@@ -54,6 +54,7 @@ export interface Event {
   fecha: string;
   lugar: string;
   ciudad: string;
+  estado?: string;
   distanciaKm?: number;
   cupoMaximo?: number;
   precio: number;

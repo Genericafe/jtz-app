@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Plus, MapPin, Users, X, Calendar, Clock, Trophy, Share2, ExternalLink, CreditCard, CheckCircle, User, Trash2, Sparkles, Mail, Edit2, Download, FileSpreadsheet } from 'lucide-react';
@@ -8,6 +8,118 @@ import { useAuth } from '../context/AuthContext';
 import { format, isAfter, formatDistanceToNow } from 'date-fns';
 import { generarTextoEvento } from '../utils/formatearTexto';
 import { es } from 'date-fns/locale';
+
+interface NominatimResult {
+  display_name: string;
+  address: {
+    road?: string; suburb?: string; neighbourhood?: string; amenity?: string;
+    village?: string; city?: string; town?: string; municipality?: string;
+    county?: string; state?: string;
+  };
+}
+
+function LocationInput({ value, onChange, onLocationSelect }: {
+  value: string;
+  onChange: (v: string) => void;
+  onLocationSelect: (lugar: string, ciudad: string, estado: string) => void;
+}) {
+  const [suggestions, setSuggestions] = useState<NominatimResult[]>([]);
+  const [open, setOpen] = useState(false);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const extractFields = (addr: NominatimResult['address'], displayName: string) => {
+    const lugar = addr.road || addr.suburb || addr.neighbourhood || addr.amenity || addr.village || displayName.split(',')[0].trim();
+    const ciudad = addr.city || addr.town || addr.municipality || addr.county || addr.village || '';
+    const estado = addr.state || '';
+    return { lugar, ciudad, estado };
+  };
+
+  const search = async (q: string) => {
+    if (q.length < 3) { setSuggestions([]); setOpen(false); return; }
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&countrycodes=mx&addressdetails=1`,
+        { headers: { 'Accept-Language': 'es' } }
+      );
+      const data: NominatimResult[] = await res.json();
+      setSuggestions(data);
+      setOpen(data.length > 0);
+    } catch { /* ignore */ }
+  };
+
+  const handleChange = (v: string) => {
+    onChange(v);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => search(v), 350);
+  };
+
+  const select = (r: NominatimResult) => {
+    const { lugar, ciudad, estado } = extractFields(r.address, r.display_name);
+    onChange(lugar);
+    onLocationSelect(lugar, ciudad, estado);
+    setSuggestions([]);
+    setOpen(false);
+  };
+
+  const useGPS = () => {
+    if (!navigator.geolocation) return;
+    setGpsLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      async pos => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`,
+            { headers: { 'Accept-Language': 'es' } }
+          );
+          const data: NominatimResult = await res.json();
+          const { lugar, ciudad, estado } = extractFields(data.address, data.display_name);
+          onChange(lugar);
+          onLocationSelect(lugar, ciudad, estado);
+        } finally {
+          setGpsLoading(false);
+        }
+      },
+      () => setGpsLoading(false)
+    );
+  };
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <input
+          value={value}
+          onChange={e => handleChange(e.target.value)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onFocus={() => suggestions.length > 0 && setOpen(true)}
+          placeholder="Escribe o usa GPS…"
+          className="input w-full text-sm pr-9"
+        />
+        <button type="button" onClick={useGPS} title="Usar mi ubicación actual"
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-brand-400 transition-colors">
+          {gpsLoading
+            ? <div className="w-3.5 h-3.5 border-2 border-brand-400 border-t-transparent rounded-full animate-spin" />
+            : <MapPin size={15} />}
+        </button>
+      </div>
+      {open && (
+        <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-surface-700 border border-white/[0.1] rounded-xl shadow-xl overflow-hidden">
+          {suggestions.map((s, i) => {
+            const { lugar, ciudad, estado } = extractFields(s.address, s.display_name);
+            return (
+              <button key={i} type="button" onMouseDown={() => select(s)}
+                className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-600 transition-colors border-b border-white/[0.04] last:border-0 flex flex-col gap-0.5">
+                <span className="font-medium text-white">{lugar}</span>
+                <span className="text-xs text-gray-500">{[ciudad, estado].filter(Boolean).join(', ')}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const typeGradient: Record<string, string> = {
   carrera: 'from-orange-500 to-red-600',
@@ -514,7 +626,8 @@ function EventCard({ ev, onRegisterClick, myRegistrations, isCoach, onShare, onD
       <div className="p-4">
         <div className="space-y-1.5 mb-3">
           <div className="flex items-center gap-2 text-xs text-gray-400">
-            <MapPin size={12} className="flex-shrink-0" /> {ev.lugar}, {ev.ciudad}
+            <MapPin size={12} className="flex-shrink-0" />
+            <span className="truncate">{ev.lugar}{ev.ciudad ? `, ${ev.ciudad}` : ''}{ev.estado ? `, ${ev.estado}` : ''}</span>
           </div>
           <div className="flex items-center gap-2 text-xs text-gray-400">
             <Clock size={12} className="flex-shrink-0" />
@@ -594,12 +707,12 @@ export default function Events() {
   const [filter, setFilter] = useState<'todos' | 'carrera' | 'trail' | 'entrenamiento' | 'social'>('todos');
   const [form, setForm] = useState({
     nombre: '', tipo: 'carrera', descripcion: '', fecha: '', lugar: '',
-    ciudad: '', distanciaKm: '', cupoMaximo: '', precio: '0',
+    ciudad: '', estado: '', distanciaKm: '', cupoMaximo: '', precio: '0',
     notificarCorredores: false,
   });
   const [editForm, setEditForm] = useState({
     nombre: '', tipo: 'carrera', descripcion: '', fecha: '', lugar: '',
-    ciudad: '', distanciaKm: '', cupoMaximo: '', precio: '0',
+    ciudad: '', estado: '', distanciaKm: '', cupoMaximo: '', precio: '0',
   });
   const [improvingText, setImprovingText] = useState(false);
 
@@ -639,6 +752,7 @@ export default function Events() {
       fecha:       fechaLocal,
       lugar:       ev.lugar,
       ciudad:      ev.ciudad ?? '',
+      estado:      ev.estado ?? '',
       distanciaKm: ev.distanciaKm?.toString() ?? '',
       cupoMaximo:  ev.cupoMaximo?.toString() ?? '',
       precio:      ev.precio.toString(),
@@ -781,15 +895,18 @@ export default function Events() {
                   ))}
                 </div>
               </div>
-              {[
-                ['nombre', 'Nombre del evento'],
-                ['lugar', 'Lugar'],
-              ].map(([field, label]) => (
-                <div key={field}>
-                  <label className="block text-xs font-semibold text-gray-400 mb-1.5">{label}</label>
-                  <input value={String(form[field as keyof typeof form])} onChange={(e) => setForm({ ...form, [field]: e.target.value })} className="input w-full text-sm" />
-                </div>
-              ))}
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5">Nombre del evento</label>
+                <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} className="input w-full text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5">Lugar</label>
+                <LocationInput
+                  value={form.lugar}
+                  onChange={v => setForm(f => ({ ...f, lugar: v }))}
+                  onLocationSelect={(lugar, ciudad, estado) => setForm(f => ({ ...f, lugar, ciudad, estado }))}
+                />
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-400 mb-1.5">Fecha y hora</label>
@@ -797,7 +914,11 @@ export default function Events() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-400 mb-1.5">Ciudad</label>
-                  <input value={form.ciudad} placeholder="Ej: Tijuana, CDMX..." onChange={(e) => setForm({ ...form, ciudad: e.target.value })} className="input w-full text-sm" />
+                  <input value={form.ciudad} placeholder="Ej: Tijuana" onChange={(e) => setForm({ ...form, ciudad: e.target.value })} className="input w-full text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1.5">Estado</label>
+                  <input value={form.estado} placeholder="Ej: Baja California" onChange={(e) => setForm({ ...form, estado: e.target.value })} className="input w-full text-sm" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-400 mb-1.5">Distancia (km)</label>
@@ -892,7 +1013,11 @@ export default function Events() {
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-400 mb-1.5">Lugar</label>
-                <input value={editForm.lugar} onChange={e => setEditForm({ ...editForm, lugar: e.target.value })} className="input w-full text-sm" />
+                <LocationInput
+                  value={editForm.lugar}
+                  onChange={v => setEditForm(f => ({ ...f, lugar: v }))}
+                  onLocationSelect={(lugar, ciudad, estado) => setEditForm(f => ({ ...f, lugar, ciudad, estado }))}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -903,6 +1028,10 @@ export default function Events() {
                 <div>
                   <label className="block text-xs font-semibold text-gray-400 mb-1.5">Ciudad</label>
                   <input value={editForm.ciudad} onChange={e => setEditForm({ ...editForm, ciudad: e.target.value })} className="input w-full text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1.5">Estado</label>
+                  <input value={editForm.estado} placeholder="Ej: Baja California" onChange={e => setEditForm({ ...editForm, estado: e.target.value })} className="input w-full text-sm" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-400 mb-1.5">Distancia (km)</label>

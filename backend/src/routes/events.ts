@@ -50,6 +50,7 @@ router.post('/', coachOnly, async (req: AuthRequest, res: Response) => {
     fecha:               z.string(),
     lugar:               z.string(),
     ciudad:              z.string().optional(),
+    estado:              z.string().optional().default(''),
     distanciaKm:         z.number().optional(),
     cupoMaximo:          z.number().int().optional(),
     precio:              z.number().default(0),

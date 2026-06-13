@@ -143,6 +143,7 @@ model Event {
   fecha       DateTime
   lugar       String
   ciudad      String   @default("Tijuana")
+  estado      String   @default("")
   distanciaKm Float?
   cupoMaximo  Int?
   precio      Float    @default(0)
