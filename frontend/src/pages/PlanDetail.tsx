@@ -370,15 +370,16 @@ export default function PlanDetail() {
                       ) : (
                         <div className="max-h-48 overflow-y-auto">
                           {plan.asignaciones.map(({ runner }) => (
-                            <div key={runner.id} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-surface-600 transition-colors">
+                            <button key={runner.id} onClick={() => navigate(`/corredores/${runner.id}`)}
+                              className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-surface-600 transition-colors text-left">
                               <div className="w-7 h-7 rounded-full bg-brand-500/20 text-brand-400 text-xs font-bold flex items-center justify-center flex-shrink-0">
                                 {runner.nombre[0]}{runner.apellido[0]}
                               </div>
-                              <div className="min-w-0">
-                                <p className="text-sm text-white font-medium truncate">{runner.nombre} {runner.apellido}</p>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm text-white font-medium truncate hover:underline">{runner.nombre} {runner.apellido}</p>
                                 <p className="text-xs text-gray-500 capitalize">{runner.nivel}</p>
                               </div>
-                            </div>
+                            </button>
                           ))}
                         </div>
                       )}
