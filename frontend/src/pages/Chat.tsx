@@ -379,7 +379,7 @@ export default function Chat() {
   const { isCoach } = useAuth();
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-52px)] lg:h-screen overflow-hidden">
+    <div className="flex flex-col h-screen overflow-hidden">
       <div className="px-4 lg:px-6 pt-4 lg:pt-5 pb-3 flex-shrink-0">
         <h1 className="text-xl font-bold text-white flex items-center gap-2">
           <MessageCircle size={20} className="text-brand-400" />
@@ -390,7 +390,7 @@ export default function Chat() {
           Mensajes cifrados con AES-256-CBC
         </p>
       </div>
-      <div className="flex-1 px-3 lg:px-6 pb-3 lg:pb-6 overflow-hidden min-h-0">
+      <div className="flex-1 px-3 lg:px-6 pb-3 lg:pb-6 overflow-hidden" style={{ minHeight: 0 }}>
         {isCoach ? <CoachChat /> : <RunnerChat />}
       </div>
     </div>
