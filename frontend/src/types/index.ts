@@ -95,6 +95,7 @@ export interface Product {
   stock: number;
   talla?: string;
   color?: string;
+  imagen?: string | null;
   activo: boolean;
 }
 

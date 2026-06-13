@@ -787,7 +787,7 @@ export default function Events() {
               ].map(([field, label]) => (
                 <div key={field}>
                   <label className="block text-xs font-semibold text-gray-400 mb-1.5">{label}</label>
-                  <input value={form[field as keyof typeof form]} onChange={(e) => setForm({ ...form, [field]: e.target.value })} className="input w-full text-sm" />
+                  <input value={String(form[field as keyof typeof form])} onChange={(e) => setForm({ ...form, [field]: e.target.value })} className="input w-full text-sm" />
                 </div>
               ))}
               <div className="grid grid-cols-2 gap-3">
