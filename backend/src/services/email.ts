@@ -65,7 +65,9 @@ async function getFreshAccessToken(refreshToken: string): Promise<string> {
 
 function buildOAuthTransporter(user: string, accessToken: string, refreshToken: string): nodemailer.Transporter {
   return nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
     auth: {
       type: 'OAuth2',
       user,
@@ -74,6 +76,9 @@ function buildOAuthTransporter(user: string, accessToken: string, refreshToken: 
       refreshToken,
       accessToken,
     },
+    connectionTimeout: 10000,
+    greetingTimeout:   10000,
+    socketTimeout:     15000,
   });
 }
 
@@ -116,7 +121,8 @@ export async function testOAuthEmail(
 ): Promise<void> {
   const freshToken = await getFreshAccessToken(refreshToken);
   const transporter = buildOAuthTransporter(userEmail, freshToken, refreshToken);
-  await transporter.sendMail({
+
+  const send = transporter.sendMail({
     from: `${fromName} <${userEmail}>`,
     to: userEmail,
     subject: '✅ JTZ — Correo de prueba (Google OAuth)',
@@ -129,6 +135,12 @@ export async function testOAuthEmail(
       </div>
     `),
   });
+
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Tiempo de espera agotado al conectar con Gmail. Verifica que el correo es válido e intenta de nuevo.')), 18000)
+  );
+
+  await Promise.race([send, timeout]);
 }
 
 // Test a given SMTP config without saving it
