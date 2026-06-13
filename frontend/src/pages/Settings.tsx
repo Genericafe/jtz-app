@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { settingsApi, default as api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import {
-  Mail, CheckCircle, AlertTriangle, Eye, EyeOff,
+  Mail, CheckCircle, Eye, EyeOff,
   Trash2, Send, ExternalLink, Settings as SettingsIcon,
   LogIn, Info,
 } from 'lucide-react';
@@ -129,7 +129,7 @@ export default function Settings() {
       const res = await api.get('/settings/email/google/auth');
       window.location.href = res.data.url;
     } catch {
-      setErrorMsg('No se pudo iniciar la autenticación con Google. Verifica que GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET estén configurados en el servidor.');
+      setErrorMsg('No se pudo iniciar la autenticación con Google. Intenta de nuevo.');
       setSaveStatus('error');
       setOauthLoading(false);
     }
@@ -286,11 +286,6 @@ export default function Settings() {
                   <span>{s}</span>
                 </div>
               ))}
-            </div>
-
-            <div className="flex items-center gap-2 text-xs text-gray-500 px-1">
-              <AlertTriangle size={12} className="flex-shrink-0" />
-              Requiere que <code className="text-gray-400 bg-surface-600 px-1 rounded">GOOGLE_CLIENT_ID</code> y <code className="text-gray-400 bg-surface-600 px-1 rounded">GOOGLE_CLIENT_SECRET</code> estén configurados en el servidor.
             </div>
 
             <button
