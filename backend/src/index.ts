@@ -1,3 +1,9 @@
+import dns from 'dns';
+// Forzar IPv4 en Railway (bloquea IPv6 saliente, afecta SMTP de Gmail)
+if (typeof (dns as any).setDefaultResultOrder === 'function') {
+  (dns as any).setDefaultResultOrder('ipv4first');
+}
+
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
