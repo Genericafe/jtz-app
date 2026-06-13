@@ -41,7 +41,14 @@ router.put('/preferences', coachOnly, async (req: AuthRequest, res: Response) =>
 router.get('/:id', async (req: AuthRequest, res: Response) => {
   const plan = await prisma.trainingPlan.findUnique({
     where: { id: Number(req.params.id) },
-    include: { semanas: { include: { dias: true }, orderBy: { numeroSemana: 'asc' } } },
+    include: {
+      semanas: { include: { dias: true }, orderBy: { numeroSemana: 'asc' } },
+      asignaciones: {
+        where: { activo: true },
+        include: { runner: { select: { id: true, nombre: true, apellido: true, nivel: true } } },
+        orderBy: { createdAt: 'desc' },
+      },
+    },
   });
   if (!plan) return res.status(404).json({ error: 'Plan no encontrado' });
   return res.json(plan);

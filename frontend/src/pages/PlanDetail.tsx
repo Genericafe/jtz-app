@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { plansApi } from '../services/api';
@@ -7,7 +7,7 @@ import {
   ArrowLeft, Calendar, Target, Clock, Dumbbell,
   ChevronDown, ChevronRight, Edit2, Check, X,
   Zap, TrendingUp, Shield, Bike, Waves, Trash2, BookmarkPlus, BookmarkCheck,
-  GripVertical,
+  GripVertical, Users,
 } from 'lucide-react';
 import { differenceInWeeks, addWeeks } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -21,10 +21,14 @@ interface TrainingDay {
 interface TrainingWeek {
   id: number; numeroSemana: number; descripcion?: string; dias: TrainingDay[];
 }
+interface AssignedRunner {
+  id: number; nombre: string; apellido: string; nivel: string;
+}
 interface Plan {
   id: number; nombre: string; descripcion?: string;
   duracionSemanas: number; nivel: string; objetivo?: string;
   semanas: TrainingWeek[];
+  asignaciones?: { runner: AssignedRunner }[];
 }
 
 const tipoLabel: Record<string, string> = {
@@ -277,6 +281,17 @@ export default function PlanDetail() {
     setDragOverId(null);
   };
 
+  const [showRunners, setShowRunners] = useState(false);
+  const runnersRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (runnersRef.current && !runnersRef.current.contains(e.target as Node)) setShowRunners(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
   const plan: Plan & { isTemplate?: boolean } | undefined = data?.data;
 
   if (isLoading) return <div className="p-8 text-gray-400">Cargando plan...</div>;
@@ -336,6 +351,41 @@ export default function PlanDetail() {
               <span className="badge bg-surface-500 text-gray-300 flex items-center gap-1">
                 <Target size={11}/> ~{avgKmWeek} km/sem
               </span>
+              {isCoach && (
+                <div ref={runnersRef} className="relative">
+                  <button
+                    onClick={() => setShowRunners(v => !v)}
+                    className="badge bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 flex items-center gap-1 hover:bg-indigo-500/25 transition-colors cursor-pointer"
+                  >
+                    <Users size={11} />
+                    {plan.asignaciones?.length ?? 0} corredor{(plan.asignaciones?.length ?? 0) !== 1 ? 'es' : ''}
+                  </button>
+                  {showRunners && (
+                    <div className="absolute left-0 top-full mt-2 z-50 w-56 bg-surface-700 border border-white/[0.08] rounded-xl shadow-xl overflow-hidden">
+                      <p className="px-3 py-2 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-white/[0.06]">
+                        Corredores asignados
+                      </p>
+                      {!plan.asignaciones?.length ? (
+                        <p className="px-3 py-3 text-sm text-gray-500">Sin corredores asignados</p>
+                      ) : (
+                        <div className="max-h-48 overflow-y-auto">
+                          {plan.asignaciones.map(({ runner }) => (
+                            <div key={runner.id} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-surface-600 transition-colors">
+                              <div className="w-7 h-7 rounded-full bg-brand-500/20 text-brand-400 text-xs font-bold flex items-center justify-center flex-shrink-0">
+                                {runner.nombre[0]}{runner.apellido[0]}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm text-white font-medium truncate">{runner.nombre} {runner.apellido}</p>
+                                <p className="text-xs text-gray-500 capitalize">{runner.nivel}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
