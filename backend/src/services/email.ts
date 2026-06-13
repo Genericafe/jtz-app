@@ -22,17 +22,21 @@ async function gmailApiSender(_userEmail: string, refreshToken: string): Promise
     );
     client.setCredentials({ refresh_token: refreshToken });
 
+    const subjectEncoded = `=?UTF-8?B?${Buffer.from(opts.subject).toString('base64')}?=`;
+    const bodyBase64 = Buffer.from(opts.html, 'utf8').toString('base64');
+
     const raw = [
       `From: ${opts.from}`,
       `To: ${opts.to}`,
-      `Subject: ${opts.subject}`,
+      `Subject: ${subjectEncoded}`,
       'MIME-Version: 1.0',
       'Content-Type: text/html; charset=UTF-8',
+      'Content-Transfer-Encoding: base64',
       '',
-      opts.html,
+      bodyBase64,
     ].join('\r\n');
 
-    const encoded = Buffer.from(raw).toString('base64url');
+    const encoded = Buffer.from(raw, 'utf8').toString('base64url');
 
     await client.request({
       url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
