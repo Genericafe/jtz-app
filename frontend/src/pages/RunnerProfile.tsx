@@ -6,8 +6,8 @@ import { CommunicationLog, Payment, EventRegistration } from '../types';
 import { useAuth } from '../context/AuthContext';
 import {
   ArrowLeft, Phone, MapPin, Mail, Calendar, CreditCard,
-  MessageSquare, CheckCircle, Clock, AlertTriangle,
-  Dumbbell, Send, Trash2, X,
+  MessageSquare, Clock, AlertTriangle,
+  Dumbbell, Send, Trash2, X, Edit2, EyeOff,
 } from 'lucide-react';
 import { format, isAfter, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -37,6 +37,8 @@ export default function RunnerProfile() {
   const [activeTab, setActiveTab] = useState<Tab>('Resumen');
   const [logForm, setLogForm] = useState({ tipo: 'whatsapp', direccion: 'entrante', mensaje: '' });
   const [showLogForm, setShowLogForm] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({ nombre: '', apellido: '', telefono: '', ciudad: '', nivel: 'principiante', notas: '' });
 
   const { data, isLoading } = useQuery({
     queryKey: ['runner', id],
@@ -52,6 +54,31 @@ export default function RunnerProfile() {
     mutationFn: (logId: number) => runnersApi.deleteLog(Number(id), logId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['runner', id] }),
   });
+
+  const updateMutation = useMutation({
+    mutationFn: (d: object) => runnersApi.update(Number(id), d),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['runner', id] }); qc.invalidateQueries({ queryKey: ['runners'] }); setShowEditModal(false); },
+  });
+
+  const openEdit = () => {
+    if (!runner) return;
+    setEditForm({ nombre: runner.nombre, apellido: runner.apellido, telefono: runner.telefono ?? '', ciudad: runner.ciudad, nivel: runner.nivel, notas: runner.notas ?? '' });
+    setShowEditModal(true);
+  };
+
+  const handleDisable = async () => {
+    if (!window.confirm(`¿Deshabilitar a ${runner?.nombre} ${runner?.apellido}? No aparecerá en la lista pero sus datos se conservan.`)) return;
+    await runnersApi.deactivate(Number(id));
+    qc.invalidateQueries({ queryKey: ['runners'] });
+    navigate('/corredores');
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm(`¿Eliminar permanentemente a ${runner?.nombre} ${runner?.apellido}? Esta acción no se puede deshacer.`)) return;
+    await runnersApi.permanentDelete(Number(id));
+    qc.invalidateQueries({ queryKey: ['runners'] });
+    navigate('/corredores');
+  };
 
   if (isLoading) return (
     <div className="p-8 flex items-center gap-3 text-gray-500">
@@ -95,6 +122,23 @@ export default function RunnerProfile() {
                 <h1 className="text-2xl font-black text-white">{runner.nombre} {runner.apellido}</h1>
                 <span className={`badge border ${cfg.badge} capitalize mt-1 inline-block`}>{nivel}</span>
               </div>
+              {/* Coach actions */}
+              {isCoach && (
+                <div className="flex items-center gap-2">
+                  <button onClick={openEdit}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-gray-300 hover:text-white hover:bg-surface-600 border border-white/[0.08] transition-all">
+                    <Edit2 size={14} /> Editar
+                  </button>
+                  <button onClick={handleDisable}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10 border border-yellow-500/20 transition-all">
+                    <EyeOff size={14} /> Deshabilitar
+                  </button>
+                  <button onClick={handleDelete}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/20 transition-all">
+                    <Trash2 size={14} /> Eliminar
+                  </button>
+                </div>
+              )}
               {/* Quick stats */}
               <div className="flex gap-4 text-center">
                 {[
@@ -402,6 +446,58 @@ export default function RunnerProfile() {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Edit modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+          <div className="card p-6 w-full max-w-md animate-slide-up">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-black text-white">Editar corredor</h2>
+              <button onClick={() => setShowEditModal(false)} className="btn-ghost p-1.5"><X size={18} /></button>
+            </div>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                {(['nombre', 'apellido'] as const).map((f) => (
+                  <div key={f}>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1.5 capitalize">{f}</label>
+                    <input value={editForm[f]} onChange={e => setEditForm({ ...editForm, [f]: e.target.value })} className="input w-full text-sm" />
+                  </div>
+                ))}
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5">Teléfono</label>
+                <input value={editForm.telefono} onChange={e => setEditForm({ ...editForm, telefono: e.target.value })} className="input w-full text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5">Ciudad</label>
+                <input value={editForm.ciudad} onChange={e => setEditForm({ ...editForm, ciudad: e.target.value })} className="input w-full text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5">Nivel</label>
+                <select value={editForm.nivel} onChange={e => setEditForm({ ...editForm, nivel: e.target.value })} className="input w-full text-sm">
+                  {['principiante', 'intermedio', 'avanzado', 'elite'].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5">Notas</label>
+                <textarea value={editForm.notas} onChange={e => setEditForm({ ...editForm, notas: e.target.value })} rows={2} className="input w-full text-sm resize-none" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setShowEditModal(false)} className="flex-1 py-2.5 rounded-xl border border-white/[0.08] text-sm text-gray-400 hover:text-white transition-colors">
+                Cancelar
+              </button>
+              <button
+                onClick={() => updateMutation.mutate({ nombre: editForm.nombre, apellido: editForm.apellido, telefono: editForm.telefono || undefined, ciudad: editForm.ciudad, nivel: editForm.nivel, notas: editForm.notas || undefined })}
+                disabled={updateMutation.isPending || !editForm.nombre || !editForm.apellido}
+                className="flex-1 btn-primary py-2.5 text-sm"
+              >
+                {updateMutation.isPending ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
