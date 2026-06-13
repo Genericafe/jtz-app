@@ -171,6 +171,21 @@ router.put('/:id', coachOnly, async (req: AuthRequest, res: Response) => {
   return res.json(runner);
 });
 
+router.delete('/:id/permanent', coachOnly, async (req: AuthRequest, res: Response) => {
+  const runner = await prisma.runner.findUnique({
+    where: { id: Number(req.params.id) },
+    select: { userId: true },
+  });
+  if (!runner) return res.status(404).json({ error: 'Corredor no encontrado' });
+
+  await (prisma as any).chatMessage.deleteMany({
+    where: { OR: [{ senderId: runner.userId }, { receiverId: runner.userId }] },
+  });
+
+  await prisma.user.delete({ where: { id: runner.userId } });
+  return res.json({ ok: true });
+});
+
 router.delete('/:id', coachOnly, async (req: AuthRequest, res: Response) => {
   await prisma.runner.update({ where: { id: Number(req.params.id) }, data: { activo: false } });
   return res.json({ ok: true });

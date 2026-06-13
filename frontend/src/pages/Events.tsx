@@ -667,7 +667,7 @@ export default function Events() {
   const past = shown.filter(e => !isAfter(new Date(e.fecha), new Date()));
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-4 lg:p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-black text-white">Eventos</h1>

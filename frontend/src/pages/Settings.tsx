@@ -150,11 +150,18 @@ export default function Settings() {
   });
 
   const testMutation = useMutation({
-    mutationFn: () => settingsApi.testEmailConfig(),
+    mutationFn: () => Promise.race([
+      settingsApi.testEmailConfig(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000)),
+    ]),
     onSuccess: () => { setSaveStatus('success'); setTimeout(() => setSaveStatus('idle'), 5000); },
     onError: (err: unknown) => {
-      const e = err as { response?: { data?: { error?: string } } };
-      setErrorMsg(e.response?.data?.error ?? 'Error al enviar');
+      const e = err as { response?: { data?: { error?: string } }; name?: string };
+      if ((e as Error).message === 'timeout') {
+        setErrorMsg('El envío tardó demasiado. Revisa tu bandeja de entrada — puede que el correo sí llegó.');
+      } else {
+        setErrorMsg(e.response?.data?.error ?? 'Error al enviar el correo de prueba.');
+      }
       setSaveStatus('error');
     },
   });
@@ -193,7 +200,7 @@ export default function Settings() {
   const parsedError = saveStatus === 'error' ? parseErrorMsg(errorMsg, selectedProvider) : null;
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
+    <div className="p-4 lg:p-6 max-w-2xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-black text-white">Configuración</h1>
         <p className="text-gray-500 text-sm mt-0.5">

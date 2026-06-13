@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Lock, Send, MessageCircle, ChevronRight } from 'lucide-react';
+import { Lock, Send, MessageCircle, ChevronRight, ArrowLeft } from 'lucide-react';
 import { chatApi, runnersApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { Runner } from '../types';
@@ -62,10 +62,12 @@ function ConversationPanel({
   runnerId,
   runnerName,
   runnerInitial,
+  onBack,
 }: {
   runnerId: number;
   runnerName: string;
   runnerInitial: string;
+  onBack?: () => void;
 }) {
   const queryClient = useQueryClient();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -107,7 +109,12 @@ function ConversationPanel({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-white/[0.06] flex items-center gap-3 bg-surface-700">
+      <div className="px-4 py-3.5 border-b border-white/[0.06] flex items-center gap-3 bg-surface-700 flex-shrink-0">
+        {onBack && (
+          <button onClick={onBack} className="p-1 -ml-1 text-gray-400 hover:text-white transition-colors lg:hidden">
+            <ArrowLeft size={20} />
+          </button>
+        )}
         <div className="w-9 h-9 rounded-full bg-surface-600 border border-white/10 flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
           {runnerInitial}
         </div>
@@ -218,8 +225,8 @@ function CoachChat() {
 
   return (
     <div className="flex h-full bg-surface-800 rounded-2xl overflow-hidden border border-white/[0.06]">
-      {/* Sidebar: runner list */}
-      <div className="w-72 border-r border-white/[0.06] flex flex-col bg-surface-700 flex-shrink-0">
+      {/* Sidebar: runner list — hidden on mobile when a conversation is open */}
+      <div className={`border-r border-white/[0.06] flex flex-col bg-surface-700 flex-shrink-0 w-full lg:w-72 ${selectedId ? 'hidden lg:flex' : 'flex'}`}>
         <div className="px-4 py-4 border-b border-white/[0.06]">
           <div className="flex items-center gap-2 mb-2">
             <Lock size={14} className="text-brand-400" />
@@ -316,13 +323,14 @@ function CoachChat() {
         </div>
       </div>
 
-      {/* Right panel */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* Right panel — hidden on mobile when no conversation is selected */}
+      <div className={`flex-1 flex-col min-w-0 ${selectedId ? 'flex' : 'hidden lg:flex'}`}>
         {selectedId && selectedRunner ? (
           <ConversationPanel
             runnerId={selectedId}
             runnerName={`${selectedRunner.nombre} ${selectedRunner.apellido}`}
             runnerInitial={selectedRunner.nombre.charAt(0).toUpperCase()}
+            onBack={() => navigate('/chat')}
           />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
@@ -371,8 +379,8 @@ export default function Chat() {
   const { isCoach } = useAuth();
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
-      <div className="px-6 pt-5 pb-3 flex-shrink-0">
+    <div className="flex flex-col h-[calc(100dvh-52px)] lg:h-screen overflow-hidden">
+      <div className="px-4 lg:px-6 pt-4 lg:pt-5 pb-3 flex-shrink-0">
         <h1 className="text-xl font-bold text-white flex items-center gap-2">
           <MessageCircle size={20} className="text-brand-400" />
           {isCoach ? 'Chat privado' : 'Chat con coach'}
@@ -382,7 +390,7 @@ export default function Chat() {
           Mensajes cifrados con AES-256-CBC
         </p>
       </div>
-      <div className="flex-1 px-6 pb-6 overflow-hidden">
+      <div className="flex-1 px-3 lg:px-6 pb-3 lg:pb-6 overflow-hidden min-h-0">
         {isCoach ? <CoachChat /> : <RunnerChat />}
       </div>
     </div>

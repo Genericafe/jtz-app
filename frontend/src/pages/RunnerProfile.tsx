@@ -77,7 +77,7 @@ export default function RunnerProfile() {
   const logs: CommunicationLog[] = runner.communicationLogs ?? [];
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-4 lg:p-6 max-w-4xl mx-auto">
       {/* Back */}
       <button onClick={() => navigate('/corredores')} className="flex items-center gap-2 text-sm text-gray-500 hover:text-white mb-5 transition-colors">
         <ArrowLeft size={16} /> Corredores

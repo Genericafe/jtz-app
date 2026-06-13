@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, Phone, MapPin, X, UserCheck } from 'lucide-react';
+import { Search, Plus, Phone, MapPin, X, UserCheck, Check, Trash2, EyeOff } from 'lucide-react';
 import { runnersApi } from '../services/api';
 import { Runner } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -13,13 +13,38 @@ const nivelConfig: Record<string, { badge: string; ring: string; gradient: strin
   elite:        { badge: 'bg-brand-500/15 text-brand-400',   ring: 'ring-brand-500/30',  gradient: 'from-brand-500 to-orange-600' },
 };
 
-function RunnerCard({ runner, onClick }: { runner: Runner; onClick: () => void }) {
+function RunnerCard({
+  runner,
+  onClick,
+  selectable = false,
+  selected = false,
+  onToggleSelect,
+}: {
+  runner: Runner;
+  onClick: () => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (e: React.MouseEvent) => void;
+}) {
   const nivel = runner.nivel ?? 'principiante';
   const cfg = nivelConfig[nivel] ?? nivelConfig.principiante;
   const initials = `${runner.nombre?.[0] ?? ''}${runner.apellido?.[0] ?? ''}`.toUpperCase() || '?';
 
   return (
-    <div onClick={onClick} className="card-hover p-5 flex flex-col gap-4 cursor-pointer">
+    <div
+      onClick={selectable ? onToggleSelect : onClick}
+      className={`card-hover p-5 flex flex-col gap-4 cursor-pointer relative transition-all ${selected ? 'ring-2 ring-brand-500 bg-brand-500/5' : ''}`}
+    >
+      {selectable && (
+        <div className="absolute top-3 right-3 z-10">
+          <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
+            selected ? 'bg-brand-500 border-brand-500' : 'border-gray-500 bg-surface-800/80'
+          }`}>
+            {selected && <Check size={12} className="text-white" />}
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-3">
         <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${cfg.gradient} flex items-center justify-center text-white font-black text-base ring-2 ${cfg.ring} flex-shrink-0 shadow-glow-sm`}>
           {initials}
@@ -61,6 +86,9 @@ export default function Runners() {
   const [levelFilter, setLevelFilter] = useState('todos');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ email: '', nombre: '', apellido: '', telefono: '', nivel: 'principiante', notas: '' });
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkPending, setBulkPending] = useState(false);
 
   const { data, isLoading } = useQuery({ queryKey: ['runners'], queryFn: () => runnersApi.list() });
   const runners: Runner[] = data?.data ?? [];
@@ -79,9 +107,58 @@ export default function Runners() {
 
   const countByLevel = (nivel: string) => runners.filter(r => r.activo && r.nivel === nivel).length;
 
+  const handleToggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.size === filtered.length && filtered.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map(r => r.id)));
+    }
+  };
+
+  const exitSelection = () => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const handleBulkDisable = async () => {
+    if (!window.confirm(`¿Deshabilitar ${selectedIds.size} corredor(es)? Seguirán en la base de datos pero no aparecerán en la lista.`)) return;
+    setBulkPending(true);
+    try {
+      await Promise.all(Array.from(selectedIds).map(id => runnersApi.deactivate(id)));
+      qc.invalidateQueries({ queryKey: ['runners'] });
+      exitSelection();
+    } finally {
+      setBulkPending(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`¿Eliminar permanentemente ${selectedIds.size} corredor(es)? Esta acción no se puede deshacer.`)) return;
+    setBulkPending(true);
+    try {
+      await Promise.all(Array.from(selectedIds).map(id => runnersApi.permanentDelete(id)));
+      qc.invalidateQueries({ queryKey: ['runners'] });
+      exitSelection();
+    } finally {
+      setBulkPending(false);
+    }
+  };
+
+  const allSelected = filtered.length > 0 && selectedIds.size === filtered.length;
+  const someSelected = selectedIds.size > 0 && !allSelected;
+
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 lg:p-6 max-w-6xl mx-auto">
+      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-black text-white">Corredores</h1>
           <p className="text-gray-500 text-sm mt-0.5">
@@ -89,9 +166,41 @@ export default function Runners() {
           </p>
         </div>
         {isCoach && (
-          <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2 px-4 py-2.5 text-sm">
-            <Plus size={16} /> Agregar corredor
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {selectionMode && selectedIds.size > 0 && (
+              <>
+                <button
+                  onClick={handleBulkDisable}
+                  disabled={bulkPending}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10 border border-yellow-500/20 transition-all disabled:opacity-40"
+                >
+                  <EyeOff size={14} />
+                  Deshabilitar ({selectedIds.size})
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={bulkPending}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/20 transition-all disabled:opacity-40"
+                >
+                  <Trash2 size={14} />
+                  Eliminar ({selectedIds.size})
+                </button>
+              </>
+            )}
+            <button
+              onClick={() => selectionMode ? exitSelection() : setSelectionMode(true)}
+              className={`px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                selectionMode
+                  ? 'bg-surface-600 text-white border border-white/[0.08]'
+                  : 'text-gray-400 hover:text-white hover:bg-surface-600'
+              }`}
+            >
+              {selectionMode ? 'Cancelar' : 'Gestionar'}
+            </button>
+            <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2 px-4 py-2.5 text-sm">
+              <Plus size={16} /> Agregar corredor
+            </button>
+          </div>
         )}
       </div>
 
@@ -110,19 +219,47 @@ export default function Runners() {
       </div>
 
       {/* Search */}
-      <div className="relative mb-6">
+      <div className="relative mb-4">
         <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" />
         <input value={search} onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar corredor..."
           className="input w-full pl-10 text-sm" />
       </div>
 
+      {/* Select all bar */}
+      {isCoach && selectionMode && (
+        <div className="flex items-center gap-3 mb-4 px-4 py-3 bg-surface-700 rounded-xl border border-white/[0.06]">
+          <button onClick={handleSelectAll} className="flex items-center gap-2.5 text-sm text-gray-300 hover:text-white transition-colors">
+            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+              allSelected ? 'bg-brand-500 border-brand-500' : someSelected ? 'border-brand-500 bg-surface-800' : 'border-gray-500 bg-surface-800'
+            }`}>
+              {allSelected && <Check size={12} className="text-white" />}
+              {someSelected && <span className="w-2 h-0.5 bg-brand-400 rounded-full" />}
+            </div>
+            {allSelected
+              ? 'Deseleccionar todos'
+              : selectedIds.size > 0
+              ? `${selectedIds.size} de ${filtered.length} seleccionados`
+              : `Seleccionar todos (${filtered.length})`}
+          </button>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="text-center py-20 text-gray-500">Cargando equipo...</div>
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filtered.map((runner) => <RunnerCard key={runner.id} runner={runner} onClick={() => navigate(`/corredores/${runner.id}`)} />)}
+            {filtered.map((runner) => (
+              <RunnerCard
+                key={runner.id}
+                runner={runner}
+                onClick={() => navigate(`/corredores/${runner.id}`)}
+                selectable={selectionMode}
+                selected={selectedIds.has(runner.id)}
+                onToggleSelect={(e) => { e.stopPropagation(); handleToggleSelect(runner.id); }}
+              />
+            ))}
           </div>
           {filtered.length === 0 && (
             <div className="text-center py-20">
