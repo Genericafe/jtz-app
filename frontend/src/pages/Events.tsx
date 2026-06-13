@@ -491,25 +491,33 @@ function CoachEventDetailModal({ ev, onClose }: { ev: Event; onClose: () => void
     URL.revokeObjectURL(url);
   };
 
+  const estadoBadge = (estado: string) => {
+    const base = 'text-xs px-2.5 py-1 rounded-full font-semibold';
+    if (estado === 'Pagado' || estado === 'Confirmado') return `${base} bg-green-500/15 text-green-400`;
+    if (estado === 'Pendiente') return `${base} bg-yellow-500/15 text-yellow-400`;
+    return `${base} bg-gray-500/15 text-gray-400`;
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 px-4">
-      <div className="card w-full max-w-5xl max-h-[88vh] flex flex-col animate-slide-up">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 sm:p-4">
+      <div className="card w-full sm:max-w-5xl h-[92vh] sm:max-h-[88vh] flex flex-col animate-slide-up rounded-b-none sm:rounded-2xl">
+
         {/* Header */}
-        <div className="flex items-start justify-between p-6 border-b border-white/[0.06] flex-shrink-0">
-          <div>
-            <h2 className="text-lg font-black text-white">{ev.nombre}</h2>
-            <div className="flex items-center gap-4 mt-1 text-sm text-gray-400 flex-wrap">
-              <span>{format(new Date(ev.fecha), "d 'de' MMMM yyyy · HH:mm 'hrs'", { locale: es })}</span>
-              <span className="flex items-center gap-1"><Users size={13} />{rows.length} inscrito{rows.length !== 1 ? 's' : ''}</span>
+        <div className="flex items-start justify-between p-4 sm:p-6 border-b border-white/[0.06] flex-shrink-0">
+          <div className="min-w-0 mr-3">
+            <h2 className="text-base sm:text-lg font-black text-white truncate">{ev.nombre}</h2>
+            <div className="flex items-center gap-3 mt-1 text-xs sm:text-sm text-gray-400 flex-wrap">
+              <span className="hidden sm:inline">{format(new Date(ev.fecha), "d 'de' MMMM yyyy · HH:mm 'hrs'", { locale: es })}</span>
+              <span className="flex items-center gap-1"><Users size={12} />{rows.length} inscrito{rows.length !== 1 ? 's' : ''}</span>
               {totalRecaudado > 0 && (
-                <span className="text-green-400 font-semibold">${totalRecaudado.toLocaleString('es-MX')} MXN recaudado</span>
+                <span className="text-green-400 font-semibold">${totalRecaudado.toLocaleString('es-MX')} MXN</span>
               )}
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <button onClick={exportCSV}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-green-500/15 text-green-400 border border-green-500/25 text-sm font-semibold hover:bg-green-500/25 transition-all">
-              <FileSpreadsheet size={15} /> Descargar Excel
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-green-500/15 text-green-400 border border-green-500/25 text-xs sm:text-sm font-semibold hover:bg-green-500/25 transition-all">
+              <FileSpreadsheet size={14} /> <span className="hidden sm:inline">Descargar</span> Excel
             </button>
             <button onClick={onClose} className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-surface-600 transition-all">
               <X size={18} />
@@ -517,8 +525,8 @@ function CoachEventDetailModal({ ev, onClose }: { ev: Event; onClose: () => void
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-auto flex-1">
+        {/* Content */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
           {isLoading ? (
             <div className="p-12 text-center text-gray-400">Cargando inscritos…</div>
           ) : rows.length === 0 ? (
@@ -527,43 +535,69 @@ function CoachEventDetailModal({ ev, onClose }: { ev: Event; onClose: () => void
               <p className="text-gray-500 text-sm">Aún no hay inscritos en este evento</p>
             </div>
           ) : (
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="sticky top-0 bg-surface-800 border-b border-white/[0.06]">
-                <tr>
-                  {['Nombre', 'Email', 'Teléfono', 'Ciudad', 'Estado', 'Monto', 'Fuente', 'Fecha'].map(h => (
-                    <th key={h} className="text-left px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
+            <>
+              {/* Desktop / tablet table */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="w-full min-w-[600px] text-sm">
+                  <thead className="sticky top-0 bg-surface-800 border-b border-white/[0.06]">
+                    <tr>
+                      {['Nombre', 'Email', 'Teléfono', 'Ciudad', 'Estado', 'Monto', 'Fuente', 'Fecha'].map(h => (
+                        <th key={h} className="text-left px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r, i) => (
+                      <tr key={i} className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
+                        <td className="px-4 py-3 text-white font-medium whitespace-nowrap">{r.Nombre}</td>
+                        <td className="px-4 py-3 text-gray-400 text-xs max-w-[160px] truncate">{r.Email || '—'}</td>
+                        <td className="px-4 py-3 text-gray-400 whitespace-nowrap">{r.Teléfono || '—'}</td>
+                        <td className="px-4 py-3 text-gray-400 whitespace-nowrap">{r.Ciudad || '—'}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className={estadoBadge(r.Estado)}>{r.Estado}</span>
+                        </td>
+                        <td className="px-4 py-3 font-semibold whitespace-nowrap">
+                          {r.Monto > 0
+                            ? <span className="text-white">${Number(r.Monto).toLocaleString('es-MX')}</span>
+                            : <span className="text-green-400 text-xs">Gratis</span>}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${r.Fuente === 'App' ? 'bg-brand-500/15 text-brand-400' : 'bg-purple-500/15 text-purple-400'}`}>
+                            {r.Fuente}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">{r.Fecha}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile cards */}
+              <div className="sm:hidden divide-y divide-white/[0.04]">
                 {rows.map((r, i) => (
-                  <tr key={i} className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
-                    <td className="px-4 py-3 text-white font-medium whitespace-nowrap">{r.Nombre}</td>
-                    <td className="px-4 py-3 text-gray-400 text-xs">{r.Email || '—'}</td>
-                    <td className="px-4 py-3 text-gray-400 whitespace-nowrap">{r.Teléfono || '—'}</td>
-                    <td className="px-4 py-3 text-gray-400 whitespace-nowrap">{r.Ciudad || '—'}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${
-                        r.Estado === 'Pagado' || r.Estado === 'Confirmado' ? 'bg-green-500/15 text-green-400' :
-                        r.Estado === 'Pendiente' ? 'bg-yellow-500/15 text-yellow-400' :
-                        'bg-gray-500/15 text-gray-400'
-                      }`}>{r.Estado}</span>
-                    </td>
-                    <td className="px-4 py-3 font-semibold whitespace-nowrap">
-                      {r.Monto > 0
-                        ? <span className="text-white">${Number(r.Monto).toLocaleString('es-MX')}</span>
-                        : <span className="text-green-400 text-xs">Gratis</span>}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
+                  <div key={i} className="p-4 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-white text-sm truncate">{r.Nombre}</span>
+                      <span className={estadoBadge(r.Estado)}>{r.Estado}</span>
+                    </div>
+                    <p className="text-xs text-gray-400 truncate">{r.Email || '—'}</p>
+                    <div className="flex items-center justify-between text-xs text-gray-500">
+                      <span>{r.Teléfono || '—'}</span>
+                      <span>{r.Ciudad || '—'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
                       <span className={`text-xs px-2 py-0.5 rounded-full ${r.Fuente === 'App' ? 'bg-brand-500/15 text-brand-400' : 'bg-purple-500/15 text-purple-400'}`}>
                         {r.Fuente}
                       </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">{r.Fecha}</td>
-                  </tr>
+                      <span className="text-sm font-bold text-white">
+                        {r.Monto > 0 ? `$${Number(r.Monto).toLocaleString('es-MX')}` : <span className="text-green-400 text-xs font-semibold">Gratis</span>}
+                      </span>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            </>
           )}
         </div>
       </div>
