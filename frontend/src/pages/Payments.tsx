@@ -18,7 +18,7 @@ export default function Payments() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [filter, setFilter] = useState<'todos' | 'pendiente' | 'pagado' | 'vencido'>('todos');
-  const [form, setForm] = useState({ runnerId: '', concepto: 'membresia', monto: '', moneda: 'MXN', estado: 'pendiente', fechaVencimiento: '', notas: '' });
+  const [form, setForm] = useState({ runnerId: '', concepto: 'membresia', monto: '', moneda: 'MXN', estado: 'pendiente', fechaVencimiento: '', fechaPago: '', duracion: '', duracionUnidad: 'meses', notas: '' });
   const [runnerSearch, setRunnerSearch] = useState('');
   const [runnerDropdown, setRunnerDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -147,7 +147,9 @@ export default function Payments() {
                     </span>
                   </td>
                   <td className="px-5 py-3 text-sm text-gray-400">
-                    {p.fechaVencimiento ? format(new Date(p.fechaVencimiento), "d MMM yyyy", { locale: es }) : '—'}
+                    <div>{p.fechaVencimiento ? format(new Date(p.fechaVencimiento), "d MMM yyyy", { locale: es }) : '—'}</div>
+                    {p.duracion && <div className="text-xs text-indigo-400 mt-0.5">{p.duracion} {p.duracionUnidad}</div>}
+                    {p.fechaPago && <div className="text-xs text-green-400 mt-0.5">Pagado {format(new Date(p.fechaPago), "d MMM", { locale: es })}</div>}
                   </td>
                   <td className="px-5 py-3">
                     {isCoach && p.estado === 'pendiente' && (
@@ -248,15 +250,43 @@ export default function Payments() {
                   </select>
                 </div>
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1.5">Fecha de vencimiento</label>
+                  <input type="date" value={form.fechaVencimiento} onChange={e => setForm({ ...form, fechaVencimiento: e.target.value })}
+                    className="input w-full text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1.5">Fecha de pago</label>
+                  <input type="date" value={form.fechaPago} onChange={e => setForm({ ...form, fechaPago: e.target.value })}
+                    className="input w-full text-sm" />
+                </div>
+              </div>
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1">Fecha de vencimiento</label>
-                <input type="date" value={form.fechaVencimiento} onChange={(e) => setForm({ ...form, fechaVencimiento: e.target.value })}
-                  className="w-full input" />
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5">Duración del plan <span className="text-gray-600">(opcional)</span></label>
+                <div className="flex gap-2">
+                  <input type="number" min="1" value={form.duracion}
+                    onChange={e => setForm({ ...form, duracion: e.target.value })}
+                    placeholder="Ej: 3"
+                    className="input text-sm w-24 flex-shrink-0" />
+                  <select value={form.duracionUnidad} onChange={e => setForm({ ...form, duracionUnidad: e.target.value })}
+                    className="input text-sm flex-1">
+                    {['horas','días','semanas','meses','años'].map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                </div>
               </div>
             </div>
             <div className="flex gap-3 mt-5">
               <button onClick={() => setShowForm(false)} className="flex-1 px-4 py-2 rounded-lg border border-dark-600 text-sm text-gray-300 hover:text-white transition-colors">Cancelar</button>
-              <button onClick={() => createMutation.mutate({ ...form, runnerId: Number(form.runnerId), monto: Number(form.monto) })}
+              <button onClick={() => createMutation.mutate({
+                  ...form,
+                  runnerId: Number(form.runnerId),
+                  monto: Number(form.monto),
+                  duracion: form.duracion ? Number(form.duracion) : undefined,
+                  duracionUnidad: form.duracion ? form.duracionUnidad : undefined,
+                  fechaPago: form.fechaPago || undefined,
+                  fechaVencimiento: form.fechaVencimiento || undefined,
+                })}
                 disabled={createMutation.isPending}
                 className="flex-1 px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-sm font-medium text-white transition-colors disabled:opacity-50">
                 {createMutation.isPending ? 'Guardando...' : 'Registrar'}

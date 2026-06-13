@@ -190,6 +190,8 @@ model Payment {
   estado           String    @default("pendiente")
   fechaVencimiento DateTime?
   fechaPago        DateTime?
+  duracion         Int?
+  duracionUnidad   String?
   notas            String?
   createdAt        DateTime  @default(now())
 }

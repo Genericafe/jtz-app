@@ -70,6 +70,8 @@ export interface Payment {
   estado: 'pendiente' | 'pagado' | 'vencido';
   fechaVencimiento?: string;
   fechaPago?: string;
+  duracion?: number;
+  duracionUnidad?: string;
   notas?: string;
   createdAt: string;
   runner?: { nombre: string; apellido: string };

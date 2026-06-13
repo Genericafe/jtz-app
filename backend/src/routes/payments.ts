@@ -34,6 +34,9 @@ router.post('/', coachOnly, async (req: AuthRequest, res: Response) => {
     moneda: z.string().default('MXN'),
     estado: z.enum(['pendiente', 'pagado', 'vencido']).default('pendiente'),
     fechaVencimiento: z.string().optional(),
+    fechaPago: z.string().optional(),
+    duracion: z.number().int().positive().optional(),
+    duracionUnidad: z.string().optional(),
     notas: z.string().optional(),
   });
 
@@ -44,6 +47,7 @@ router.post('/', coachOnly, async (req: AuthRequest, res: Response) => {
     data: {
       ...parse.data,
       fechaVencimiento: parse.data.fechaVencimiento ? new Date(parse.data.fechaVencimiento) : undefined,
+      fechaPago: parse.data.fechaPago ? new Date(parse.data.fechaPago) : undefined,
     },
   });
   return res.status(201).json(payment);
