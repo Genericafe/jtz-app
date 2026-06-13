@@ -4,6 +4,8 @@ import {
   CreditCard, ShoppingBag, MessageSquare, LogOut, Zap, User, Settings, MessageCircle,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useQuery } from '@tanstack/react-query';
+import { runnersApi } from '../services/api';
 
 const coachNav = [
   { to: '/',             label: 'Inicio',          icon: LayoutDashboard },
@@ -47,7 +49,19 @@ function Avatar({ name, email, role }: { name?: string; email?: string; role?: s
 export default function Sidebar() {
   const { user, logout, isCoach } = useAuth();
   const navItems = isCoach ? coachNav : runnerNav;
-  const runnerName = user?.runner ? `${user.runner.nombre} ${user.runner.apellido}` : user?.email;
+
+  const { data: meData } = useQuery({
+    queryKey: ['runner-me'],
+    queryFn: () => runnersApi.me(),
+    staleTime: 30000,
+  });
+
+  const me = meData?.data;
+  const runnerName = me
+    ? `${me.nombre} ${me.apellido}`.trim()
+    : user?.runner
+      ? `${user.runner.nombre} ${user.runner.apellido}`.trim()
+      : user?.email;
 
   return (
     <aside className="w-64 min-h-screen bg-surface-800 flex flex-col border-r border-white/[0.05]">
