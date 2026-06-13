@@ -10,25 +10,40 @@ router.use(authMiddleware);
 
 // Perfil del runner autenticado
 router.get('/me', async (req: AuthRequest, res: Response) => {
-  const runner = await prisma.runner.findUnique({
-    where: { userId: req.userId! },
-    include: {
-      user: { select: { email: true } },
-      trainingPlans: {
-        include: { plan: true },
-        orderBy: { createdAt: 'desc' },
+  const [runner, user] = await Promise.all([
+    prisma.runner.findUnique({
+      where: { userId: req.userId! },
+      include: {
+        user: { select: { email: true } },
+        trainingPlans: {
+          include: { plan: true },
+          orderBy: { createdAt: 'desc' },
+        },
+        payments: {
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+        },
+        eventRegistrations: {
+          include: { event: true },
+        },
+        activityLogs: {
+          orderBy: { fecha: 'desc' },
+          take: 20,
+        },
       },
-      payments: {
-        orderBy: { createdAt: 'desc' },
-        take: 10,
-      },
-      eventRegistrations: {
-        include: { event: true },
-      },
-    },
-  });
+    }),
+    prisma.user.findUnique({ where: { id: req.userId! }, select: { email: true } }),
+  ]);
   if (!runner) return res.status(404).json({ error: 'Perfil no encontrado' });
-  return res.json(runner);
+
+  // Include paid/confirmed EventLeads (for runners who registered via landing page)
+  const paidLeads = user ? await prisma.eventLead.findMany({
+    where: { email: user.email, estado: { in: ['pagado', 'confirmado'] } },
+    select: { eventId: true },
+  }) : [];
+  const paidLeadEventIds = paidLeads.map(l => l.eventId);
+
+  return res.json({ ...runner, paidLeadEventIds });
 });
 
 // Actualizar propio perfil (runners)
@@ -193,6 +208,44 @@ router.delete('/:id/permanent', coachOnly, async (req: AuthRequest, res: Respons
 router.delete('/:id', coachOnly, async (req: AuthRequest, res: Response) => {
   await prisma.runner.update({ where: { id: Number(req.params.id) }, data: { activo: false } });
   return res.json({ ok: true });
+});
+
+// ── Activity Logs ─────────────────────────────────────────────────────────────
+
+// Runner sube actividad (GPX + distancia + notas)
+router.post('/me/activity-logs', async (req: AuthRequest, res: Response) => {
+  const schema = z.object({
+    diaId:       z.number().int().optional(),
+    fecha:       z.string().optional(),
+    gpxContent:  z.string().optional(),
+    gpxNombre:   z.string().optional(),
+    distanciaKm: z.number().optional(),
+    duracionMin: z.number().int().optional(),
+    notas:       z.string().optional(),
+  });
+  const parse = schema.safeParse(req.body);
+  if (!parse.success) return res.status(400).json({ error: 'Datos inválidos' });
+
+  const runner = await prisma.runner.findUnique({ where: { userId: req.userId! } });
+  if (!runner) return res.status(404).json({ error: 'Perfil no encontrado' });
+
+  const log = await (prisma as any).activityLog.create({
+    data: {
+      runnerId: runner.id,
+      ...parse.data,
+      fecha: parse.data.fecha ? new Date(parse.data.fecha) : new Date(),
+    },
+  });
+  return res.status(201).json(log);
+});
+
+// Coach ve logs de un corredor
+router.get('/:id/activity-logs', coachOnly, async (req: AuthRequest, res: Response) => {
+  const logs = await (prisma as any).activityLog.findMany({
+    where: { runnerId: Number(req.params.id) },
+    orderBy: { fecha: 'desc' },
+  });
+  return res.json(logs);
 });
 
 export default router;

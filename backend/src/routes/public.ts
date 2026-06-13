@@ -130,6 +130,16 @@ router.post('/webhook/stripe', async (req: Request, res: Response) => {
         include: { event: true },
       });
 
+      // Link to runner account if email matches
+      const user = await prisma.user.findUnique({ where: { email: lead.email }, include: { runner: true } });
+      if (user?.runner) {
+        await prisma.eventRegistration.upsert({
+          where: { eventId_runnerId: { eventId: lead.eventId, runnerId: user.runner.id } },
+          update: { pagado: true, estado: 'pagado' },
+          create: { eventId: lead.eventId, runnerId: user.runner.id, pagado: true, estado: 'pagado' },
+        });
+      }
+
       sendRegistrationConfirmation({
         to: lead.email,
         nombre: lead.nombre,
@@ -157,6 +167,17 @@ router.get('/verify/:sessionId', async (req: Request, res: Response) => {
         data: { estado: 'pagado', stripeSessionId: session.id },
         include: { event: true },
       });
+
+      // Link to runner account if email matches
+      const user = await prisma.user.findUnique({ where: { email: lead.email }, include: { runner: true } });
+      if (user?.runner) {
+        await prisma.eventRegistration.upsert({
+          where: { eventId_runnerId: { eventId: lead.eventId, runnerId: user.runner.id } },
+          update: { pagado: true, estado: 'pagado' },
+          create: { eventId: lead.eventId, runnerId: user.runner.id, pagado: true, estado: 'pagado' },
+        });
+      }
+
       sendRegistrationConfirmation({
         to: lead.email,
         nombre: lead.nombre,

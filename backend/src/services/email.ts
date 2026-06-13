@@ -10,7 +10,7 @@ interface StoredEmailConfig {
   oauthAccessToken: string | null; oauthRefreshToken: string | null;
 }
 
-interface SendOpts { from: string; to: string; subject: string; html: string; }
+interface SendOpts { from: string; to: string; subject: string; html: string; attachment?: { filename: string; content: string; contentType: string } }
 type Sender = (opts: SendOpts) => Promise<void>;
 
 // ── Gmail REST API sender (bypasses SMTP/IPv6 — uses HTTPS port 443) ──────────
@@ -25,17 +25,45 @@ async function gmailApiSender(_userEmail: string, refreshToken: string): Promise
     const subjectEncoded = `=?UTF-8?B?${Buffer.from(opts.subject).toString('base64')}?=`;
     const bodyBase64 = Buffer.from(opts.html, 'utf8').toString('base64');
 
-    const raw = [
-      `From: ${opts.from}`,
-      `To: ${opts.to}`,
-      `Subject: ${subjectEncoded}`,
-      'MIME-Version: 1.0',
-      'Content-Type: text/html; charset=UTF-8',
-      'Content-Transfer-Encoding: base64',
-      '',
-      bodyBase64,
-    ].join('\r\n');
+    let rawParts: string[];
+    if (opts.attachment) {
+      const boundary = `boundary_${Date.now()}`;
+      const attBase64 = Buffer.from(opts.attachment.content, 'utf8').toString('base64');
+      const attachNombreEncoded = `=?UTF-8?B?${Buffer.from(opts.attachment.filename).toString('base64')}?=`;
+      rawParts = [
+        `From: ${opts.from}`,
+        `To: ${opts.to}`,
+        `Subject: ${subjectEncoded}`,
+        'MIME-Version: 1.0',
+        `Content-Type: multipart/mixed; boundary="${boundary}"`,
+        '',
+        `--${boundary}`,
+        'Content-Type: text/html; charset=UTF-8',
+        'Content-Transfer-Encoding: base64',
+        '',
+        bodyBase64,
+        `--${boundary}`,
+        `Content-Type: ${opts.attachment.contentType}`,
+        `Content-Disposition: attachment; filename="${attachNombreEncoded}"`,
+        'Content-Transfer-Encoding: base64',
+        '',
+        attBase64,
+        `--${boundary}--`,
+      ];
+    } else {
+      rawParts = [
+        `From: ${opts.from}`,
+        `To: ${opts.to}`,
+        `Subject: ${subjectEncoded}`,
+        'MIME-Version: 1.0',
+        'Content-Type: text/html; charset=UTF-8',
+        'Content-Transfer-Encoding: base64',
+        '',
+        bodyBase64,
+      ];
+    }
 
+    const raw = rawParts.join('\r\n');
     const encoded = Buffer.from(raw, 'utf8').toString('base64url');
 
     await client.request({
@@ -210,4 +238,34 @@ export async function sendBulkUpdate(opts: {
       </div>
     `) });
   }
+}
+
+export async function sendGpxToRunner(opts: {
+  to: string; nombre: string; eventName: string;
+  gpxContent: string; gpxNombre: string; coachUserId?: number;
+}): Promise<void> {
+  const { send, from } = await getSender(opts.coachUserId);
+  await send({
+    from,
+    to: opts.to,
+    subject: `🗺️ Ruta GPX disponible — ${opts.eventName}`,
+    html: baseTemplate(`
+      <div class="header"><h1>🗺️ Ruta del evento</h1><p>${opts.eventName}</p></div>
+      <div class="body">
+        <p>¡Hola, <strong style="color:white">${opts.nombre}</strong>! 👋</p>
+        <p>El coach ha publicado la ruta oficial del evento. Encontrarás el archivo GPX adjunto en este correo.</p>
+        <div class="info-box">
+          <div class="info-row"><span class="info-label">Evento</span><span class="info-value">${opts.eventName}</span></div>
+          <div class="info-row"><span class="info-label">Archivo</span><span class="info-value">${opts.gpxNombre}</span></div>
+        </div>
+        <p style="color:#94a3b8;font-size:13px">Puedes importar el archivo GPX directamente en Garmin Connect, Strava, Komoot u otras apps de entrenamiento.</p>
+        <p style="margin-top:24px;color:#94a3b8;font-size:13px">— Coach · JTZ Running Club</p>
+      </div>
+    `),
+    attachment: {
+      filename: opts.gpxNombre,
+      content:  opts.gpxContent,
+      contentType: 'application/gpx+xml',
+    },
+  });
 }

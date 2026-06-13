@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware, coachOnly, AuthRequest } from '../middleware/auth';
-import { sendEventNotification } from '../services/email';
+import { sendEventNotification, sendGpxToRunner } from '../services/email';
 import { z } from 'zod';
 
 const router = Router();
@@ -102,6 +102,74 @@ router.put('/:id', coachOnly, async (req: AuthRequest, res: Response) => {
 router.delete('/:id', coachOnly, async (req: AuthRequest, res: Response) => {
   await prisma.event.delete({ where: { id: Number(req.params.id) } });
   return res.json({ ok: true });
+});
+
+// ── GPX upload (coach) ────────────────────────────────────────────────────────
+router.post('/:id/gpx', coachOnly, async (req: AuthRequest, res: Response) => {
+  const schema = z.object({
+    gpxContent: z.string().min(1),
+    gpxNombre:  z.string().min(1),
+  });
+  const parse = schema.safeParse(req.body);
+  if (!parse.success) return res.status(400).json({ error: 'Datos inválidos' });
+
+  const event = await prisma.event.update({
+    where: { id: Number(req.params.id) },
+    data: { gpxContent: parse.data.gpxContent, gpxNombre: parse.data.gpxNombre },
+    include: {
+      registros: {
+        where: { pagado: true },
+        include: { runner: { include: { user: { select: { email: true } } } } },
+      },
+      leads: { where: { estado: { in: ['pagado', 'confirmado'] } } },
+    },
+  });
+
+  // Email GPX to all paid registrants (fire-and-forget)
+  const recipients = [
+    ...event.registros.map(r => ({ nombre: r.runner.nombre, email: r.runner.user!.email })),
+    ...event.leads.map(l => ({ nombre: l.nombre, email: l.email })),
+  ];
+  const uniqueEmails = new Map(recipients.map(r => [r.email, r]));
+
+  for (const { nombre, email } of uniqueEmails.values()) {
+    sendGpxToRunner({
+      to: email, nombre,
+      eventName: event.nombre,
+      gpxContent: parse.data.gpxContent,
+      gpxNombre: parse.data.gpxNombre,
+      coachUserId: req.userId,
+    }).catch(err => console.error('[gpx email]', err));
+  }
+
+  return res.json({ ok: true, gpxNombre: event.gpxNombre });
+});
+
+// ── GPX download (paid runner or coach) ──────────────────────────────────────
+router.get('/:id/gpx', async (req: AuthRequest, res: Response) => {
+  const event = await prisma.event.findUnique({ where: { id: Number(req.params.id) } });
+  if (!event?.gpxContent) return res.status(404).json({ error: 'Este evento no tiene ruta GPX' });
+
+  // Coach always allowed; runners must be registered+paid
+  const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { role: true, email: true, runner: true } });
+  if (!user) return res.status(401).json({ error: 'No autenticado' });
+
+  if (user.role !== 'coach') {
+    const runnerId = (user as any).runner?.id;
+    const [regOk, leadOk] = await Promise.all([
+      runnerId ? prisma.eventRegistration.findFirst({
+        where: { eventId: event.id, runnerId, pagado: true },
+      }) : null,
+      prisma.eventLead.findFirst({
+        where: { eventId: event.id, email: user.email, estado: { in: ['pagado', 'confirmado'] } },
+      }),
+    ]);
+    if (!regOk && !leadOk) return res.status(403).json({ error: 'Solo disponible para inscritos pagados' });
+  }
+
+  res.setHeader('Content-Type', 'application/gpx+xml');
+  res.setHeader('Content-Disposition', `attachment; filename="${event.gpxNombre ?? 'ruta.gpx'}"`);
+  return res.send(event.gpxContent);
 });
 
 router.post('/:id/register', async (req: AuthRequest, res: Response) => {

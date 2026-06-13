@@ -58,8 +58,21 @@ export interface Event {
   distanciaKm?: number;
   cupoMaximo?: number;
   precio: number;
+  gpxNombre?: string | null;
   activo: boolean;
   _count?: { registros: number };
+}
+
+export interface ActivityLog {
+  id: number;
+  runnerId: number;
+  diaId?: number | null;
+  fecha: string;
+  gpxNombre?: string | null;
+  distanciaKm?: number | null;
+  duracionMin?: number | null;
+  notas?: string | null;
+  createdAt: string;
 }
 
 export interface Payment {

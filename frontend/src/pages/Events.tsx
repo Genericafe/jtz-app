@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Plus, MapPin, Users, X, Calendar, Clock, Trophy, Share2, ExternalLink, CreditCard, CheckCircle, User, Trash2, Sparkles, Mail, Edit2, Download, FileSpreadsheet } from 'lucide-react';
-import { eventsApi, publicApi, runnersApi } from '../services/api';
+import { Plus, MapPin, Users, X, Calendar, Clock, Trophy, Share2, ExternalLink, CreditCard, CheckCircle, User, Trash2, Sparkles, Mail, Edit2, Download, FileSpreadsheet, Upload, Route } from 'lucide-react';
+import { eventsApi, publicApi, runnersApi, default as api } from '../services/api';
 import { Event } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { format, isAfter, formatDistanceToNow } from 'date-fns';
@@ -434,6 +434,164 @@ const typeConfig: Record<string, { gradient: string; emoji: string; label: strin
 };
 
 // ── Coach: modal with registered people table + Excel export ──────────────────
+// ── GPX upload para coach ─────────────────────────────────────────────────────
+function GpxUpload({ eventId, currentGpxNombre }: { eventId: number; currentGpxNombre?: string | null }) {
+  const qc = useQueryClient();
+  const [status, setStatus] = useState<'idle' | 'uploading' | 'ok' | 'error'>('idle');
+  const [nombre, setNombre] = useState(currentGpxNombre ?? null);
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setStatus('uploading');
+    try {
+      const content = await file.text();
+      await api.post(`/events/${eventId}/gpx`, { gpxContent: content, gpxNombre: file.name });
+      setNombre(file.name);
+      setStatus('ok');
+      qc.invalidateQueries({ queryKey: ['events'] });
+      setTimeout(() => setStatus('idle'), 4000);
+    } catch {
+      setStatus('error');
+    }
+    e.target.value = '';
+  };
+
+  return (
+    <div className="bg-surface-700 rounded-xl p-4 border border-white/[0.06]">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Route size={15} className="text-brand-400 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-white">Ruta GPX del evento</p>
+            <p className="text-xs text-gray-500 truncate max-w-[200px]">
+              {nombre ?? 'Sin archivo GPX todavía'}
+            </p>
+          </div>
+        </div>
+        <label className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${
+          status === 'uploading' ? 'opacity-50 cursor-not-allowed' :
+          'bg-brand-500/10 text-brand-400 border-brand-500/20 hover:bg-brand-500/20'
+        }`}>
+          <Upload size={13} />
+          {status === 'uploading' ? 'Subiendo…' : nombre ? 'Reemplazar GPX' : 'Subir GPX'}
+          <input type="file" accept=".gpx" className="hidden" onChange={handleFile} disabled={status === 'uploading'} />
+        </label>
+      </div>
+      {status === 'ok' && (
+        <p className="text-xs text-green-400 mt-2">✓ GPX subido — se envió por correo a todos los inscritos pagados</p>
+      )}
+      {status === 'error' && (
+        <p className="text-xs text-red-400 mt-2">Error al subir. Verifica el archivo e intenta de nuevo.</p>
+      )}
+    </div>
+  );
+}
+
+// ── Modal de detalle de evento para corredor inscrito ─────────────────────────
+function RunnerEventDetailModal({ ev, isPaid, onClose }: { ev: Event; isPaid: boolean; onClose: () => void }) {
+  const [gpxLoading, setGpxLoading] = useState(false);
+  const [gpxStatus, setGpxStatus] = useState<'idle' | 'ok' | 'error'>('idle');
+  const cfg = typeConfig[ev.tipo] ?? typeConfig.carrera;
+
+  const downloadGpx = async () => {
+    setGpxLoading(true);
+    try {
+      const res = await api.get(`/events/${ev.id}/gpx`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = ev.gpxNombre ?? 'ruta.gpx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setGpxStatus('ok');
+    } catch {
+      setGpxStatus('error');
+    } finally {
+      setGpxLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 sm:px-4">
+      <div className="card w-full sm:max-w-lg max-h-[90vh] overflow-y-auto animate-slide-up rounded-b-none sm:rounded-2xl">
+        {/* Header con gradiente */}
+        <div className={`${cfg.gradient} p-5 relative rounded-t-2xl`}>
+          <button onClick={onClose} className="absolute top-3 right-3 p-1.5 rounded-lg bg-black/20 text-white/70 hover:text-white transition-colors">
+            <X size={16} />
+          </button>
+          <p className="text-white/70 text-xs font-semibold uppercase tracking-wide mb-1">{cfg.label}</p>
+          <h2 className="text-xl font-black text-white leading-tight pr-8">{ev.nombre}</h2>
+          <div className="flex flex-wrap gap-3 mt-2 text-white/80 text-xs">
+            <span className="flex items-center gap-1"><Calendar size={11} /> {format(new Date(ev.fecha), "d 'de' MMMM · HH:mm 'hrs'", { locale: es })}</span>
+            <span className="flex items-center gap-1"><MapPin size={11} /> {ev.lugar}{ev.ciudad ? `, ${ev.ciudad}` : ''}</span>
+            {ev.distanciaKm && <span className="flex items-center gap-1"><Trophy size={11} /> {ev.distanciaKm} km</span>}
+          </div>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Badge inscrito */}
+          <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-green-500/10 border border-green-500/20">
+            <CheckCircle size={16} className="text-green-400 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-green-300">
+                {isPaid ? '¡Inscripción confirmada y pagada!' : '¡Inscripción confirmada!'}
+              </p>
+              <p className="text-xs text-green-400/70 mt-0.5">Recibirás actualizaciones del coach por correo</p>
+            </div>
+          </div>
+
+          {/* Descripción */}
+          {ev.descripcion && (
+            <div className="bg-surface-700 rounded-xl p-4 border border-white/[0.06]">
+              <p className="text-sm text-gray-300 leading-relaxed">{ev.descripcion}</p>
+            </div>
+          )}
+
+          {/* Ruta GPX */}
+          {ev.gpxNombre && isPaid && (
+            <div className="bg-surface-700 rounded-xl p-4 border border-white/[0.06]">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Route size={16} className="text-brand-400 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-white">Ruta oficial GPX</p>
+                    <p className="text-xs text-gray-500 truncate max-w-[180px]">{ev.gpxNombre}</p>
+                  </div>
+                </div>
+                <button onClick={downloadGpx} disabled={gpxLoading}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-brand-500/15 text-brand-400 border border-brand-500/20 text-xs font-semibold hover:bg-brand-500/25 transition-all disabled:opacity-50">
+                  <Download size={13} /> {gpxLoading ? 'Descargando…' : 'Descargar'}
+                </button>
+              </div>
+              {gpxStatus === 'ok' && <p className="text-xs text-green-400 mt-2">✓ Descarga iniciada — importa el GPX en Garmin, Strava o Komoot</p>}
+              {gpxStatus === 'error' && <p className="text-xs text-red-400 mt-2">Error al descargar. Intenta de nuevo.</p>}
+            </div>
+          )}
+
+          {ev.gpxNombre && !isPaid && (
+            <div className="bg-surface-700 rounded-xl p-4 border border-white/[0.06] opacity-60">
+              <div className="flex items-center gap-2">
+                <Route size={16} className="text-gray-500" />
+                <div>
+                  <p className="text-sm font-semibold text-gray-400">Ruta GPX disponible</p>
+                  <p className="text-xs text-gray-500">Solo disponible para inscritos con pago confirmado</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <button onClick={onClose} className="w-full py-2.5 rounded-xl border border-white/[0.08] text-sm text-gray-400 hover:text-white transition-colors">
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CoachEventDetailModal({ ev, onClose }: { ev: Event; onClose: () => void }) {
   const { data, isLoading } = useQuery({
     queryKey: ['event-detail', ev.id],
@@ -605,9 +763,10 @@ function CoachEventDetailModal({ ev, onClose }: { ev: Event; onClose: () => void
   );
 }
 
-function EventCard({ ev, onRegisterClick, myRegistrations, isCoach, onShare, onDelete, onEdit, onViewInscribed }: {
+function EventCard({ ev, onRegisterClick, onViewDetail, myRegistrations, isCoach, onShare, onDelete, onEdit, onViewInscribed }: {
   ev: Event;
   onRegisterClick?: (ev: Event) => void;
+  onViewDetail?: (ev: Event) => void;
   myRegistrations?: Set<number>;
   isCoach: boolean;
   onShare: (ev: Event) => void;
@@ -622,6 +781,8 @@ function EventCard({ ev, onRegisterClick, myRegistrations, isCoach, onShare, onD
   const handleCardClick = () => {
     if (isCoach) {
       onViewInscribed?.(ev);
+    } else if (isRegistered) {
+      onViewDetail?.(ev);
     } else if (!isPast) {
       onRegisterClick?.(ev);
     }
@@ -712,9 +873,10 @@ function EventCard({ ev, onRegisterClick, myRegistrations, isCoach, onShare, onD
             )}
             {!isCoach && !isPast && (
               isRegistered ? (
-                <span className="text-xs px-2.5 py-1 rounded-full bg-green-500/15 text-green-400 font-medium flex items-center gap-1">
-                  <CheckCircle size={11} /> Inscrito
-                </span>
+                <button onClick={e => { e.stopPropagation(); onViewDetail?.(ev); }}
+                  className="text-xs px-2.5 py-1 rounded-full bg-green-500/15 text-green-400 font-medium flex items-center gap-1 hover:bg-green-500/25 transition-colors">
+                  <CheckCircle size={11} /> Inscrito · ver detalle
+                </button>
               ) : (
                 <button onClick={() => onRegisterClick?.(ev)}
                   className="text-xs px-3 py-1.5 rounded-full bg-brand-500 hover:bg-brand-600 text-white font-semibold transition-colors active:scale-95">
@@ -738,6 +900,7 @@ export default function Events() {
   const [shareEvent, setShareEvent] = useState<Event | null>(null);
   const [registerEvent, setRegisterEvent] = useState<Event | null>(null);
   const [coachDetailEvent, setCoachDetailEvent] = useState<Event | null>(null);
+  const [runnerDetailEvent, setRunnerDetailEvent] = useState<Event | null>(null);
   const [filter, setFilter] = useState<'todos' | 'carrera' | 'trail' | 'entrenamiento' | 'social'>('todos');
   const [form, setForm] = useState({
     nombre: '', tipo: 'carrera', descripcion: '', fecha: '', lugar: '',
@@ -758,9 +921,10 @@ export default function Events() {
   });
 
   const events: Event[] = data?.data ?? [];
-  const myRegistrations = new Set<number>(
-    (meData?.data?.eventRegistrations ?? []).map((r: { eventId: number }) => r.eventId)
-  );
+  const myRegistrations = new Set<number>([
+    ...(meData?.data?.eventRegistrations ?? []).map((r: { eventId: number }) => r.eventId),
+    ...(meData?.data?.paidLeadEventIds ?? []),
+  ]);
 
   const createMutation = useMutation({
     mutationFn: (d: object) => eventsApi.create(d),
@@ -859,7 +1023,7 @@ export default function Events() {
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {upcoming.map((ev) => (
               <div key={ev.id} className="flex flex-col gap-2">
-                <EventCard ev={ev} onRegisterClick={!isCoach ? setRegisterEvent : undefined} myRegistrations={myRegistrations} isCoach={isCoach} onShare={setShareEvent} onDelete={isCoach ? (id) => deleteMutation.mutate(id) : undefined} onEdit={isCoach ? openEdit : undefined} onViewInscribed={isCoach ? setCoachDetailEvent : undefined} />
+                <EventCard ev={ev} onRegisterClick={!isCoach ? setRegisterEvent : undefined} onViewDetail={!isCoach ? setRunnerDetailEvent : undefined} myRegistrations={myRegistrations} isCoach={isCoach} onShare={setShareEvent} onDelete={isCoach ? (id) => deleteMutation.mutate(id) : undefined} onEdit={isCoach ? openEdit : undefined} onViewInscribed={isCoach ? setCoachDetailEvent : undefined} />
                 {isCoach && (
                   <div className="flex gap-2">
                     <button onClick={() => navigate(`/eventos/${ev.id}/inscritos`)}
@@ -883,7 +1047,7 @@ export default function Events() {
           <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Anteriores</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {past.slice(0, 6).map((ev) => (
-              <EventCard key={ev.id} ev={ev} myRegistrations={myRegistrations} isCoach={isCoach} onShare={setShareEvent} onDelete={isCoach ? (id) => deleteMutation.mutate(id) : undefined} onEdit={isCoach ? openEdit : undefined} onViewInscribed={isCoach ? setCoachDetailEvent : undefined} />
+              <EventCard key={ev.id} ev={ev} onViewDetail={!isCoach ? setRunnerDetailEvent : undefined} myRegistrations={myRegistrations} isCoach={isCoach} onShare={setShareEvent} onDelete={isCoach ? (id) => deleteMutation.mutate(id) : undefined} onEdit={isCoach ? openEdit : undefined} onViewInscribed={isCoach ? setCoachDetailEvent : undefined} />
             ))}
           </div>
         </div>
@@ -898,6 +1062,13 @@ export default function Events() {
 
       {shareEvent && <ShareModal ev={shareEvent} onClose={() => setShareEvent(null)} />}
       {coachDetailEvent && <CoachEventDetailModal ev={coachDetailEvent} onClose={() => setCoachDetailEvent(null)} />}
+      {runnerDetailEvent && (
+        <RunnerEventDetailModal
+          ev={runnerDetailEvent}
+          isPaid={myRegistrations.has(runnerDetailEvent.id)}
+          onClose={() => setRunnerDetailEvent(null)}
+        />
+      )}
 
       {registerEvent && (
         <RegisterModal
@@ -1101,6 +1272,9 @@ export default function Events() {
                 <textarea value={editForm.descripcion} onChange={e => setEditForm({ ...editForm, descripcion: e.target.value })}
                   rows={3} spellCheck lang="es-MX" className="input w-full text-sm resize-none" />
               </div>
+
+              {/* GPX upload */}
+              <GpxUpload eventId={editEvent.id} currentGpxNombre={editEvent.gpxNombre} />
             </div>
 
             <div className="flex gap-3 mt-5">

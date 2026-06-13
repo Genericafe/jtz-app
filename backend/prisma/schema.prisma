@@ -64,6 +64,22 @@ model Runner {
   eventRegistrations EventRegistration[]
   orders             Order[]
   communicationLogs  CommunicationLog[]
+  activityLogs       ActivityLog[]
+}
+
+model ActivityLog {
+  id          Int          @id @default(autoincrement())
+  runnerId    Int
+  runner      Runner       @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  diaId       Int?
+  dia         TrainingDay? @relation(fields: [diaId], references: [id])
+  fecha       DateTime     @default(now())
+  gpxContent  String?      @db.Text
+  gpxNombre   String?
+  distanciaKm Float?
+  duracionMin Int?
+  notas       String?
+  createdAt   DateTime     @default(now())
 }
 
 model CommunicationLog {
@@ -121,6 +137,8 @@ model TrainingDay {
   duracionMin Int?
   descripcion String?
   intensidad  String?
+
+  activityLogs ActivityLog[]
 }
 
 model TrainingPlanAssignment {
@@ -148,6 +166,8 @@ model Event {
   cupoMaximo  Int?
   precio      Float    @default(0)
   imagen      String?
+  gpxContent  String?  @db.Text
+  gpxNombre   String?
   activo      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
