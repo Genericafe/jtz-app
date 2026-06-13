@@ -23,6 +23,7 @@
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^8.0.11",
     "stripe": "^15.12.0",
+    "ts-node": "^10.9.2",
     "zod": "^3.23.8"
   },
   "devDependencies": {
