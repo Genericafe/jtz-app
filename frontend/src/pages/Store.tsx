@@ -144,7 +144,7 @@ function ProductForm({ onClose }: { onClose: () => void }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-400 mb-1">Tipo</label>
-              <select value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value })} className="input w-full text-sm">
+              <select value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value as 'jersey' | 'short' | 'accesorio' | 'calzado' })} className="input w-full text-sm">
                 {Object.entries(tipoLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </div>
@@ -256,7 +256,7 @@ function EditProductForm({ product, onClose }: { product: Product; onClose: () =
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-400 mb-1">Tipo</label>
-              <select value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value })} className="input w-full text-sm">
+              <select value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value as 'jersey' | 'short' | 'accesorio' | 'calzado' })} className="input w-full text-sm">
                 {Object.entries(tipoLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </div>
