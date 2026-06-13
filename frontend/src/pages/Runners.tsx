@@ -16,7 +16,7 @@ const nivelConfig: Record<string, { badge: string; ring: string; gradient: strin
 function RunnerCard({ runner, onClick }: { runner: Runner; onClick: () => void }) {
   const nivel = runner.nivel ?? 'principiante';
   const cfg = nivelConfig[nivel] ?? nivelConfig.principiante;
-  const initials = `${runner.nombre[0]}${runner.apellido[0]}`.toUpperCase();
+  const initials = `${runner.nombre?.[0] ?? ''}${runner.apellido?.[0] ?? ''}`.toUpperCase() || '?';
 
   return (
     <div onClick={onClick} className="card-hover p-5 flex flex-col gap-4 cursor-pointer">
