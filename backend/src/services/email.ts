@@ -36,24 +36,27 @@ function buildTransporter(host: string, port: number, user: string, pass: string
 
   if (host === 'smtp.office365.com') {
     return nodemailer.createTransport({
-      host, port: 587, secure: false, requireTLS: true,
+      host, port: 587, secure: false, requireTLS: true, family: 4,
       auth: { user, pass: cleanPass },
       tls: { ciphers: 'SSLv3', minVersion: 'TLSv1.2' },
-    });
+    } as object);
   }
 
   return nodemailer.createTransport({
-    host, port,
+    host, port, family: 4,
     secure: port === 465,
     requireTLS: port === 587,
     auth: { user, pass: cleanPass },
     tls: { minVersion: 'TLSv1.2' },
-  });
+  } as object);
 }
 
 function buildOAuthTransporter(user: string, refreshToken: string): nodemailer.Transporter {
   return nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,   // STARTTLS
+    family: 4,       // Forzar IPv4 (Railway no soporta IPv6)
     auth: {
       type: 'OAuth2',
       user,
