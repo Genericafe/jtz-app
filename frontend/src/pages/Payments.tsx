@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, CheckCircle, Clock, AlertTriangle, X, CreditCard } from 'lucide-react';
+import { Plus, CheckCircle, Clock, AlertTriangle, X, CreditCard, Search, ChevronDown } from 'lucide-react';
 import { paymentsApi, runnersApi, stripeApi } from '../services/api';
 import { Payment, Runner } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -19,6 +19,19 @@ export default function Payments() {
   const [showForm, setShowForm] = useState(false);
   const [filter, setFilter] = useState<'todos' | 'pendiente' | 'pagado' | 'vencido'>('todos');
   const [form, setForm] = useState({ runnerId: '', concepto: 'membresia', monto: '', moneda: 'MXN', estado: 'pendiente', fechaVencimiento: '', notas: '' });
+  const [runnerSearch, setRunnerSearch] = useState('');
+  const [runnerDropdown, setRunnerDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setRunnerDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   // Coach ve todos los pagos; runner ve sólo los suyos
   const { data: paymentsData } = useQuery({
@@ -76,7 +89,7 @@ export default function Payments() {
             { label: 'Pendientes', value: stats?.pendiente ?? 0, color: 'text-yellow-400' },
             { label: 'Vencidos', value: stats?.vencido ?? 0, color: 'text-red-400' },
           ].map(({ label, value, color }) => (
-            <div key={label} className="bg-dark-800 border border-dark-700 rounded-xl p-5">
+            <div key={label} className="card rounded-xl p-5">
               <p className="text-xs text-gray-400 uppercase tracking-wide">{label}</p>
               <p className={`text-2xl font-bold mt-1 ${color}`}>{value}</p>
             </div>
@@ -93,7 +106,7 @@ export default function Payments() {
         </div>
       )}
 
-      <div className="flex gap-1 p-1 bg-dark-800 border border-dark-700 rounded-lg w-fit mb-5">
+      <div className="flex gap-1 p-1 card rounded-lg w-fit mb-5">
         {(['todos', 'pendiente', 'pagado', 'vencido'] as const).map((f) => (
           <button key={f} onClick={() => setFilter(f)}
             className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors capitalize ${filter === f ? 'bg-brand-500 text-white' : 'text-gray-400 hover:text-white'}`}>
@@ -102,7 +115,7 @@ export default function Payments() {
         ))}
       </div>
 
-      <div className="bg-dark-800 border border-dark-700 rounded-xl overflow-hidden">
+      <div className="card rounded-xl overflow-hidden">
         <table className="w-full">
           <thead>
             <tr className="border-b border-dark-700">
@@ -118,7 +131,7 @@ export default function Payments() {
             {filtered.map((p) => {
               const { cls, icon: Icon } = estadoStyles[p.estado] ?? estadoStyles.pendiente;
               return (
-                <tr key={p.id} className="border-b border-dark-700/50 hover:bg-dark-700/30 transition-colors">
+                <tr key={p.id} className="border-b border-dark-700/50 hover:bg-surface-700/30 transition-colors">
                   {isCoach && (
                     <td className="px-5 py-3 text-sm text-white">
                       {p.runner?.nombre} {p.runner?.apellido}
@@ -168,26 +181,54 @@ export default function Payments() {
 
       {showForm && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 px-4">
-          <div className="bg-dark-800 border border-dark-700 rounded-2xl p-6 w-full max-w-md">
+          <div className="card rounded-2xl p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-semibold text-white">Registrar pago</h2>
               <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-white"><X size={20} /></button>
             </div>
             <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1">Corredor</label>
-                <select value={form.runnerId} onChange={(e) => setForm({ ...form, runnerId: e.target.value })}
-                  className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500">
-                  <option value="">Seleccionar corredor...</option>
-                  {runners.filter(r => r.activo).map((r) => (
-                    <option key={r.id} value={r.id}>{r.nombre} {r.apellido}</option>
-                  ))}
-                </select>
+              <div ref={dropdownRef} className="relative">
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5">Corredor</label>
+                <div
+                  className="input w-full flex items-center gap-2 cursor-pointer"
+                  onClick={() => setRunnerDropdown(true)}
+                >
+                  <Search size={14} className="text-gray-500 flex-shrink-0" />
+                  <input
+                    value={runnerSearch}
+                    onChange={e => { setRunnerSearch(e.target.value); setRunnerDropdown(true); if (!e.target.value) setForm({ ...form, runnerId: '' }); }}
+                    onFocus={() => setRunnerDropdown(true)}
+                    placeholder={form.runnerId ? runners.find(r => String(r.id) === form.runnerId) ? `${runners.find(r => String(r.id) === form.runnerId)!.nombre} ${runners.find(r => String(r.id) === form.runnerId)!.apellido}` : 'Buscar corredor...' : 'Buscar corredor...'}
+                    className="flex-1 bg-transparent outline-none text-sm text-white placeholder-gray-500"
+                  />
+                  <ChevronDown size={14} className="text-gray-500 flex-shrink-0" />
+                </div>
+                {runnerDropdown && (
+                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-surface-700 border border-white/[0.08] rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                    {runners.filter(r => r.activo && `${r.nombre} ${r.apellido}`.toLowerCase().includes(runnerSearch.toLowerCase())).length === 0 ? (
+                      <p className="px-3 py-3 text-sm text-gray-500">No se encontraron corredores</p>
+                    ) : (
+                      runners.filter(r => r.activo && `${r.nombre} ${r.apellido}`.toLowerCase().includes(runnerSearch.toLowerCase())).map(r => (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() => { setForm({ ...form, runnerId: String(r.id) }); setRunnerSearch(`${r.nombre} ${r.apellido}`); setRunnerDropdown(false); }}
+                          className={`w-full text-left px-3 py-2.5 text-sm hover:bg-surface-600 transition-colors flex items-center gap-2 ${String(r.id) === form.runnerId ? 'text-brand-400 bg-brand-500/10' : 'text-white'}`}
+                        >
+                          <span className="w-7 h-7 rounded-full bg-brand-500/20 text-brand-400 text-xs font-bold flex items-center justify-center flex-shrink-0">
+                            {r.nombre[0]}{r.apellido[0]}
+                          </span>
+                          {r.nombre} {r.apellido}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-400 mb-1">Concepto</label>
                 <select value={form.concepto} onChange={(e) => setForm({ ...form, concepto: e.target.value })}
-                  className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500">
+                  className="w-full input">
                   {['membresia', 'plan_personalizado', 'evento', 'uniforme'].map((c) => (
                     <option key={c} value={c}>{c.replace('_', ' ')}</option>
                   ))}
@@ -197,12 +238,12 @@ export default function Payments() {
                 <div>
                   <label className="block text-xs font-medium text-gray-400 mb-1">Monto (MXN)</label>
                   <input type="number" value={form.monto} onChange={(e) => setForm({ ...form, monto: e.target.value })}
-                    className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500" />
+                    className="w-full input" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-400 mb-1">Estado inicial</label>
                   <select value={form.estado} onChange={(e) => setForm({ ...form, estado: e.target.value })}
-                    className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500">
+                    className="w-full input">
                     {['pendiente', 'pagado', 'vencido'].map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
@@ -210,7 +251,7 @@ export default function Payments() {
               <div>
                 <label className="block text-xs font-medium text-gray-400 mb-1">Fecha de vencimiento</label>
                 <input type="date" value={form.fechaVencimiento} onChange={(e) => setForm({ ...form, fechaVencimiento: e.target.value })}
-                  className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500" />
+                  className="w-full input" />
               </div>
             </div>
             <div className="flex gap-3 mt-5">
