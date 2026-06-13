@@ -74,28 +74,37 @@ router.post('/events/:id/checkout', async (req: Request, res: Response) => {
     create: { ...parse.data, eventId: event.id, estado: 'pendiente', monto: event.precio },
   });
 
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-04-10' as Stripe.LatestApiVersion });
-  const session = await stripe.checkout.sessions.create({
-    mode: 'payment',
-    payment_method_types: ['card'],
-    customer_email: parse.data.email,
-    line_items: [{
-      price_data: {
-        currency: 'mxn',
-        product_data: {
-          name: `Inscripción — ${event.nombre}`,
-          description: `${event.lugar}, ${event.ciudad} · ${format(new Date(event.fecha), "d 'de' MMMM", { locale: es })}`,
-        },
-        unit_amount: Math.round(event.precio * 100),
-      },
-      quantity: 1,
-    }],
-    metadata: { leadId: lead.id.toString(), eventId: event.id.toString() },
-    success_url: `${process.env.FRONTEND_URL}/evento/${event.id}?success=1&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${process.env.FRONTEND_URL}/evento/${event.id}?cancelled=1`,
-  });
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  if (!stripeKey || stripeKey.includes('REEMPLAZA') || stripeKey.length < 20) {
+    return res.status(503).json({ error: 'El pago con tarjeta no está disponible en este momento. Contacta al coach para inscribirte.' });
+  }
 
-  return res.json({ url: session.url });
+  try {
+    const stripe = new Stripe(stripeKey, { apiVersion: '2024-04-10' as Stripe.LatestApiVersion });
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      payment_method_types: ['card'],
+      customer_email: parse.data.email,
+      line_items: [{
+        price_data: {
+          currency: 'mxn',
+          product_data: {
+            name: `Inscripción — ${event.nombre}`,
+            description: `${event.lugar}, ${event.ciudad} · ${format(new Date(event.fecha), "d 'de' MMMM", { locale: es })}`,
+          },
+          unit_amount: Math.round(event.precio * 100),
+        },
+        quantity: 1,
+      }],
+      metadata: { leadId: lead.id.toString(), eventId: event.id.toString() },
+      success_url: `${process.env.FRONTEND_URL}/evento/${event.id}?success=1&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.FRONTEND_URL}/evento/${event.id}?cancelled=1`,
+    });
+    return res.json({ url: session.url });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error al procesar el pago';
+    return res.status(500).json({ error: `Error al crear la sesión de pago: ${msg}` });
+  }
 });
 
 // Stripe webhook — confirm lead payment

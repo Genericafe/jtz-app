@@ -49,6 +49,9 @@ model Runner {
   estado          String    @default("México")
   fechaNacimiento DateTime?
   nivel           String    @default("principiante")
+  pais            String    @default("México")
+  genero          String?
+  tallaCamiseta   String?
   fotoPerfil      String?
   activo          Boolean   @default(true)
   notas           String?

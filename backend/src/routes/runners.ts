@@ -155,8 +155,12 @@ router.put('/:id', coachOnly, async (req: AuthRequest, res: Response) => {
     nombre: z.string().optional(),
     apellido: z.string().optional(),
     telefono: z.string().optional(),
+    pais: z.string().optional(),
+    estado: z.string().optional(),
     ciudad: z.string().optional(),
     nivel: z.enum(['principiante', 'intermedio', 'avanzado', 'elite']).optional(),
+    genero: z.string().optional(),
+    tallaCamiseta: z.string().optional(),
     activo: z.boolean().optional(),
     notas: z.string().optional(),
   });

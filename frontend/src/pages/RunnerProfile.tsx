@@ -38,7 +38,7 @@ export default function RunnerProfile() {
   const [logForm, setLogForm] = useState({ tipo: 'whatsapp', direccion: 'entrante', mensaje: '' });
   const [showLogForm, setShowLogForm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editForm, setEditForm] = useState({ nombre: '', apellido: '', telefono: '', ciudad: '', nivel: 'principiante', notas: '' });
+  const [editForm, setEditForm] = useState({ nombre: '', apellido: '', telefono: '', pais: '', estado: '', ciudad: '', nivel: 'principiante', genero: '', tallaCamiseta: '', notas: '' });
 
   const { data, isLoading } = useQuery({
     queryKey: ['runner', id],
@@ -62,7 +62,7 @@ export default function RunnerProfile() {
 
   const openEdit = () => {
     if (!runner) return;
-    setEditForm({ nombre: runner.nombre, apellido: runner.apellido, telefono: runner.telefono ?? '', ciudad: runner.ciudad, nivel: runner.nivel, notas: runner.notas ?? '' });
+    setEditForm({ nombre: runner.nombre, apellido: runner.apellido, telefono: runner.telefono ?? '', pais: (runner as any).pais ?? '', estado: runner.estado ?? '', ciudad: runner.ciudad, nivel: runner.nivel, genero: (runner as any).genero ?? '', tallaCamiseta: (runner as any).tallaCamiseta ?? '', notas: runner.notas ?? '' });
     setShowEditModal(true);
   };
 
@@ -473,19 +473,50 @@ export default function RunnerProfile() {
                   </div>
                 ))}
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-400 mb-1.5">Teléfono</label>
-                <input value={editForm.telefono} onChange={e => setEditForm({ ...editForm, telefono: e.target.value })} className="input w-full text-sm" />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1.5">Teléfono</label>
+                  <input value={editForm.telefono} onChange={e => setEditForm({ ...editForm, telefono: e.target.value })} className="input w-full text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1.5">Nivel</label>
+                  <select value={editForm.nivel} onChange={e => setEditForm({ ...editForm, nivel: e.target.value })} className="input w-full text-sm">
+                    {['principiante', 'intermedio', 'avanzado', 'elite'].map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1.5">Género</label>
+                  <select value={editForm.genero} onChange={e => setEditForm({ ...editForm, genero: e.target.value })} className="input w-full text-sm">
+                    <option value="">—</option>
+                    <option value="femenino">Femenino</option>
+                    <option value="masculino">Masculino</option>
+                    <option value="no_binario">No binario</option>
+                    <option value="prefiero_no_responder">Prefiero no responder</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1.5">Talla camiseta</label>
+                  <select value={editForm.tallaCamiseta} onChange={e => setEditForm({ ...editForm, tallaCamiseta: e.target.value })} className="input w-full text-sm">
+                    <option value="">—</option>
+                    {['XS','S','M','L','XL','XXL'].map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-400 mb-1.5">Ciudad</label>
-                <input value={editForm.ciudad} onChange={e => setEditForm({ ...editForm, ciudad: e.target.value })} className="input w-full text-sm" />
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5">País</label>
+                <input value={editForm.pais} onChange={e => setEditForm({ ...editForm, pais: e.target.value })} className="input w-full text-sm" />
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-400 mb-1.5">Nivel</label>
-                <select value={editForm.nivel} onChange={e => setEditForm({ ...editForm, nivel: e.target.value })} className="input w-full text-sm">
-                  {['principiante', 'intermedio', 'avanzado', 'elite'].map(n => <option key={n} value={n}>{n}</option>)}
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1.5">Estado</label>
+                  <input value={editForm.estado} onChange={e => setEditForm({ ...editForm, estado: e.target.value })} className="input w-full text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1.5">Ciudad</label>
+                  <input value={editForm.ciudad} onChange={e => setEditForm({ ...editForm, ciudad: e.target.value })} className="input w-full text-sm" />
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-400 mb-1.5">Notas</label>
@@ -497,7 +528,7 @@ export default function RunnerProfile() {
                 Cancelar
               </button>
               <button
-                onClick={() => updateMutation.mutate({ nombre: editForm.nombre, apellido: editForm.apellido, telefono: editForm.telefono || undefined, ciudad: editForm.ciudad, nivel: editForm.nivel, notas: editForm.notas || undefined })}
+                onClick={() => updateMutation.mutate({ nombre: editForm.nombre, apellido: editForm.apellido, telefono: editForm.telefono || undefined, pais: editForm.pais || undefined, estado: editForm.estado || undefined, ciudad: editForm.ciudad, nivel: editForm.nivel, genero: editForm.genero || undefined, tallaCamiseta: editForm.tallaCamiseta || undefined, notas: editForm.notas || undefined })}
                 disabled={updateMutation.isPending || !editForm.nombre || !editForm.apellido}
                 className="flex-1 btn-primary py-2.5 text-sm"
               >

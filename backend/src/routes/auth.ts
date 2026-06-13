@@ -38,12 +38,20 @@ router.post('/register', async (req: Request, res: Response) => {
     nombre: z.string(),
     apellido: z.string(),
     role: z.enum(['coach', 'runner']).default('runner'),
+    telefono: z.string().optional(),
+    fechaNacimiento: z.string().optional(),
+    genero: z.string().optional(),
+    pais: z.string().optional(),
+    estado: z.string().optional(),
+    ciudad: z.string().optional(),
+    tallaCamiseta: z.string().optional(),
+    nivel: z.enum(['principiante', 'intermedio', 'avanzado', 'elite']).optional(),
   });
 
   const parse = schema.safeParse(req.body);
   if (!parse.success) return res.status(400).json({ error: 'Datos inválidos', details: parse.error.errors });
 
-  const { email, password, nombre, apellido, role } = parse.data;
+  const { email, password, nombre, apellido, role, telefono, fechaNacimiento, genero, pais, estado, ciudad, tallaCamiseta, nivel } = parse.data;
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) return res.status(409).json({ error: 'El correo ya está registrado' });
@@ -55,7 +63,18 @@ router.post('/register', async (req: Request, res: Response) => {
       password: hashed,
       role,
       runner: {
-        create: { nombre, apellido },
+        create: {
+          nombre,
+          apellido,
+          telefono,
+          fechaNacimiento: fechaNacimiento ? new Date(fechaNacimiento) : undefined,
+          genero,
+          pais: pais ?? 'México',
+          estado: estado ?? 'México',
+          ciudad: ciudad ?? 'México',
+          tallaCamiseta,
+          nivel: nivel ?? 'principiante',
+        },
       },
     },
     include: { runner: true },
