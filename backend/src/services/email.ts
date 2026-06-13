@@ -1,5 +1,4 @@
 import nodemailer from 'nodemailer';
-import { OAuth2Client } from 'google-auth-library';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -52,34 +51,20 @@ function buildTransporter(host: string, port: number, user: string, pass: string
   });
 }
 
-async function getFreshAccessToken(refreshToken: string): Promise<string> {
-  const client = new OAuth2Client(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-  );
-  client.setCredentials({ refresh_token: refreshToken });
-  const { token } = await client.getAccessToken();
-  if (!token) throw new Error('No se pudo obtener un access token de Google');
-  return token;
-}
-
-function buildOAuthTransporter(user: string, accessToken: string, refreshToken: string): nodemailer.Transporter {
+function buildOAuthTransporter(user: string, refreshToken: string): nodemailer.Transporter {
   return nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
+    service: 'gmail',
     auth: {
       type: 'OAuth2',
       user,
       clientId:     process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       refreshToken,
-      accessToken,
     },
     connectionTimeout: 10000,
     greetingTimeout:   10000,
     socketTimeout:     15000,
-  });
+  } as object);
 }
 
 // Returns the email transporter for a user (OAuth2 > SMTP > env fallback)
@@ -88,9 +73,8 @@ async function getTransportForUser(userId?: number): Promise<{ transporter: node
     const cfg = await prisma.emailConfig.findUnique({ where: { userId } }) as StoredEmailConfig | null;
     if (cfg?.verified) {
       if (cfg.provider === 'google_oauth' && cfg.oauthRefreshToken) {
-        const freshToken = await getFreshAccessToken(cfg.oauthRefreshToken);
         return {
-          transporter: buildOAuthTransporter(cfg.fromEmail, freshToken, cfg.oauthRefreshToken),
+          transporter: buildOAuthTransporter(cfg.fromEmail, cfg.oauthRefreshToken),
           from: `${cfg.fromName} <${cfg.fromEmail}>`,
         };
       }
@@ -119,8 +103,7 @@ export async function testOAuthEmail(
   _accessToken: string | null,
   refreshToken: string,
 ): Promise<void> {
-  const freshToken = await getFreshAccessToken(refreshToken);
-  const transporter = buildOAuthTransporter(userEmail, freshToken, refreshToken);
+  const transporter = buildOAuthTransporter(userEmail, refreshToken);
 
   const send = transporter.sendMail({
     from: `${fromName} <${userEmail}>`,
