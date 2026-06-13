@@ -406,7 +406,7 @@ function CoachEventDetailModal({ ev, onClose }: { ev: Event; onClose: () => void
         </div>
 
         {/* Table */}
-        <div className="overflow-y-auto flex-1">
+        <div className="overflow-auto flex-1">
           {isLoading ? (
             <div className="p-12 text-center text-gray-400">Cargando inscritos…</div>
           ) : rows.length === 0 ? (
@@ -415,7 +415,7 @@ function CoachEventDetailModal({ ev, onClose }: { ev: Event; onClose: () => void
               <p className="text-gray-500 text-sm">Aún no hay inscritos en este evento</p>
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[720px] text-sm">
               <thead className="sticky top-0 bg-surface-800 border-b border-white/[0.06]">
                 <tr>
                   {['Nombre', 'Email', 'Teléfono', 'Ciudad', 'Estado', 'Monto', 'Fuente', 'Fecha'].map(h => (
