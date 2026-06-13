@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, Phone, MapPin, X, UserCheck, Check, Trash2, EyeOff } from 'lucide-react';
+import { Search, Plus, Phone, MapPin, X, UserCheck, Check, Trash2, EyeOff, RefreshCw } from 'lucide-react';
 import { runnersApi } from '../services/api';
 import { Runner } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -19,22 +19,36 @@ function RunnerCard({
   selectable = false,
   selected = false,
   onToggleSelect,
+  onReactivate,
 }: {
   runner: Runner;
   onClick: () => void;
   selectable?: boolean;
   selected?: boolean;
   onToggleSelect?: (e: React.MouseEvent) => void;
+  onReactivate?: (e: React.MouseEvent) => void;
 }) {
   const nivel = runner.nivel ?? 'principiante';
   const cfg = nivelConfig[nivel] ?? nivelConfig.principiante;
   const initials = `${runner.nombre?.[0] ?? ''}${runner.apellido?.[0] ?? ''}`.toUpperCase() || '?';
+  const disabled = !runner.activo;
 
   return (
     <div
       onClick={selectable ? onToggleSelect : onClick}
-      className={`card-hover p-5 flex flex-col gap-4 cursor-pointer relative transition-all ${selected ? 'ring-2 ring-brand-500 bg-brand-500/5' : ''}`}
+      className={`card-hover p-5 flex flex-col gap-4 cursor-pointer relative transition-all
+        ${selected ? 'ring-2 ring-brand-500 bg-brand-500/5' : ''}
+        ${disabled ? 'opacity-50' : ''}
+      `}
     >
+      {disabled && (
+        <div className="absolute top-3 left-3 z-10">
+          <span className="text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-full uppercase tracking-wide">
+            Deshabilitado
+          </span>
+        </div>
+      )}
+
       {selectable && (
         <div className="absolute top-3 right-3 z-10">
           <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
@@ -45,8 +59,8 @@ function RunnerCard({
         </div>
       )}
 
-      <div className="flex items-center gap-3">
-        <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${cfg.gradient} flex items-center justify-center text-white font-black text-base ring-2 ${cfg.ring} flex-shrink-0 shadow-glow-sm`}>
+      <div className={`flex items-center gap-3 ${disabled ? 'mt-4' : ''}`}>
+        <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${cfg.gradient} flex items-center justify-center text-white font-black text-base ring-2 ${cfg.ring} flex-shrink-0 shadow-glow-sm ${disabled ? 'grayscale' : ''}`}>
           {initials}
         </div>
         <div className="flex-1 min-w-0">
@@ -74,6 +88,15 @@ function RunnerCard({
           "{runner.notas}"
         </p>
       )}
+
+      {disabled && onReactivate && (
+        <button
+          onClick={onReactivate}
+          className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl text-xs font-semibold text-green-400 border border-green-500/25 hover:bg-green-500/10 transition-all mt-1"
+        >
+          <RefreshCw size={12} /> Reactivar cuenta
+        </button>
+      )}
     </div>
   );
 }
@@ -98,14 +121,23 @@ export default function Runners() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['runners'] }); setShowForm(false); },
   });
 
+  const reactivateMutation = useMutation({
+    mutationFn: (id: number) => runnersApi.reactivate(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['runners'] }),
+  });
+
+  const activeRunners = runners.filter(r => r.activo);
+  const disabledRunners = runners.filter(r => !r.activo);
+
   const filtered = runners.filter((r) => {
-    if (!r.activo) return false;
     const matchesSearch = `${r.nombre} ${r.apellido} ${r.ciudad}`.toLowerCase().includes(search.toLowerCase());
+    if (levelFilter === 'deshabilitados') return !r.activo && matchesSearch;
+    if (!r.activo) return false;
     const matchesLevel = levelFilter === 'todos' || r.nivel === levelFilter;
     return matchesSearch && matchesLevel;
   });
 
-  const countByLevel = (nivel: string) => runners.filter(r => r.activo && r.nivel === nivel).length;
+  const countByLevel = (nivel: string) => activeRunners.filter(r => r.nivel === nivel).length;
 
   const handleToggleSelect = (id: number) => {
     setSelectedIds(prev => {
@@ -162,7 +194,7 @@ export default function Runners() {
         <div>
           <h1 className="text-2xl font-black text-white">Corredores</h1>
           <p className="text-gray-500 text-sm mt-0.5">
-            {runners.filter(r => r.activo).length} miembros · Equipo JTZ
+            {activeRunners.length} activos{disabledRunners.length > 0 ? ` · ${disabledRunners.length} deshabilitados` : ''} · Equipo JTZ
           </p>
         </div>
         {isCoach && (
@@ -208,7 +240,7 @@ export default function Runners() {
       <div className="flex gap-2 mb-5 flex-wrap">
         <button onClick={() => setLevelFilter('todos')}
           className={`text-sm px-4 py-1.5 rounded-full font-medium transition-all ${levelFilter === 'todos' ? 'bg-brand-500 text-white shadow-glow-sm' : 'bg-surface-700 text-gray-400 hover:text-white border border-white/[0.06]'}`}>
-          Todos ({runners.filter(r => r.activo).length})
+          Todos ({activeRunners.length})
         </button>
         {['principiante', 'intermedio', 'avanzado', 'elite'].map((nivel) => (
           <button key={nivel} onClick={() => setLevelFilter(nivel)}
@@ -216,6 +248,12 @@ export default function Runners() {
             {nivel} ({countByLevel(nivel)})
           </button>
         ))}
+        {isCoach && disabledRunners.length > 0 && (
+          <button onClick={() => setLevelFilter(levelFilter === 'deshabilitados' ? 'todos' : 'deshabilitados')}
+            className={`text-sm px-4 py-1.5 rounded-full font-medium transition-all ${levelFilter === 'deshabilitados' ? 'bg-red-500/30 text-red-300 border border-red-500/40' : 'bg-surface-700 text-red-400/70 hover:text-red-300 border border-red-500/20'}`}>
+            Deshabilitados ({disabledRunners.length})
+          </button>
+        )}
       </div>
 
       {/* Search */}
@@ -255,9 +293,10 @@ export default function Runners() {
                 key={runner.id}
                 runner={runner}
                 onClick={() => navigate(`/corredores/${runner.id}`)}
-                selectable={selectionMode}
+                selectable={selectionMode && runner.activo}
                 selected={selectedIds.has(runner.id)}
                 onToggleSelect={(e) => { e.stopPropagation(); handleToggleSelect(runner.id); }}
+                onReactivate={isCoach && !runner.activo ? (e) => { e.stopPropagation(); reactivateMutation.mutate(runner.id); } : undefined}
               />
             ))}
           </div>

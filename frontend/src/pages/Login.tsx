@@ -18,8 +18,9 @@ export default function Login() {
     try {
       await login(email, password);
       navigate('/');
-    } catch {
-      setError('Correo o contraseña incorrectos');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      setError(msg ?? 'Correo o contraseña incorrectos');
     } finally {
       setLoading(false);
     }

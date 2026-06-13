@@ -33,6 +33,7 @@ export const runnersApi = {
   create: (data: object) => api.post('/runners', data),
   update: (id: number, data: object) => api.put(`/runners/${id}`, data),
   deactivate: (id: number) => api.delete(`/runners/${id}`),
+  reactivate: (id: number) => api.put(`/runners/${id}`, { activo: true }),
   permanentDelete: (id: number) => api.delete(`/runners/${id}/permanent`),
   addLog: (id: number, data: object) => api.post(`/runners/${id}/logs`, data),
   deleteLog: (id: number, logId: number) => api.delete(`/runners/${id}/logs/${logId}`),

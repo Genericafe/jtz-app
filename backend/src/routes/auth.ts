@@ -23,6 +23,10 @@ router.post('/login', async (req: Request, res: Response) => {
   const valid = await bcrypt.compare(password, user.password);
   if (!valid) return res.status(401).json({ error: 'Credenciales incorrectas' });
 
+  if (user.role === 'runner' && user.runner && !user.runner.activo) {
+    return res.status(403).json({ error: 'Tu cuenta está deshabilitada. Contacta a tu coach.' });
+  }
+
   const token = jwt.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET!, { expiresIn: '7d' });
   return res.json({ token, user: { id: user.id, email: user.email, role: user.role, runner: user.runner } });
 });

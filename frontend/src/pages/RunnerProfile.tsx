@@ -124,15 +124,22 @@ export default function RunnerProfile() {
               </div>
               {/* Coach actions */}
               {isCoach && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <button onClick={openEdit}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-gray-300 hover:text-white hover:bg-surface-600 border border-white/[0.08] transition-all">
                     <Edit2 size={14} /> Editar
                   </button>
-                  <button onClick={handleDisable}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10 border border-yellow-500/20 transition-all">
-                    <EyeOff size={14} /> Deshabilitar
-                  </button>
+                  {runner.activo ? (
+                    <button onClick={handleDisable}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10 border border-yellow-500/20 transition-all">
+                      <EyeOff size={14} /> Deshabilitar
+                    </button>
+                  ) : (
+                    <button onClick={async () => { await runnersApi.reactivate(Number(id)); qc.invalidateQueries({ queryKey: ['runner', id] }); qc.invalidateQueries({ queryKey: ['runners'] }); }}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-green-400 hover:text-green-300 hover:bg-green-500/10 border border-green-500/20 transition-all">
+                      <EyeOff size={14} /> Reactivar
+                    </button>
+                  )}
                   <button onClick={handleDelete}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/20 transition-all">
                     <Trash2 size={14} /> Eliminar
