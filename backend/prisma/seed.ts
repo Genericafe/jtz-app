@@ -9,6 +9,13 @@ function toEmailSlug(str: string): string {
 }
 
 async function main() {
+  // Si el coach ya existe, no re-crear nada (evita duplicar datos en cada deploy)
+  const coachExists = await prisma.user.findUnique({ where: { email: 'coach@jtz.mx' } });
+  if (coachExists) {
+    console.log('✅ Coach ya existe — seed omitido');
+    return;
+  }
+
   const coachPassword = await bcrypt.hash('coach123', 10);
 
   const coach = await prisma.user.upsert({
