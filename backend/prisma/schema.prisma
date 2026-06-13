@@ -1,0 +1,269 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  role      String   @default("runner")
+  createdAt DateTime @default(now())
+
+  runner          Runner?
+  emailConfig     EmailConfig?
+  coachPreference CoachPreference?
+}
+
+model EmailConfig {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider  String   @default("gmail") // "gmail" | "outlook" | "smtp" | "google_oauth"
+  fromName  String   @default("JTZ Running Club")
+  fromEmail String
+  smtpHost  String   @default("smtp.gmail.com")
+  smtpPort  Int      @default(587)
+  smtpUser  String   @default("")
+  smtpPass  String   @default("")
+  // Google OAuth2 tokens (used when provider = "google_oauth")
+  oauthAccessToken  String?
+  oauthRefreshToken String?
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Runner {
+  id              Int       @id @default(autoincrement())
+  userId          Int       @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nombre          String
+  apellido        String
+  telefono        String?
+  ciudad          String    @default("México")
+  estado          String    @default("México")
+  fechaNacimiento DateTime?
+  nivel           String    @default("principiante")
+  fotoPerfil      String?
+  activo          Boolean   @default(true)
+  notas           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  memberships        Membership[]
+  payments           Payment[]
+  trainingPlans      TrainingPlanAssignment[]
+  eventRegistrations EventRegistration[]
+  orders             Order[]
+  communicationLogs  CommunicationLog[]
+}
+
+model CommunicationLog {
+  id        Int      @id @default(autoincrement())
+  runnerId  Int
+  runner    Runner   @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  tipo      String   // "whatsapp" | "email" | "llamada" | "presencial"
+  direccion String   @default("entrante") // "entrante" | "saliente"
+  mensaje   String
+  createdAt DateTime @default(now())
+}
+
+model TrainingPlan {
+  id              Int      @id @default(autoincrement())
+  nombre          String
+  descripcion     String?
+  duracionSemanas Int      @default(4)
+  nivel           String   @default("intermedio")
+  objetivo        String?
+  activo          Boolean  @default(true)
+  isTemplate      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  semanas      TrainingWeek[]
+  asignaciones TrainingPlanAssignment[]
+}
+
+model CoachPreference {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // JSON blob: { defaultNivel, defaultSesiones, defaultDuracion, modalidades, lastGoals[] }
+  data      String   @default("{}")
+  updatedAt DateTime @updatedAt
+}
+
+model TrainingWeek {
+  id           Int          @id @default(autoincrement())
+  planId       Int
+  plan         TrainingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  numeroSemana Int
+  descripcion  String?
+
+  dias TrainingDay[]
+}
+
+model TrainingDay {
+  id          Int          @id @default(autoincrement())
+  semanaId    Int
+  semana      TrainingWeek @relation(fields: [semanaId], references: [id], onDelete: Cascade)
+  diaSemana   String
+  tipo        String
+  distanciaKm Float?
+  duracionMin Int?
+  descripcion String?
+  intensidad  String?
+}
+
+model TrainingPlanAssignment {
+  id          Int          @id @default(autoincrement())
+  runnerId    Int
+  runner      Runner       @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  planId      Int
+  plan        TrainingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  fechaInicio DateTime
+  fechaFin    DateTime?
+  activo      Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+}
+
+model Event {
+  id          Int      @id @default(autoincrement())
+  nombre      String
+  tipo        String
+  descripcion String?
+  fecha       DateTime
+  lugar       String
+  ciudad      String   @default("Tijuana")
+  distanciaKm Float?
+  cupoMaximo  Int?
+  precio      Float    @default(0)
+  imagen      String?
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  registros EventRegistration[]
+  leads     EventLead[]
+}
+
+model EventRegistration {
+  id       Int    @id @default(autoincrement())
+  eventId  Int
+  event    Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  runnerId Int
+  runner   Runner @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  estado   String @default("inscrito")
+  pagado   Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, runnerId])
+}
+
+model Membership {
+  id          Int      @id @default(autoincrement())
+  runnerId    Int
+  runner      Runner   @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  tipo        String   @default("mensual")
+  precio      Float
+  fechaInicio DateTime
+  fechaFin    DateTime
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}
+
+model Payment {
+  id               Int       @id @default(autoincrement())
+  runnerId         Int
+  runner           Runner    @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  concepto         String
+  monto            Float
+  moneda           String    @default("MXN")
+  estado           String    @default("pendiente")
+  fechaVencimiento DateTime?
+  fechaPago        DateTime?
+  notas            String?
+  createdAt        DateTime  @default(now())
+}
+
+model Product {
+  id          Int      @id @default(autoincrement())
+  nombre      String
+  descripcion String?
+  tipo        String
+  precio      Float
+  costo       Float    @default(0)
+  stock       Int      @default(0)
+  talla       String?
+  color       String?
+  imagen      String?
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orderItems OrderItem[]
+}
+
+model Order {
+  id       Int    @id @default(autoincrement())
+  runnerId Int
+  runner   Runner @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  estado   String @default("pendiente")
+  total    Float
+  notas    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items OrderItem[]
+}
+
+model OrderItem {
+  id         Int     @id @default(autoincrement())
+  orderId    Int
+  order      Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId  Int
+  product    Product @relation(fields: [productId], references: [id])
+  cantidad   Int
+  precioUnit Float
+}
+
+model EventLead {
+  id              Int      @id @default(autoincrement())
+  eventId         Int
+  event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  nombre          String
+  apellido        String
+  email           String
+  telefono        String?
+  ciudad          String?
+  estado          String   @default("pendiente") // "pendiente" | "pagado" | "confirmado" | "cancelado"
+  stripeSessionId String?
+  monto           Float    @default(0)
+  createdAt       DateTime @default(now())
+
+  @@unique([eventId, email])
+}
+
+model Announcement {
+  id        Int      @id @default(autoincrement())
+  titulo    String
+  contenido String
+  tipo      String   @default("general")
+  publicado Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ChatMessage {
+  id         Int      @id @default(autoincrement())
+  senderId   Int
+  receiverId Int
+  content    String   // AES-256-CBC encrypted: "iv_hex:ciphertext_hex"
+  leido      Boolean  @default(false)
+  createdAt  DateTime @default(now())
+}

@@ -1,0 +1,426 @@
+import { useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { plansApi } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import {
+  ArrowLeft, Calendar, Target, Clock, Dumbbell,
+  ChevronDown, ChevronRight, Edit2, Check, X,
+  Zap, TrendingUp, Shield, Bike, Waves, Trash2, BookmarkPlus, BookmarkCheck,
+  GripVertical,
+} from 'lucide-react';
+import { differenceInWeeks, addWeeks } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { format } from 'date-fns';
+
+interface TrainingDay {
+  id: number; diaSemana: string; tipo: string;
+  distanciaKm?: number; duracionMin?: number;
+  intensidad: string; descripcion: string;
+}
+interface TrainingWeek {
+  id: number; numeroSemana: number; descripcion?: string; dias: TrainingDay[];
+}
+interface Plan {
+  id: number; nombre: string; descripcion?: string;
+  duracionSemanas: number; nivel: string; objetivo?: string;
+  semanas: TrainingWeek[];
+}
+
+const tipoLabel: Record<string, string> = {
+  rodaje_facil:       'Carrera Fácil',
+  rodaje_largo:       'Carrera Larga',
+  rodaje_moderado:    'Carrera Moderada',
+  tempo:              'Tempo / Umbral',
+  intervalos:         'Intervalos',
+  fuerza:             'Fuerza / Pesas',
+  cross_training:     'Cross Training',
+  trail_tecnico:      'Trail Técnico',
+  hyrox_especifico:   'HYROX Específico',
+  brick_triatlon:     'Brick Triatlón',
+  natacion:           'Natación',
+  descanso:           'Descanso',
+  recuperacion_activa:'Recuperación Activa',
+  wod_crossfit:       'WOD CrossFit',
+  wod_crossfit_largo: 'WOD CrossFit Largo',
+};
+
+const tipoIcon: Record<string, { icon: React.ReactNode; color: string; bg: string }> = {
+  rodaje_facil:      { icon: <Zap size={14}/>,    color: 'text-green-400',  bg: 'bg-green-500/15' },
+  rodaje_largo:      { icon: <TrendingUp size={14}/>, color: 'text-blue-400', bg: 'bg-blue-500/15' },
+  rodaje_moderado:   { icon: <Zap size={14}/>,    color: 'text-teal-400',   bg: 'bg-teal-500/15' },
+  tempo:             { icon: <Zap size={14}/>,    color: 'text-orange-400', bg: 'bg-orange-500/15' },
+  intervalos:        { icon: <Zap size={14}/>,    color: 'text-red-400',    bg: 'bg-red-500/15' },
+  fuerza:            { icon: <Dumbbell size={14}/>, color: 'text-purple-400', bg: 'bg-purple-500/15' },
+  cross_training:    { icon: <Bike size={14}/>,   color: 'text-cyan-400',   bg: 'bg-cyan-500/15' },
+  trail_tecnico:     { icon: <TrendingUp size={14}/>, color: 'text-emerald-400', bg: 'bg-emerald-500/15' },
+  hyrox_especifico:  { icon: <Dumbbell size={14}/>, color: 'text-brand-400', bg: 'bg-brand-500/15' },
+  brick_triatlon:    { icon: <Bike size={14}/>,   color: 'text-sky-400',    bg: 'bg-sky-500/15' },
+  natacion:          { icon: <Waves size={14}/>,  color: 'text-teal-400',   bg: 'bg-teal-500/15' },
+  descanso:          { icon: <Shield size={14}/>, color: 'text-gray-500',   bg: 'bg-gray-500/10' },
+  recuperacion_activa:{ icon: <Shield size={14}/>, color: 'text-gray-400',  bg: 'bg-gray-500/15' },
+  wod_crossfit:      { icon: <Dumbbell size={14}/>, color: 'text-yellow-400', bg: 'bg-yellow-500/15' },
+  wod_crossfit_largo:{ icon: <Dumbbell size={14}/>, color: 'text-yellow-300', bg: 'bg-yellow-500/10' },
+};
+
+const intensidadColor: Record<string, string> = {
+  descanso: 'text-gray-500', muy_suave: 'text-gray-400', suave: 'text-green-400',
+  'suave-moderado': 'text-teal-400', moderado: 'text-blue-400',
+  'moderado-intenso': 'text-orange-400', intenso: 'text-red-400', máximo: 'text-red-600',
+};
+
+const diasLabel: Record<string, string> = {
+  lunes: 'Lun', martes: 'Mar', 'miércoles': 'Mié', jueves: 'Jue',
+  viernes: 'Vie', sábado: 'Sáb', domingo: 'Dom',
+};
+
+function DayCard({ day, isCoach, planId, onUpdate, onDragStart, onDragOver, onDrop, isDragOver, isDragging }: {
+  day: TrainingDay; isCoach: boolean; planId: number;
+  onUpdate: () => void;
+  onDragStart?: () => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDrop?: () => void;
+  isDragOver?: boolean;
+  isDragging?: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    tipo:        day.tipo,
+    diaSemana:   day.diaSemana,
+    distanciaKm: day.distanciaKm ?? '',
+    duracionMin:  day.duracionMin ?? '',
+    intensidad:   day.intensidad,
+    descripcion:  day.descripcion,
+  });
+  const qc = useQueryClient();
+
+  const updateMutation = useMutation({
+    mutationFn: (data: object) => plansApi.updateDay(day.id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['plan', planId] }); setEditing(false); onUpdate(); },
+  });
+
+  const isRest = day.tipo === 'descanso' || day.tipo === 'recuperacion_activa';
+  const cfg = tipoIcon[day.tipo] ?? tipoIcon.descanso;
+
+  return (
+    <div
+      draggable={isCoach}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={() => {/* handled by parent */}}
+      className={`rounded-xl border transition-all select-none ${
+        isDragOver  ? 'border-brand-500/60 bg-brand-500/10 scale-[1.01]' :
+        isDragging  ? 'opacity-40 border-white/[0.03]' :
+        isRest      ? 'border-white/[0.03] bg-surface-800/50' :
+                      'border-white/[0.06] bg-surface-700 hover:border-white/[0.12]'
+      }`}
+    >
+      <div className="flex items-center gap-3 px-4 py-3 cursor-pointer" onClick={() => !isRest && setExpanded(!expanded)}>
+        {isCoach && (
+          <GripVertical size={14} className="text-gray-600 cursor-grab active:cursor-grabbing flex-shrink-0 -ml-1" />
+        )}
+        <span className="text-xs font-bold text-gray-500 w-8 flex-shrink-0">{diasLabel[day.diaSemana] ?? day.diaSemana.slice(0,3).toUpperCase()}</span>
+        <span className={`flex items-center justify-center w-7 h-7 rounded-lg flex-shrink-0 ${cfg.bg}`}>
+          <span className={cfg.color}>{cfg.icon}</span>
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm font-medium ${isRest ? 'text-gray-500' : 'text-white'}`}>
+            {tipoLabel[day.tipo] ?? day.tipo.replace(/_/g, ' ')}
+          </p>
+          <div className="flex items-center gap-2 mt-0.5">
+            {day.distanciaKm && <span className="text-xs text-gray-400">{day.distanciaKm}km</span>}
+            {day.duracionMin  && <span className="text-xs text-gray-400">{day.duracionMin}min</span>}
+            <span className={`text-xs font-medium ${intensidadColor[day.intensidad] ?? 'text-gray-400'}`}>
+              {day.intensidad.replace(/-/g, ' ')}
+            </span>
+          </div>
+        </div>
+        {!isRest && (
+          <div className="flex items-center gap-1">
+            {isCoach && (
+              <button onClick={e => { e.stopPropagation(); setEditing(!editing); setExpanded(true); }}
+                className="p-1.5 text-gray-600 hover:text-white hover:bg-surface-500 rounded-lg transition-all">
+                <Edit2 size={13} />
+              </button>
+            )}
+            <span className={`text-gray-500 transition-transform ${expanded ? 'rotate-90' : ''}`}>
+              <ChevronRight size={14} />
+            </span>
+          </div>
+        )}
+      </div>
+
+      {expanded && (
+        <div className="px-4 pb-4 pt-1 border-t border-white/[0.05]">
+          {editing ? (
+            <div className="space-y-3">
+              {/* Type + Day row */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Tipo de actividad</label>
+                  <select value={editForm.tipo}
+                    onChange={e => setEditForm({ ...editForm, tipo: e.target.value })}
+                    className="input w-full text-sm">
+                    {Object.entries(tipoLabel).map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Día de la semana</label>
+                  <select value={editForm.diaSemana}
+                    onChange={e => setEditForm({ ...editForm, diaSemana: e.target.value })}
+                    className="input w-full text-sm">
+                    {['lunes','martes','miércoles','jueves','viernes','sábado','domingo'].map(d => (
+                      <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Distancia (km)</label>
+                  <input type="number" value={editForm.distanciaKm}
+                    onChange={e => setEditForm({ ...editForm, distanciaKm: e.target.value })}
+                    className="input w-full text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Duración (min)</label>
+                  <input type="number" value={editForm.duracionMin}
+                    onChange={e => setEditForm({ ...editForm, duracionMin: e.target.value })}
+                    className="input w-full text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Intensidad</label>
+                <select value={editForm.intensidad}
+                  onChange={e => setEditForm({ ...editForm, intensidad: e.target.value })}
+                  className="input w-full text-sm">
+                  {['descanso','muy_suave','suave','suave-moderado','moderado','moderado-intenso','intenso','máximo'].map(i => (
+                    <option key={i} value={i}>{i.replace(/-/g,' ')}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Descripción / Instrucciones</label>
+                <textarea value={editForm.descripcion}
+                  onChange={e => setEditForm({ ...editForm, descripcion: e.target.value })}
+                  rows={4} className="input w-full text-sm resize-none" />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setEditing(false)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/[0.08] text-xs text-gray-400 hover:text-white transition-colors">
+                  <X size={12} /> Cancelar
+                </button>
+                <button onClick={() => updateMutation.mutate({
+                  tipo:        editForm.tipo,
+                  diaSemana:   editForm.diaSemana,
+                  distanciaKm: editForm.distanciaKm ? Number(editForm.distanciaKm) : null,
+                  duracionMin:  editForm.duracionMin  ? Number(editForm.duracionMin)  : null,
+                  intensidad:  editForm.intensidad,
+                  descripcion: editForm.descripcion,
+                })} disabled={updateMutation.isPending}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-500 text-xs text-white font-semibold transition-colors disabled:opacity-50">
+                  <Check size={12} /> {updateMutation.isPending ? 'Guardando...' : 'Guardar'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{day.descripcion}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function PlanDetail() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const { isCoach } = useAuth();
+  const [selectedWeek, setSelectedWeek] = useState(1);
+  const [draggedId, setDraggedId] = useState<number | null>(null);
+  const [dragOverId, setDragOverId] = useState<number | null>(null);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['plan', Number(id)],
+    queryFn: () => plansApi.get(Number(id)),
+  });
+
+  const deletePlanMutation = useMutation({
+    mutationFn: () => plansApi.delete(Number(id)),
+    onSuccess: () => navigate('/planes'),
+  });
+
+  const templateMutation = useMutation({
+    mutationFn: () => plansApi.toggleTemplate(Number(id)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['plan', Number(id)] }),
+  });
+
+  const swapDaysMutation = useMutation({
+    mutationFn: async ({ id1, dia1, id2, dia2 }: { id1: number; dia1: string; id2: number; dia2: string }) => {
+      await plansApi.updateDay(id1, { diaSemana: dia2 });
+      await plansApi.updateDay(id2, { diaSemana: dia1 });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['plan', Number(id)] }),
+  });
+
+  const handleDrop = (targetDay: TrainingDay) => {
+    if (draggedId === null || draggedId === targetDay.id) { setDraggedId(null); setDragOverId(null); return; }
+    const week = plan?.semanas.find(s => s.numeroSemana === selectedWeek);
+    const sourceDay = week?.dias.find(d => d.id === draggedId);
+    if (!sourceDay) return;
+    swapDaysMutation.mutate({ id1: sourceDay.id, dia1: sourceDay.diaSemana, id2: targetDay.id, dia2: targetDay.diaSemana });
+    setDraggedId(null);
+    setDragOverId(null);
+  };
+
+  const plan: Plan & { isTemplate?: boolean } | undefined = data?.data;
+
+  if (isLoading) return <div className="p-8 text-gray-400">Cargando plan...</div>;
+  if (!plan) return <div className="p-8 text-gray-400">Plan no encontrado</div>;
+
+  const week = plan.semanas.find(s => s.numeroSemana === selectedWeek);
+  const totalKm = plan.semanas.reduce((s, w) => s + w.dias.reduce((d, day) => d + (day.distanciaKm ?? 0), 0), 0);
+  const avgKmWeek = Math.round(totalKm / plan.duracionSemanas);
+  const sesiones = week?.dias.filter(d => d.tipo !== 'descanso').length ?? 0;
+  const weekKm = week?.dias.reduce((s, d) => s + (d.distanciaKm ?? 0), 0) ?? 0;
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto">
+      <div className="flex items-center justify-between mb-5">
+        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-gray-500 hover:text-white transition-colors">
+          <ArrowLeft size={16} /> Volver
+        </button>
+        {isCoach && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => templateMutation.mutate()}
+              title={plan.isTemplate ? 'Quitar de plantillas' : 'Guardar como plantilla'}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                plan.isTemplate
+                  ? 'bg-yellow-500/15 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/25'
+                  : 'bg-surface-600 border-white/[0.08] text-gray-400 hover:text-yellow-400 hover:border-yellow-500/30'
+              }`}
+            >
+              {plan.isTemplate ? <BookmarkCheck size={13} /> : <BookmarkPlus size={13} />}
+              {plan.isTemplate ? 'Plantilla guardada' : 'Guardar plantilla'}
+            </button>
+            <button
+              onClick={() => { if (confirm(`¿Eliminar "${plan.nombre}"?`)) deletePlanMutation.mutate(); }}
+              disabled={deletePlanMutation.isPending}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-500/20 text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-50"
+            >
+              <Trash2 size={13} /> Eliminar
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Header */}
+      <div className="card p-6 mb-5">
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-hero flex items-center justify-center flex-shrink-0 shadow-glow">
+            <Dumbbell size={22} className="text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl font-black text-white">{plan.nombre}</h1>
+            <div className="flex flex-wrap gap-3 mt-2">
+              <span className="badge bg-brand-500/15 text-brand-400 capitalize">{plan.nivel}</span>
+              {plan.objetivo && <span className="badge bg-blue-500/15 text-blue-400">{plan.objetivo}</span>}
+              <span className="badge bg-surface-500 text-gray-300 flex items-center gap-1">
+                <Calendar size={11}/> {plan.duracionSemanas} semanas
+              </span>
+              <span className="badge bg-surface-500 text-gray-300 flex items-center gap-1">
+                <Target size={11}/> ~{avgKmWeek} km/sem
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {plan.descripcion && (
+          <div className="mt-4 pt-4 border-t border-white/[0.05]">
+            <details className="group">
+              <summary className="text-xs font-semibold text-gray-400 cursor-pointer hover:text-white transition-colors flex items-center gap-1">
+                <ChevronDown size={13} className="group-open:rotate-180 transition-transform" />
+                Filosofía y principios del plan
+              </summary>
+              <p className="text-sm text-gray-400 leading-relaxed mt-3 whitespace-pre-line">{plan.descripcion}</p>
+            </details>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-5">
+        {/* Week selector */}
+        <div className="xl:col-span-1">
+          <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Semanas</h2>
+          <div className="space-y-1 max-h-[600px] overflow-y-auto pr-1">
+            {plan.semanas.map(s => {
+              const wKm = Math.round(s.dias.reduce((sum, d) => sum + (d.distanciaKm ?? 0), 0));
+              const isSelected = s.numeroSemana === selectedWeek;
+              const desc = s.descripcion?.split('·')[0]?.trim() ?? '';
+              return (
+                <button key={s.numeroSemana}
+                  onClick={() => setSelectedWeek(s.numeroSemana)}
+                  className={`w-full text-left px-3 py-2.5 rounded-xl transition-all ${
+                    isSelected ? 'bg-brand-500/20 border border-brand-500/30 text-white' : 'text-gray-400 hover:text-white hover:bg-surface-600'
+                  }`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold">Semana {s.numeroSemana}</span>
+                    {wKm > 0 && <span className="text-xs text-gray-500">{wKm}km</span>}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5 truncate">{desc}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Week detail */}
+        <div className="xl:col-span-3">
+          {week ? (
+            <>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h2 className="text-lg font-black text-white">Semana {week.numeroSemana}</h2>
+                  <p className="text-sm text-gray-400">{week.descripcion}</p>
+                </div>
+                <div className="flex gap-3 text-center">
+                  <div className="bg-surface-700 rounded-xl px-3 py-2 border border-white/[0.06]">
+                    <p className="text-sm font-black text-white">{weekKm > 0 ? `${weekKm.toFixed(1)}km` : '—'}</p>
+                    <p className="text-xs text-gray-500">volumen</p>
+                  </div>
+                  <div className="bg-surface-700 rounded-xl px-3 py-2 border border-white/[0.06]">
+                    <p className="text-sm font-black text-white">{sesiones}</p>
+                    <p className="text-xs text-gray-500">sesiones</p>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                className="space-y-2"
+                onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
+              >
+                {week.dias.map(day => (
+                  <DayCard key={day.id} day={day} isCoach={isCoach} planId={plan.id}
+                    onUpdate={() => qc.invalidateQueries({ queryKey: ['plan', plan.id] })}
+                    isDragging={draggedId === day.id}
+                    isDragOver={dragOverId === day.id}
+                    onDragStart={() => setDraggedId(day.id)}
+                    onDragOver={(e) => { e.preventDefault(); if (draggedId !== day.id) setDragOverId(day.id); }}
+                    onDrop={() => handleDrop(day)}
+                  />
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="card p-12 text-center text-gray-500">Selecciona una semana</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
