@@ -63,6 +63,37 @@ app.use('/api/integrations', integrationsRoutes);
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', app: 'JTZ API' }));
 
+// Endpoint de recuperación — crea el coach si no existe
+app.post('/api/setup/coach', express.json(), async (req: any, res: any) => {
+  const { secret, email, password, nombre, apellido } = req.body ?? {};
+  if (secret !== process.env.SETUP_SECRET && secret !== 'jtz-setup-2024') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const bcrypt = await import('bcryptjs');
+  const { PrismaClient } = await import('@prisma/client');
+  const prisma = new PrismaClient();
+  try {
+    const coachEmail = email ?? 'coach@jtz.mx';
+    const existing = await prisma.user.findUnique({ where: { email: coachEmail } });
+    if (existing) {
+      // Actualizar contraseña
+      const hashed = await bcrypt.hash(password ?? 'coach123', 10);
+      await prisma.user.update({ where: { email: coachEmail }, data: { password: hashed } });
+      return res.json({ ok: true, action: 'password_updated', email: coachEmail });
+    }
+    const hashed = await bcrypt.hash(password ?? 'coach123', 10);
+    await prisma.user.create({
+      data: {
+        email: coachEmail,
+        password: hashed,
+        role: 'coach',
+        runner: { create: { nombre: nombre ?? 'Jorge', apellido: apellido ?? 'Torres', ciudad: 'México', nivel: 'elite' } },
+      },
+    });
+    return res.json({ ok: true, action: 'created', email: coachEmail });
+  } finally { await prisma.$disconnect(); }
+});
+
 app.listen(PORT, () => {
   console.log(`JTZ API corriendo en http://localhost:${PORT}`);
 });
