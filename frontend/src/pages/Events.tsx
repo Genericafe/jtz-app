@@ -1008,6 +1008,7 @@ export default function Events() {
       exitSelectionEv();
     } finally { setBulkPending(false); }
   };
+  const shown = filter === 'todos' ? events : events.filter(e => e.tipo === filter);
   const allSelectedEv = shown.length > 0 && selectedIds.size === shown.length;
   const someSelectedEv = selectedIds.size > 0 && !allSelectedEv;
 
@@ -1049,7 +1050,6 @@ export default function Events() {
     setTimeout(() => setImprovingText(false), 200);
   };
 
-  const shown = filter === 'todos' ? events : events.filter(e => e.tipo === filter);
   const upcoming = shown.filter(e => isAfter(new Date(e.fecha), new Date()));
   const past = shown.filter(e => !isAfter(new Date(e.fecha), new Date()));
 
