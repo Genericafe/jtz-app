@@ -34,9 +34,19 @@ const PORT = process.env.PORT ?? 3001;
 // Confiar en el proxy (Railway, Render, Heroku) para leer X-Forwarded-Proto/Host
 app.set('trust proxy', 1);
 
-const allowedOrigins = (process.env.FRONTEND_URL ?? 'http://localhost:5173').split(',').map(s => s.trim());
+const allowedOrigins = [
+  'https://jtz-app.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  ...(process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',').map(s => s.trim()).filter(Boolean) : []),
+];
 app.use(cors({
-  origin: (origin, cb) => cb(null, !origin || allowedOrigins.some(o => origin.startsWith(o))),
+  origin: (origin, cb) => {
+    if (!origin || allowedOrigins.some(o => origin === o || origin.startsWith(o))) {
+      return cb(null, true);
+    }
+    cb(null, false);
+  },
   credentials: true,
 }));
 
