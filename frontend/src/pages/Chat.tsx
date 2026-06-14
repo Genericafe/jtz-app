@@ -379,7 +379,7 @@ export default function Chat() {
   const { isCoach } = useAuth();
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       <div className="px-4 lg:px-6 pt-4 lg:pt-5 pb-3 flex-shrink-0">
         <h1 className="text-xl font-bold text-white flex items-center gap-2">
           <MessageCircle size={20} className="text-brand-400" />

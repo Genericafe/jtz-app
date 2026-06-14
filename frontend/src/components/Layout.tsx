@@ -155,7 +155,7 @@ export default function Layout() {
         </div>
 
         <div className="pointer-events-none fixed top-0 left-64 right-0 h-64 bg-glow-green z-0 hidden lg:block" />
-        <div className="relative z-10 flex-1 min-h-0 overflow-auto">
+        <div className="relative z-10 flex-1 min-h-0 overflow-auto flex flex-col">
           <Outlet />
         </div>
       </main>
