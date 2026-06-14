@@ -11,11 +11,22 @@ const prisma = new PrismaClient();
 router.use(authMiddleware);
 
 router.get('/', async (_req: AuthRequest, res: Response) => {
-  const events = await prisma.event.findMany({
-    include: { _count: { select: { registros: true } } },
-    orderBy: { fecha: 'asc' },
-  });
-  return res.json(events);
+  const [events, paidLeadCounts] = await Promise.all([
+    prisma.event.findMany({
+      include: { _count: { select: { registros: true } } },
+      orderBy: { fecha: 'asc' },
+    }),
+    prisma.eventLead.groupBy({
+      by: ['eventId'],
+      where: { estado: { in: ['pagado', 'confirmado'] } },
+      _count: { id: true },
+    }),
+  ]);
+  const paidLeadMap = new Map(paidLeadCounts.map(r => [r.eventId, r._count.id]));
+  return res.json(events.map(e => ({
+    ...e,
+    _count: { registros: e._count.registros + (paidLeadMap.get(e.id) ?? 0) },
+  })));
 });
 
 router.get('/:id', async (req: AuthRequest, res: Response) => {

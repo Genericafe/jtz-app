@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import Anthropic from '@anthropic-ai/sdk';
 import { authMiddleware, coachOnly, AuthRequest } from '../middleware/auth';
 import { sendBulkUpdate } from '../services/email';
 import { z } from 'zod';
@@ -34,7 +35,7 @@ router.get('/events/:id/leads/export', async (req: AuthRequest, res: Response) =
   return res.send(csv);
 });
 
-// Send bulk email to all leads of an event
+// Send bulk email — leads (landing) + registrations (app), deduplicated
 router.post('/events/:id/broadcast', async (req: AuthRequest, res: Response) => {
   const schema = z.object({
     subject: z.string().min(1),
@@ -47,23 +48,88 @@ router.post('/events/:id/broadcast', async (req: AuthRequest, res: Response) => 
   const event = await prisma.event.findUnique({ where: { id: Number(req.params.id) } });
   if (!event) return res.status(404).json({ error: 'Evento no encontrado' });
 
-  const leads = await prisma.eventLead.findMany({
-    where: {
-      eventId: Number(req.params.id),
-      ...(parse.data.soloConfirmados ? { estado: { in: ['confirmado', 'pagado'] } } : {}),
-    },
+  const [leads, registrations] = await Promise.all([
+    prisma.eventLead.findMany({
+      where: {
+        eventId: Number(req.params.id),
+        ...(parse.data.soloConfirmados ? { estado: { in: ['confirmado', 'pagado'] } } : {}),
+      },
+    }),
+    prisma.eventRegistration.findMany({
+      where: {
+        eventId: Number(req.params.id),
+        ...(parse.data.soloConfirmados ? { pagado: true } : {}),
+      },
+      include: { runner: { include: { user: { select: { email: true } } } } },
+    }),
+  ]);
+
+  // Deduplicate by email (app registrations take priority for name)
+  const recipientMap = new Map<string, { nombre: string; email: string }>();
+  leads.forEach(l => recipientMap.set(l.email, { nombre: l.nombre, email: l.email }));
+  registrations.forEach(r => {
+    if (r.runner.user?.email)
+      recipientMap.set(r.runner.user.email, { nombre: r.runner.nombre, email: r.runner.user.email });
   });
 
-  if (leads.length === 0) return res.status(400).json({ error: 'No hay inscritos para notificar' });
+  const recipients = Array.from(recipientMap.values());
+  if (recipients.length === 0) return res.status(400).json({ error: 'No hay inscritos para notificar' });
 
   await sendBulkUpdate({
-    recipients: leads.map(l => ({ nombre: l.nombre, email: l.email })),
+    recipients,
     eventName: event.nombre,
     subject: parse.data.subject,
     mensaje: parse.data.mensaje,
+    coachUserId: req.userId,
   });
 
-  return res.json({ ok: true, sent: leads.length });
+  return res.json({ ok: true, sent: recipients.length });
+});
+
+// AI email generator
+router.post('/events/:id/generate-email', async (req: AuthRequest, res: Response) => {
+  const { prompt } = req.body;
+  if (!prompt) return res.status(400).json({ error: 'Prompt requerido' });
+
+  const event = await prisma.event.findUnique({ where: { id: Number(req.params.id) } });
+  if (!event) return res.status(404).json({ error: 'Evento no encontrado' });
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: 'API de IA no configurada' });
+
+  const client = new Anthropic({ apiKey });
+  const diasAlEvento = Math.ceil((new Date(event.fecha).getTime() - Date.now()) / 86400000);
+  const fechaStr = new Date(event.fecha).toLocaleDateString('es-MX', { dateStyle: 'full', timeZone: 'America/Tijuana' });
+
+  try {
+    const msg = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      messages: [{
+        role: 'user',
+        content: `Eres el asistente de comunicación de JTZ Running Club.
+
+Evento: ${event.nombre}
+Fecha: ${fechaStr} (en ${diasAlEvento} días)
+Lugar: ${event.lugar}${event.ciudad ? `, ${event.ciudad}` : ''}
+${event.distanciaKm ? `Distancia: ${event.distanciaKm} km` : ''}
+
+El coach quiere comunicar: "${prompt}"
+
+Genera un correo motivador y profesional para los corredores inscritos en español mexicano.
+Responde ÚNICAMENTE con JSON válido (sin markdown, sin código, sin explicaciones):
+{"asunto":"...","mensaje":"..."}`
+      }],
+    });
+
+    const text = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '{}';
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const result = JSON.parse(jsonMatch?.[0] ?? text);
+    return res.json(result);
+  } catch (err) {
+    console.error('[generate-email]', err);
+    return res.status(500).json({ error: 'Error generando el mensaje' });
+  }
 });
 
 // Update lead status manually

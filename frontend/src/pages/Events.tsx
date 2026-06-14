@@ -808,7 +808,7 @@ function CoachEventDetailModal({ ev, onClose }: { ev: Event; onClose: () => void
   );
 }
 
-function EventCard({ ev, onRegisterClick, onViewDetail, myRegistrations, isCoach, onShare, onDelete, onEdit, onViewInscribed }: {
+function EventCard({ ev, onRegisterClick, onViewDetail, myRegistrations, isCoach, onShare, onDelete, onEdit }: {
   ev: Event;
   onRegisterClick?: (ev: Event) => void;
   onViewDetail?: (ev: Event) => void;
@@ -817,7 +817,6 @@ function EventCard({ ev, onRegisterClick, onViewDetail, myRegistrations, isCoach
   onShare: (ev: Event) => void;
   onDelete?: (id: number) => void;
   onEdit?: (ev: Event) => void;
-  onViewInscribed?: (ev: Event) => void;
 }) {
   const cfg = typeConfig[ev.tipo] ?? typeConfig.carrera;
   const isPast = !isAfter(new Date(ev.fecha), new Date());
@@ -825,7 +824,7 @@ function EventCard({ ev, onRegisterClick, onViewDetail, myRegistrations, isCoach
 
   const handleCardClick = () => {
     if (isCoach) {
-      onViewInscribed?.(ev);
+      // navegado desde el botón "Ver inscritos" o clic en card
     } else if (isRegistered) {
       onViewDetail?.(ev);
     } else if (!isPast) {
@@ -944,7 +943,6 @@ export default function Events() {
   const [editEvent, setEditEvent] = useState<Event | null>(null);
   const [shareEvent, setShareEvent] = useState<Event | null>(null);
   const [registerEvent, setRegisterEvent] = useState<Event | null>(null);
-  const [coachDetailEvent, setCoachDetailEvent] = useState<Event | null>(null);
   const [runnerDetailEvent, setRunnerDetailEvent] = useState<Event | null>(null);
   const [filter, setFilter] = useState<'todos' | 'carrera' | 'trail' | 'entrenamiento' | 'social'>('todos');
   const [form, setForm] = useState({
@@ -1068,7 +1066,7 @@ export default function Events() {
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {upcoming.map((ev) => (
               <div key={ev.id} className="flex flex-col gap-2">
-                <EventCard ev={ev} onRegisterClick={!isCoach ? setRegisterEvent : undefined} onViewDetail={!isCoach ? setRunnerDetailEvent : undefined} myRegistrations={myRegistrations} isCoach={isCoach} onShare={setShareEvent} onDelete={isCoach ? (id) => deleteMutation.mutate(id) : undefined} onEdit={isCoach ? openEdit : undefined} onViewInscribed={isCoach ? setCoachDetailEvent : undefined} />
+                <EventCard ev={ev} onRegisterClick={!isCoach ? setRegisterEvent : undefined} onViewDetail={!isCoach ? setRunnerDetailEvent : undefined} myRegistrations={myRegistrations} isCoach={isCoach} onShare={setShareEvent} onDelete={isCoach ? (id) => deleteMutation.mutate(id) : undefined} onEdit={isCoach ? openEdit : undefined} />
                 {isCoach && (
                   <div className="flex gap-2">
                     <button onClick={() => navigate(`/eventos/${ev.id}/inscritos`)}
@@ -1092,7 +1090,7 @@ export default function Events() {
           <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Anteriores</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {past.slice(0, 6).map((ev) => (
-              <EventCard key={ev.id} ev={ev} onViewDetail={!isCoach ? setRunnerDetailEvent : undefined} myRegistrations={myRegistrations} isCoach={isCoach} onShare={setShareEvent} onDelete={isCoach ? (id) => deleteMutation.mutate(id) : undefined} onEdit={isCoach ? openEdit : undefined} onViewInscribed={isCoach ? setCoachDetailEvent : undefined} />
+              <EventCard key={ev.id} ev={ev} onViewDetail={!isCoach ? setRunnerDetailEvent : undefined} myRegistrations={myRegistrations} isCoach={isCoach} onShare={setShareEvent} onDelete={isCoach ? (id) => deleteMutation.mutate(id) : undefined} onEdit={isCoach ? openEdit : undefined} />
             ))}
           </div>
         </div>
@@ -1106,7 +1104,6 @@ export default function Events() {
       )}
 
       {shareEvent && <ShareModal ev={shareEvent} onClose={() => setShareEvent(null)} />}
-      {coachDetailEvent && <CoachEventDetailModal ev={coachDetailEvent} onClose={() => setCoachDetailEvent(null)} />}
       {runnerDetailEvent && (
         <RunnerEventDetailModal
           ev={runnerDetailEvent}
