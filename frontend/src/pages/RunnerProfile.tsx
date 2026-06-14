@@ -7,7 +7,8 @@ import { useAuth } from '../context/AuthContext';
 import {
   ArrowLeft, Phone, MapPin, Mail, Calendar, CreditCard,
   MessageSquare, Clock, AlertTriangle,
-  Dumbbell, Send, Trash2, X, Edit2, EyeOff,
+  Dumbbell, Send, Trash2, X, Edit2, EyeOff, Activity,
+  Flame, Timer, TrendingUp, Heart,
 } from 'lucide-react';
 import { format, isAfter, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -26,7 +27,7 @@ const logTipoConfig: Record<string, { icon: string; label: string; color: string
   presencial: { icon: '🤝', label: 'Presencial', color: 'text-purple-400' },
 };
 
-const tabs = ['Resumen', 'Plan', 'Eventos', 'Pagos', 'Mensajes'] as const;
+const tabs = ['Resumen', 'Actividades', 'Plan', 'Eventos', 'Pagos', 'Mensajes'] as const;
 type Tab = typeof tabs[number];
 
 export default function RunnerProfile() {
@@ -111,101 +112,103 @@ export default function RunnerProfile() {
       </button>
 
       {/* Hero header */}
-      <div className="card p-6 mb-5">
-        <div className="flex items-start gap-5">
-          <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${cfg.gradient} flex items-center justify-center text-white font-black text-xl flex-shrink-0 shadow-glow`}>
+      <div className="card p-4 lg:p-6 mb-5">
+        {/* Name row */}
+        <div className="flex items-center gap-4 mb-4">
+          <div className={`w-14 h-14 lg:w-16 lg:h-16 rounded-2xl bg-gradient-to-br ${cfg.gradient} flex items-center justify-center text-white font-black text-lg lg:text-xl flex-shrink-0 shadow-glow`}>
             {initials}
           </div>
-          <div className="flex-1">
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div>
-                <h1 className="text-2xl font-black text-white">{runner.nombre} {runner.apellido}</h1>
-                <span className={`badge border ${cfg.badge} capitalize mt-1 inline-block`}>{nivel}</span>
-              </div>
-              {/* Coach actions */}
-              {isCoach && (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button onClick={openEdit}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-gray-300 hover:text-white hover:bg-surface-600 border border-white/[0.08] transition-all">
-                    <Edit2 size={14} /> Editar
-                  </button>
-                  {runner.activo ? (
-                    <button onClick={handleDisable}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10 border border-yellow-500/20 transition-all">
-                      <EyeOff size={14} /> Deshabilitar
-                    </button>
-                  ) : (
-                    <button onClick={async () => { await runnersApi.reactivate(Number(id)); qc.invalidateQueries({ queryKey: ['runner', id] }); qc.invalidateQueries({ queryKey: ['runners'] }); }}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-green-400 hover:text-green-300 hover:bg-green-500/10 border border-green-500/20 transition-all">
-                      <EyeOff size={14} /> Reactivar
-                    </button>
-                  )}
-                  <button onClick={handleDelete}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/20 transition-all">
-                    <Trash2 size={14} /> Eliminar
-                  </button>
-                </div>
-              )}
-              {/* Quick stats */}
-              <div className="flex gap-4 text-center">
-                {[
-                  { label: 'Pagos pend.', value: pendingPayments.length, color: pendingPayments.length > 0 ? 'text-yellow-400' : 'text-green-400' },
-                  { label: 'Eventos', value: upcomingEvents.length, color: 'text-blue-400' },
-                  { label: 'Mensajes', value: logs.length, color: 'text-purple-400' },
-                ].map(({ label, value, color }) => (
-                  <div key={label} className="bg-surface-600 rounded-xl px-4 py-2">
-                    <p className={`text-xl font-black ${color}`}>{value}</p>
-                    <p className="text-xs text-gray-500">{label}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-4 mt-3">
-              {runner.user?.email && (
-                <a href={`mailto:${runner.user.email}`} className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors">
-                  <Mail size={13} /> {runner.user.email}
-                </a>
-              )}
-              {runner.telefono && (
-                <a href={`tel:${runner.telefono}`} className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors">
-                  <Phone size={13} /> {runner.telefono}
-                </a>
-              )}
-              {runner.ciudad && (
-                <span className="flex items-center gap-1.5 text-sm text-gray-400">
-                  <MapPin size={13} /> {runner.ciudad}
-                </span>
-              )}
-            </div>
+          <div className="min-w-0">
+            <h1 className="text-xl lg:text-2xl font-black text-white leading-tight">{runner.nombre} {runner.apellido}</h1>
+            <span className={`badge border ${cfg.badge} capitalize mt-1 inline-block`}>{nivel}</span>
           </div>
         </div>
 
+        {/* Quick stats */}
+        <div className="flex gap-3 mb-4">
+          {[
+            { label: 'Pagos pend.', value: pendingPayments.length, color: pendingPayments.length > 0 ? 'text-yellow-400' : 'text-green-400' },
+            { label: 'Actividades', value: (runner.activityLogs ?? []).length, color: 'text-brand-400' },
+            { label: 'Eventos', value: upcomingEvents.length, color: 'text-blue-400' },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="flex-1 bg-surface-600 rounded-xl px-3 py-2 text-center">
+              <p className={`text-lg font-black ${color}`}>{value}</p>
+              <p className="text-xs text-gray-500">{label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Contact info */}
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5 mb-4">
+          {runner.user?.email && (
+            <a href={`mailto:${runner.user.email}`} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors">
+              <Mail size={12} /> {runner.user.email}
+            </a>
+          )}
+          {runner.telefono && (
+            <a href={`tel:${runner.telefono}`} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors">
+              <Phone size={12} /> {runner.telefono}
+            </a>
+          )}
+          {runner.ciudad && (
+            <span className="flex items-center gap-1.5 text-xs text-gray-400">
+              <MapPin size={12} /> {runner.ciudad}
+            </span>
+          )}
+        </div>
+
+        {/* Coach actions */}
+        {isCoach && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <button onClick={openEdit}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-gray-300 hover:text-white hover:bg-surface-600 border border-white/[0.08] transition-all">
+              <Edit2 size={13} /> Editar
+            </button>
+            {runner.activo ? (
+              <button onClick={handleDisable}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10 border border-yellow-500/20 transition-all">
+                <EyeOff size={13} /> Deshabilitar
+              </button>
+            ) : (
+              <button onClick={async () => { await runnersApi.reactivate(Number(id)); qc.invalidateQueries({ queryKey: ['runner', id] }); qc.invalidateQueries({ queryKey: ['runners'] }); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-green-400 hover:text-green-300 hover:bg-green-500/10 border border-green-500/20 transition-all">
+                <EyeOff size={13} /> Reactivar
+              </button>
+            )}
+            <button onClick={handleDelete}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/20 transition-all">
+              <Trash2 size={13} /> Eliminar
+            </button>
+          </div>
+        )}
+
         {/* Next payment alert */}
         {nextPayment && (
-          <div className="mt-4 p-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertTriangle size={15} className="text-yellow-400" />
-              <span className="text-sm text-yellow-300">
+          <div className="mt-4 p-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <AlertTriangle size={15} className="text-yellow-400 flex-shrink-0" />
+              <span className="text-xs text-yellow-300 truncate">
                 Próximo pago: <strong>{nextPayment.concepto.replace('_', ' ')}</strong>
                 {nextPayment.fechaVencimiento && ` · ${format(new Date(nextPayment.fechaVencimiento), "d MMM yyyy", { locale: es })}`}
               </span>
             </div>
-            <span className="text-sm font-black text-yellow-400">${nextPayment.monto.toLocaleString('es-MX')} MXN</span>
+            <span className="text-sm font-black text-yellow-400 flex-shrink-0">${nextPayment.monto.toLocaleString('es-MX')}</span>
           </div>
         )}
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 p-1 bg-surface-800 border border-white/[0.06] rounded-xl w-fit mb-5">
-        {tabs.map((tab) => (
-          <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-              activeTab === tab ? 'bg-brand-500 text-white shadow-glow-sm' : 'text-gray-400 hover:text-white'
-            }`}>
-            {tab}
-          </button>
-        ))}
+      {/* Tabs — scrollable on mobile */}
+      <div className="overflow-x-auto mb-5 -mx-4 px-4 lg:mx-0 lg:px-0">
+        <div className="flex gap-1 p-1 bg-surface-800 border border-white/[0.06] rounded-xl w-max min-w-full lg:w-fit">
+          {tabs.map((tab) => (
+            <button key={tab} onClick={() => setActiveTab(tab)}
+              className={`px-3 lg:px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
+                activeTab === tab ? 'bg-brand-500 text-white shadow-glow-sm' : 'text-gray-400 hover:text-white'
+              }`}>
+              {tab}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Tab: Resumen */}
@@ -240,6 +243,56 @@ export default function RunnerProfile() {
               <p className="text-sm text-gray-300 leading-relaxed">{runner.notas}</p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Tab: Actividades */}
+      {activeTab === 'Actividades' && (
+        <div className="space-y-3 animate-slide-up">
+          {(runner.activityLogs ?? []).length === 0 ? (
+            <div className="card p-12 text-center">
+              <Activity size={36} className="mx-auto text-gray-600 mb-3" />
+              <p className="text-gray-500">Sin actividades registradas</p>
+            </div>
+          ) : (runner.activityLogs ?? []).map((act: any) => (
+            <div key={act.id} className="card p-4">
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div>
+                  <p className="font-semibold text-white capitalize">{act.nombre || act.tipo}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {format(new Date(act.fecha), "d MMM yyyy · HH:mm", { locale: es })}
+                  </p>
+                </div>
+                <span className="badge bg-brand-500/15 text-brand-400 capitalize flex-shrink-0">{act.tipo}</span>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                {act.distanciaKm != null && (
+                  <div className="flex items-center gap-1.5 text-sm">
+                    <TrendingUp size={13} className="text-brand-400" />
+                    <span className="text-white font-semibold">{Number(act.distanciaKm).toFixed(2)} km</span>
+                  </div>
+                )}
+                {act.duracionMin != null && (
+                  <div className="flex items-center gap-1.5 text-sm">
+                    <Timer size={13} className="text-blue-400" />
+                    <span className="text-white font-semibold">{act.duracionMin} min</span>
+                  </div>
+                )}
+                {act.fcPromedio != null && (
+                  <div className="flex items-center gap-1.5 text-sm">
+                    <Heart size={13} className="text-red-400" />
+                    <span className="text-white font-semibold">{act.fcPromedio} bpm</span>
+                  </div>
+                )}
+                {act.caloriasKcal != null && (
+                  <div className="flex items-center gap-1.5 text-sm">
+                    <Flame size={13} className="text-orange-400" />
+                    <span className="text-white font-semibold">{act.caloriasKcal} kcal</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

@@ -14,7 +14,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => {
     const stored = localStorage.getItem('jtz_user');
-    return stored ? JSON.parse(stored) : null;
+    try { return stored ? JSON.parse(stored) : null; } catch { return null; }
   });
 
   const login = async (email: string, password: string) => {
