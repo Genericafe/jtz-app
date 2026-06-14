@@ -47,24 +47,48 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
   return res.json({ ...runner, paidLeadEventIds });
 });
 
-// Actualizar propio perfil (runners)
+// Actualizar propio perfil (runners y coach)
 router.put('/me', async (req: AuthRequest, res: Response) => {
   const schema = z.object({
-    nombre: z.string().optional(),
-    apellido: z.string().optional(),
-    telefono: z.string().optional(),
-    ciudad: z.string().optional(),
-    estado: z.string().optional(),
+    nombre:        z.string().optional(),
+    apellido:      z.string().optional(),
+    telefono:      z.string().optional(),
+    ciudad:        z.string().optional(),
+    estado:        z.string().optional(),
+    pais:          z.string().optional(),
+    genero:        z.string().optional(),
+    tallaCamiseta: z.string().optional(),
+    notas:         z.string().optional(),
   });
 
   const parse = schema.safeParse(req.body);
   if (!parse.success) return res.status(400).json({ error: 'Datos inválidos' });
 
-  const runner = await prisma.runner.update({
-    where: { userId: req.userId! },
-    data: parse.data,
-  });
-  return res.json(runner);
+  try {
+    // Upsert: crea el perfil si no existe (útil para coaches que no tienen runner)
+    const existing = await prisma.runner.findUnique({ where: { userId: req.userId! } });
+    let runner;
+    if (existing) {
+      runner = await prisma.runner.update({
+        where: { userId: req.userId! },
+        data: parse.data,
+      });
+    } else {
+      runner = await prisma.runner.create({
+        data: {
+          userId:   req.userId!,
+          nombre:   parse.data.nombre   ?? 'Coach',
+          apellido: parse.data.apellido ?? '',
+          ciudad:   parse.data.ciudad   ?? 'México',
+          ...parse.data,
+        },
+      });
+    }
+    return res.json(runner);
+  } catch (err: any) {
+    console.error('[PUT /runners/me]', err?.message ?? err);
+    return res.status(500).json({ error: err?.message ?? 'Error al actualizar el perfil' });
+  }
 });
 
 // Lista todos los corredores (coach)

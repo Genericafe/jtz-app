@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { runnersApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { User, CheckCircle } from 'lucide-react';
+import { User, CheckCircle, AlertCircle } from 'lucide-react';
 
 export default function Profile() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [form, setForm] = useState({ nombre: '', apellido: '', telefono: '', ciudad: '', estado: '' });
 
   const { data: meData, isLoading } = useQuery({
@@ -34,7 +35,12 @@ export default function Profile() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['runner-me'] });
       setSaved(true);
+      setSaveError('');
       setTimeout(() => setSaved(false), 3000);
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.error ?? err?.message ?? 'Error al guardar. Intenta de nuevo.';
+      setSaveError(msg);
     },
   });
 
@@ -96,15 +102,20 @@ export default function Profile() {
           </div>
         </div>
 
-        <div className="flex items-center justify-between mt-6 pt-4 border-t border-dark-700">
+        <div className="mt-6 pt-4 border-t border-dark-700 space-y-3">
           {saved && (
-            <span className="flex items-center gap-1.5 text-sm text-green-400">
-              <CheckCircle size={15} /> Cambios guardados
-            </span>
+            <div className="flex items-center gap-1.5 text-sm text-green-400 bg-green-500/10 rounded-lg px-3 py-2">
+              <CheckCircle size={15} /> Cambios guardados correctamente
+            </div>
           )}
-          <div className="ml-auto">
+          {saveError && (
+            <div className="flex items-center gap-1.5 text-sm text-red-400 bg-red-500/10 rounded-lg px-3 py-2">
+              <AlertCircle size={15} /> {saveError}
+            </div>
+          )}
+          <div className="flex justify-end">
             <button
-              onClick={() => updateMutation.mutate(form)}
+              onClick={() => { setSaveError(''); updateMutation.mutate(form); }}
               disabled={updateMutation.isPending}
               className="px-6 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
             >
