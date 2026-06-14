@@ -62,9 +62,7 @@ router.put('/preferences', coachOnly, async (req: AuthRequest, res: Response) =>
 });
 
 router.get('/:id', async (req: AuthRequest, res: Response) => {
-  const user = await prisma.user.findUnique({ where: { id: req.userId! } });
-
-  if (user?.role !== 'coach') {
+  if (req.userRole !== 'coach') {
     // Runner: verificar que esté asignado a este plan
     const runner = await prisma.runner.findUnique({ where: { userId: req.userId! } });
     if (!runner) return res.status(403).json({ error: 'Acceso no autorizado' });
