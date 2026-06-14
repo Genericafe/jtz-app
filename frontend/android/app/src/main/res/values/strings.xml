@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">JTZ Running Club</string>
+    <string name="title_activity_main">JTZ Running Club</string>
+    <string name="package_name">mx.jtz.app</string>
+    <string name="custom_url_scheme">mx.jtz.app</string>
+</resources>

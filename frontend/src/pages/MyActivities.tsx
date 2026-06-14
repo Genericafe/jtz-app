@@ -1,11 +1,14 @@
 import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { integrationsApi } from '../services/api';
-import { Plus, Trash2, Upload, X, FileText, ChevronRight, CheckCircle2, Clock3 } from 'lucide-react';
+import { Plus, Trash2, Upload, X, FileText, ChevronRight, CheckCircle2, Clock3, Radio, Heart } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { parseGpx } from '../utils/gpxParser';
 import ActivityStatsView, { ActivityLog } from '../components/ActivityStatsView';
+import { Capacitor } from '@capacitor/core';
+import { importFromHealth } from '../hooks/useHealthSync';
 
 const TIPOS = [
   { id: 'correr',   label: 'Correr',   emoji: '🏃' },
@@ -92,12 +95,15 @@ const tipoEmoji = (t: string) => TIPOS.find(x => x.id === t)?.emoji ?? '💪';
 
 export default function MyActivities() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
   const [showForm, setShowForm] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [importingHealth, setImportingHealth] = useState(false);
+  const isNative = Capacitor.isNativePlatform();
 
   const [form, setForm] = useState({
     nombre: '', tipo: 'correr',
@@ -125,6 +131,27 @@ export default function MyActivities() {
     mutationFn: (id: number) => integrationsApi.deleteActivity(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['my-activities'] }),
   });
+
+  const handleHealthImport = async () => {
+    setImportingHealth(true);
+    try {
+      const workouts = await importFromHealth(14);
+      if (workouts.length === 0) {
+        alert('No se encontraron actividades recientes en Apple Health / Google Fit.');
+        return;
+      }
+      for (const w of workouts) {
+        await integrationsApi.logActivity({ ...w, fuente: 'health' });
+      }
+      await qc.invalidateQueries({ queryKey: ['my-activities'] });
+      alert(`${workouts.length} actividad${workouts.length !== 1 ? 'es' : ''} importada${workouts.length !== 1 ? 's' : ''} correctamente.`);
+    } catch (e) {
+      console.error(e);
+      alert('Error al importar actividades del reloj.');
+    } finally {
+      setImportingHealth(false);
+    }
+  };
 
   const resetForm = () => setForm({
     nombre: '', tipo: 'correr',
@@ -201,15 +228,33 @@ export default function MyActivities() {
     <div className="p-4 lg:p-6 max-w-3xl mx-auto space-y-6">
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-black text-white">Mis actividades</h1>
           <p className="text-gray-500 text-sm mt-0.5">Historial de entrenamientos y carreras</p>
         </div>
-        <button onClick={() => setShowForm(true)}
-          className="btn-primary flex items-center gap-2 px-4 py-2.5 text-sm">
-          <Plus size={15} /> Registrar
-        </button>
+        <div className="flex gap-2 flex-wrap">
+          {isNative && (
+            <button
+              onClick={handleHealthImport}
+              disabled={importingHealth}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium bg-dark-700 border border-dark-600 text-gray-300 hover:text-white hover:border-brand-500/40 transition-all disabled:opacity-50"
+            >
+              <Heart size={14} className="text-red-400" />
+              {importingHealth ? 'Importando...' : 'Reloj'}
+            </button>
+          )}
+          <button
+            onClick={() => navigate('/grabar')}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white transition-colors"
+          >
+            <Radio size={14} /> Grabar
+          </button>
+          <button onClick={() => setShowForm(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium bg-dark-700 border border-dark-600 text-gray-300 hover:text-white transition-all">
+            <Plus size={14} /> Manual
+          </button>
+        </div>
       </div>
 
       {/* GPX upload card */}
