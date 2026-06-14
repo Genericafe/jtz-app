@@ -492,6 +492,9 @@ function GpxUpload({ eventId, currentGpxNombre }: { eventId: number; currentGpxN
 function RunnerEventDetailModal({ ev, isPaid, onClose }: { ev: Event; isPaid: boolean; onClose: () => void }) {
   const [gpxLoading, setGpxLoading] = useState(false);
   const [gpxStatus, setGpxStatus] = useState<'idle' | 'ok' | 'error'>('idle');
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
+  const [showQr, setShowQr] = useState(false);
   const cfg = typeConfig[ev.tipo] ?? typeConfig.carrera;
 
   const downloadGpx = async () => {
@@ -511,6 +514,20 @@ function RunnerEventDetailModal({ ev, isPaid, onClose }: { ev: Event; isPaid: bo
       setGpxStatus('error');
     } finally {
       setGpxLoading(false);
+    }
+  };
+
+  const openQr = async () => {
+    if (qrUrl) { setShowQr(true); return; }
+    setQrLoading(true);
+    try {
+      const res = await api.get(`/events/${ev.id}/gpx-token`);
+      setQrUrl(res.data.url);
+      setShowQr(true);
+    } catch {
+      setGpxStatus('error');
+    } finally {
+      setQrLoading(false);
     }
   };
 
@@ -552,22 +569,50 @@ function RunnerEventDetailModal({ ev, isPaid, onClose }: { ev: Event; isPaid: bo
 
           {/* Ruta GPX */}
           {ev.gpxNombre && isPaid && (
-            <div className="bg-surface-700 rounded-xl p-4 border border-white/[0.06]">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <Route size={16} className="text-brand-400 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-white">Ruta oficial GPX</p>
-                    <p className="text-xs text-gray-500 truncate max-w-[180px]">{ev.gpxNombre}</p>
-                  </div>
+            <div className="bg-surface-700 rounded-xl p-4 border border-white/[0.06] space-y-3">
+              <div className="flex items-center gap-2">
+                <Route size={15} className="text-brand-400 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white">Ruta oficial GPX</p>
+                  <p className="text-xs text-gray-500 truncate">{ev.gpxNombre}</p>
                 </div>
+              </div>
+
+              <div className="flex gap-2">
                 <button onClick={downloadGpx} disabled={gpxLoading}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-brand-500/15 text-brand-400 border border-brand-500/20 text-xs font-semibold hover:bg-brand-500/25 transition-all disabled:opacity-50">
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-brand-500/15 text-brand-400 border border-brand-500/20 text-xs font-semibold hover:bg-brand-500/25 transition-all disabled:opacity-50">
                   <Download size={13} /> {gpxLoading ? 'Descargando…' : 'Descargar'}
                 </button>
+                <button onClick={openQr} disabled={qrLoading}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-purple-500/15 text-purple-400 border border-purple-500/20 text-xs font-semibold hover:bg-purple-500/25 transition-all disabled:opacity-50">
+                  {qrLoading
+                    ? <div className="w-3 h-3 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                    : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM17 17h3v3h-3zM14 20h3"/></svg>
+                  }
+                  Ver QR
+                </button>
               </div>
-              {gpxStatus === 'ok' && <p className="text-xs text-green-400 mt-2">✓ Descarga iniciada — importa el GPX en Garmin, Strava o Komoot</p>}
-              {gpxStatus === 'error' && <p className="text-xs text-red-400 mt-2">Error al descargar. Intenta de nuevo.</p>}
+
+              {/* QR panel */}
+              {showQr && qrUrl && (
+                <div className="flex flex-col items-center gap-3 pt-2 border-t border-white/[0.06]">
+                  <p className="text-xs text-gray-400 text-center">Escanea con tu celular para descargar el GPX directamente</p>
+                  <div className="bg-white p-3 rounded-2xl shadow-lg">
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(qrUrl)}&color=000000&bgcolor=ffffff&margin=0`}
+                      alt="QR ruta GPX"
+                      className="w-[180px] h-[180px] sm:w-[220px] sm:h-[220px]"
+                    />
+                  </div>
+                  <p className="text-[11px] text-gray-600 text-center">Válido por 1 hora · Funciona en Garmin, Strava, Komoot</p>
+                  <button onClick={() => setShowQr(false)} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
+                    Ocultar QR
+                  </button>
+                </div>
+              )}
+
+              {gpxStatus === 'ok' && <p className="text-xs text-green-400">✓ Descarga iniciada — importa el GPX en Garmin, Strava o Komoot</p>}
+              {gpxStatus === 'error' && <p className="text-xs text-red-400">Error. Intenta de nuevo.</p>}
             </div>
           )}
 

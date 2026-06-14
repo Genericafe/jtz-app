@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import jwt from 'jsonwebtoken';
 import { authMiddleware, coachOnly, AuthRequest } from '../middleware/auth';
 import { sendEventNotification, sendGpxToRunner } from '../services/email';
 import { z } from 'zod';
@@ -170,6 +171,30 @@ router.get('/:id/gpx', async (req: AuthRequest, res: Response) => {
   res.setHeader('Content-Type', 'application/gpx+xml');
   res.setHeader('Content-Disposition', `attachment; filename="${event.gpxNombre ?? 'ruta.gpx'}"`);
   return res.send(event.gpxContent);
+});
+
+// ── GPX token para QR (válido 1 hora) ────────────────────────────────────────
+router.get('/:id/gpx-token', async (req: AuthRequest, res: Response) => {
+  const event = await prisma.event.findUnique({ where: { id: Number(req.params.id) } });
+  if (!event?.gpxContent) return res.status(404).json({ error: 'Este evento no tiene ruta GPX' });
+
+  const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { role: true, email: true, runner: true } });
+  if (!user) return res.status(401).json({ error: 'No autenticado' });
+
+  if (user.role !== 'coach') {
+    const runnerId = (user as any).runner?.id;
+    const [regOk, leadOk] = await Promise.all([
+      runnerId ? prisma.eventRegistration.findFirst({ where: { eventId: event.id, runnerId, pagado: true } }) : null,
+      prisma.eventLead.findFirst({ where: { eventId: event.id, email: user.email, estado: { in: ['pagado', 'confirmado'] } } }),
+    ]);
+    if (!regOk && !leadOk) return res.status(403).json({ error: 'Solo disponible para inscritos pagados' });
+  }
+
+  const secret = process.env.JWT_SECRET ?? 'jtz-secret';
+  const token = jwt.sign({ eventId: event.id, gpx: true }, secret, { expiresIn: '1h' });
+  const backendUrl = process.env.BACKEND_URL ?? 'http://localhost:3001';
+  const url = `${backendUrl}/api/public/gpx/${event.id}?token=${token}`;
+  return res.json({ url, gpxNombre: event.gpxNombre });
 });
 
 router.post('/:id/register', async (req: AuthRequest, res: Response) => {

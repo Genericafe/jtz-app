@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import Stripe from 'stripe';
+import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { sendRegistrationConfirmation } from '../services/email';
 import { format } from 'date-fns';
@@ -8,6 +9,29 @@ import { es } from 'date-fns/locale';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+// ── GPX público con token firmado (para QR) ───────────────────────────────────
+router.get('/gpx/:eventId', async (req: Request, res: Response) => {
+  const token = req.query.token as string;
+  if (!token) return res.status(401).send('Token requerido');
+
+  try {
+    const secret = process.env.JWT_SECRET ?? 'jtz-secret';
+    const payload = jwt.verify(token, secret) as { eventId: number; gpx: boolean };
+    if (!payload.gpx || payload.eventId !== Number(req.params.eventId)) {
+      return res.status(403).send('Token inválido');
+    }
+  } catch {
+    return res.status(403).send('Token expirado o inválido');
+  }
+
+  const event = await prisma.event.findUnique({ where: { id: Number(req.params.eventId) } });
+  if (!event?.gpxContent) return res.status(404).send('GPX no encontrado');
+
+  res.setHeader('Content-Type', 'application/gpx+xml');
+  res.setHeader('Content-Disposition', `attachment; filename="${event.gpxNombre ?? 'ruta.gpx'}"`);
+  return res.send(event.gpxContent);
+});
 
 // Public event info (no auth)
 router.get('/events/:id', async (req: Request, res: Response) => {
