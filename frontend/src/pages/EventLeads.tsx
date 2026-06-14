@@ -208,34 +208,37 @@ export default function EventLeads() {
 
       {/* Event header card */}
       {event && (
-        <div className="card p-5">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div className="flex-1 min-w-0">
-              <h1 className="text-xl sm:text-2xl font-black text-white truncate">{event.nombre}</h1>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-gray-400">
-                <span className="flex items-center gap-1.5">
-                  <Calendar size={13} />
-                  {format(new Date(event.fecha), "EEEE d 'de' MMMM · HH:mm 'hrs'", { locale: es })}
-                  <span className="text-gray-600 text-xs">({formatDistanceToNow(new Date(event.fecha), { locale: es, addSuffix: true })})</span>
-                </span>
-                <span className="flex items-center gap-1.5"><MapPin size={13} /> {event.lugar}{event.ciudad ? `, ${event.ciudad}` : ''}</span>
-                {event.distanciaKm && <span className="flex items-center gap-1.5"><Trophy size={13} /> {event.distanciaKm} km</span>}
-              </div>
-            </div>
-            <div className="flex gap-2 flex-wrap flex-shrink-0">
-              <button onClick={() => { navigator.clipboard.writeText(landingUrl); setCopied(true); setTimeout(() => setCopied(false), 2500); }}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-600 border border-white/[0.08] text-xs text-gray-300 hover:text-white transition-all">
-                {copied ? <><CheckCircle size={12} className="text-green-400" /> Copiado</> : <><Copy size={12} /> Copiar link</>}
-              </button>
-              <a href={landingUrl} target="_blank" rel="noreferrer"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-600 border border-white/[0.08] text-xs text-gray-300 hover:text-white transition-all">
-                <ExternalLink size={12} /> Landing
-              </a>
-              <button onClick={downloadCSV}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-600 border border-white/[0.08] text-xs text-gray-300 hover:text-white transition-all">
-                <FileSpreadsheet size={12} /> CSV
-              </button>
-            </div>
+        <div className="card p-4 lg:p-5">
+          <h1 className="text-xl lg:text-2xl font-black text-white leading-tight mb-2">{event.nombre}</h1>
+          <div className="flex flex-col gap-1 mb-4 text-sm text-gray-400">
+            <span className="flex items-center gap-1.5">
+              <Calendar size={13} className="flex-shrink-0" />
+              <span className="capitalize">{format(new Date(event.fecha), "EEEE d 'de' MMMM · HH:mm 'hrs'", { locale: es })}</span>
+              <span className="text-gray-600 text-xs whitespace-nowrap">({formatDistanceToNow(new Date(event.fecha), { locale: es, addSuffix: true })})</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <MapPin size={13} className="flex-shrink-0" />
+              {event.lugar}{event.ciudad ? `, ${event.ciudad}` : ''}
+            </span>
+            {event.distanciaKm && (
+              <span className="flex items-center gap-1.5">
+                <Trophy size={13} className="flex-shrink-0" /> {event.distanciaKm} km
+              </span>
+            )}
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={() => { navigator.clipboard.writeText(landingUrl); setCopied(true); setTimeout(() => setCopied(false), 2500); }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-600 border border-white/[0.08] text-xs text-gray-300 hover:text-white transition-all">
+              {copied ? <><CheckCircle size={12} className="text-green-400" /> Copiado</> : <><Copy size={12} /> Copiar link</>}
+            </button>
+            <a href={landingUrl} target="_blank" rel="noreferrer"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-600 border border-white/[0.08] text-xs text-gray-300 hover:text-white transition-all">
+              <ExternalLink size={12} /> Landing
+            </a>
+            <button onClick={downloadCSV}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-600 border border-white/[0.08] text-xs text-gray-300 hover:text-white transition-all">
+              <FileSpreadsheet size={12} /> CSV
+            </button>
           </div>
         </div>
       )}

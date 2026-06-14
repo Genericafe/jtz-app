@@ -1,6 +1,7 @@
 import { useAuth } from '../context/AuthContext';
 import RunnerDashboard from './RunnerDashboard';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { runnersApi, paymentsApi, eventsApi, announcementsApi } from '../services/api';
 import { Runner, Event, Payment, Announcement } from '../types';
 import { format, isAfter, formatDistanceToNow } from 'date-fns';
@@ -21,10 +22,13 @@ const eventEmoji: Record<string, string> = {
   carrera: '🏃', trail: '🏔️', entrenamiento: '💪', social: '🎉',
 };
 
-function EventStoryCard({ ev }: { ev: Event }) {
+function EventStoryCard({ ev, onClick }: { ev: Event; onClick: () => void }) {
   const gradient = eventGradient[ev.tipo] ?? 'bg-carrera';
   return (
-    <div className={`${gradient} rounded-2xl p-5 min-w-[200px] max-w-[200px] flex flex-col justify-between h-36 cursor-pointer hover:scale-105 transition-transform duration-200 shadow-glow-sm flex-shrink-0`}>
+    <div
+      onClick={onClick}
+      className={`${gradient} rounded-2xl p-5 min-w-[180px] max-w-[180px] flex flex-col justify-between h-36 cursor-pointer active:scale-95 hover:scale-105 transition-transform duration-200 shadow-glow-sm flex-shrink-0`}
+    >
       <div className="flex items-start justify-between">
         <span className="text-2xl">{eventEmoji[ev.tipo] ?? '🏃'}</span>
         <span className="text-xs bg-black/20 backdrop-blur rounded-full px-2 py-0.5 text-white font-medium">
@@ -73,6 +77,7 @@ function AnnouncementCard({ ann }: { ann: Announcement }) {
 }
 
 function CoachDashboard() {
+  const navigate = useNavigate();
   const { data: runnersData } = useQuery({ queryKey: ['runners'], queryFn: () => runnersApi.list() });
   const { data: paymentsData } = useQuery({ queryKey: ['payments'], queryFn: () => paymentsApi.list() });
   const { data: statsData } = useQuery({ queryKey: ['payment-stats'], queryFn: () => paymentsApi.stats() });
@@ -104,12 +109,13 @@ function CoachDashboard() {
       {/* Stats row */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
         {[
-          { label: 'Corredores', value: activeRunners, icon: Users, sub: 'activos', color: 'text-blue-400', bg: 'bg-blue-500/10' },
-          { label: 'Pendientes', value: pendingPayments, icon: AlertTriangle, sub: 'por cobrar', color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
-          { label: 'Eventos', value: upcomingEvents.length, icon: Calendar, sub: 'próximos', color: 'text-green-400', bg: 'bg-green-500/10' },
-          { label: 'Ingresos', value: `$${((stats?.totalRecaudado ?? 0) / 1000).toFixed(0)}k`, icon: TrendingUp, sub: 'MXN cobrado', color: 'text-brand-400', bg: 'bg-brand-500/10' },
-        ].map(({ label, value, icon: Icon, sub, color, bg }) => (
-          <div key={label} className="card p-4 flex items-center gap-3">
+          { label: 'Corredores', value: activeRunners, icon: Users, sub: 'activos', color: 'text-blue-400', bg: 'bg-blue-500/10', href: '/corredores' },
+          { label: 'Pendientes', value: pendingPayments, icon: AlertTriangle, sub: 'por cobrar', color: 'text-yellow-400', bg: 'bg-yellow-500/10', href: '/pagos' },
+          { label: 'Eventos', value: upcomingEvents.length, icon: Calendar, sub: 'próximos', color: 'text-green-400', bg: 'bg-green-500/10', href: '/eventos' },
+          { label: 'Ingresos', value: `$${((stats?.totalRecaudado ?? 0) / 1000).toFixed(0)}k`, icon: TrendingUp, sub: 'MXN cobrado', color: 'text-brand-400', bg: 'bg-brand-500/10', href: '/pagos' },
+        ].map(({ label, value, icon: Icon, sub, color, bg, href }) => (
+          <button key={label} onClick={() => navigate(href)}
+            className="card p-4 flex items-center gap-3 text-left hover:border-white/20 active:scale-95 transition-all duration-150 w-full">
             <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center flex-shrink-0`}>
               <Icon size={18} className={color} />
             </div>
@@ -117,7 +123,7 @@ function CoachDashboard() {
               <p className="text-xl font-black text-white leading-tight">{value}</p>
               <p className="text-xs text-gray-500">{sub}</p>
             </div>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -137,7 +143,7 @@ function CoachDashboard() {
               </div>
               <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
                 {upcomingEvents.slice(0, 6).map((ev) => (
-                  <EventStoryCard key={ev.id} ev={ev} />
+                  <EventStoryCard key={ev.id} ev={ev} onClick={() => navigate(`/eventos/${ev.id}/inscritos`)} />
                 ))}
               </div>
             </div>
