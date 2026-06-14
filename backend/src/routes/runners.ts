@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware, coachOnly, AuthRequest } from '../middleware/auth';
 import { z } from 'zod';
+import { sendBulkUpdate } from '../services/email';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -246,6 +247,44 @@ router.get('/:id/activity-logs', coachOnly, async (req: AuthRequest, res: Respon
     orderBy: { fecha: 'desc' },
   });
   return res.json(logs);
+});
+
+// POST /runners/bulk-email — coach envía email a todos (o un subconjunto) de corredores activos
+router.post('/bulk-email', coachOnly, async (req: AuthRequest, res: Response) => {
+  const schema = z.object({
+    subject:    z.string().min(1),
+    mensaje:    z.string().min(1),
+    runnerIds:  z.array(z.number().int()).optional(),
+  });
+
+  const parse = schema.safeParse(req.body);
+  if (!parse.success) return res.status(400).json({ error: 'Datos inválidos' });
+
+  const { subject, mensaje, runnerIds } = parse.data;
+
+  const runners = await prisma.runner.findMany({
+    where: {
+      activo: true,
+      ...(runnerIds?.length ? { id: { in: runnerIds } } : {}),
+    },
+    include: { user: { select: { email: true } } },
+  });
+
+  const recipients = runners
+    .filter(r => (r as any).user?.email)
+    .map(r => ({ nombre: `${r.nombre} ${r.apellido}`, email: (r as any).user.email as string }));
+
+  if (!recipients.length) {
+    return res.status(400).json({ error: 'No hay corredores con correo electrónico disponible' });
+  }
+
+  try {
+    await sendBulkUpdate({ recipients, eventName: 'JTZ Running Club', subject, mensaje, coachUserId: req.userId });
+    return res.json({ ok: true, sent: recipients.length });
+  } catch (err: any) {
+    console.error('[bulk-email]', err?.message ?? err);
+    return res.status(500).json({ error: err?.message ?? 'Error al enviar los correos' });
+  }
 });
 
 export default router;
