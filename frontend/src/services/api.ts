@@ -38,6 +38,8 @@ export const runnersApi = {
   addLog:    (id: number, data: object) => api.post(`/runners/${id}/logs`, data),
   deleteLog: (id: number, logId: number) => api.delete(`/runners/${id}/logs/${logId}`),
   bulkEmail: (data: object) => api.post('/runners/bulk-email', data),
+  getActivityLog: (runnerId: number, actId: number) => api.get(`/runners/${runnerId}/activity-logs/${actId}`),
+  confirmActivityLog: (runnerId: number, actId: number) => api.patch(`/runners/${runnerId}/activity-logs/${actId}/confirm`, {}),
 };
 
 export const plansApi = {

@@ -8,10 +8,11 @@ import {
   ArrowLeft, Phone, MapPin, Mail, Calendar, CreditCard,
   MessageSquare, Clock, AlertTriangle,
   Dumbbell, Send, Trash2, X, Edit2, EyeOff, Activity,
-  Flame, Timer, TrendingUp, Heart,
+  Flame, Timer, TrendingUp, Heart, CheckCircle2, ChevronRight,
 } from 'lucide-react';
 import { format, isAfter, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
+import ActivityDetailModal from '../components/ActivityDetailModal';
 
 const nivelConfig: Record<string, { badge: string; gradient: string }> = {
   principiante: { badge: 'bg-green-500/15 text-green-400 border-green-500/20',   gradient: 'from-green-500 to-emerald-600' },
@@ -40,6 +41,7 @@ export default function RunnerProfile() {
   const [showLogForm, setShowLogForm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({ nombre: '', apellido: '', telefono: '', pais: '', estado: '', ciudad: '', nivel: 'principiante', genero: '', tallaCamiseta: '', notas: '' });
+  const [selectedActId, setSelectedActId] = useState<number | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['runner', id],
@@ -59,6 +61,20 @@ export default function RunnerProfile() {
   const updateMutation = useMutation({
     mutationFn: (d: object) => runnersApi.update(Number(id), d),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['runner', id] }); qc.invalidateQueries({ queryKey: ['runners'] }); setShowEditModal(false); },
+  });
+
+  const { data: actDetailData, isLoading: actLoading } = useQuery({
+    queryKey: ['activity', id, selectedActId],
+    queryFn: () => runnersApi.getActivityLog(Number(id), selectedActId!),
+    enabled: !!selectedActId,
+  });
+
+  const confirmMutation = useMutation({
+    mutationFn: () => runnersApi.confirmActivityLog(Number(id), selectedActId!),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['runner', id] });
+      qc.invalidateQueries({ queryKey: ['activity', id, selectedActId] });
+    },
   });
 
   const openEdit = () => {
@@ -198,17 +214,21 @@ export default function RunnerProfile() {
       </div>
 
       {/* Tabs — scrollable on mobile */}
-      <div className="overflow-x-auto mb-5 -mx-4 px-4 lg:mx-0 lg:px-0">
-        <div className="flex gap-1 p-1 bg-surface-800 border border-white/[0.06] rounded-xl w-max min-w-full lg:w-fit">
-          {tabs.map((tab) => (
-            <button key={tab} onClick={() => setActiveTab(tab)}
-              className={`px-3 lg:px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
-                activeTab === tab ? 'bg-brand-500 text-white shadow-glow-sm' : 'text-gray-400 hover:text-white'
-              }`}>
-              {tab}
-            </button>
-          ))}
+      <div className="relative mb-5">
+        <div className="overflow-x-auto -mx-4 px-4 lg:mx-0 lg:px-0 scrollbar-none">
+          <div className="flex gap-1 p-1 bg-surface-800 border border-white/[0.06] rounded-xl w-max min-w-full lg:w-fit">
+            {tabs.map((tab) => (
+              <button key={tab} onClick={() => setActiveTab(tab)}
+                className={`px-3 lg:px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
+                  activeTab === tab ? 'bg-brand-500 text-white shadow-glow-sm' : 'text-gray-400 hover:text-white'
+                }`}>
+                {tab}
+              </button>
+            ))}
+          </div>
         </div>
+        {/* Fade hint that more tabs exist on mobile */}
+        <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-surface-900 to-transparent pointer-events-none lg:hidden" />
       </div>
 
       {/* Tab: Resumen */}
@@ -255,15 +275,27 @@ export default function RunnerProfile() {
               <p className="text-gray-500">Sin actividades registradas</p>
             </div>
           ) : (runner.activityLogs ?? []).map((act: any) => (
-            <div key={act.id} className="card p-4">
+            <button
+              key={act.id}
+              onClick={() => setSelectedActId(act.id)}
+              className="card p-4 w-full text-left hover:border-brand-500/30 active:scale-[0.99] transition-all group"
+            >
               <div className="flex items-start justify-between gap-3 mb-3">
-                <div>
-                  <p className="font-semibold text-white capitalize">{act.nombre || act.tipo}</p>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-white capitalize truncate">{act.nombre || act.tipo}</p>
+                    {act.confirmadoPorCoach && (
+                      <CheckCircle2 size={13} className="text-green-400 flex-shrink-0" />
+                    )}
+                  </div>
                   <p className="text-xs text-gray-500 mt-0.5">
                     {format(new Date(act.fecha), "d MMM yyyy · HH:mm", { locale: es })}
                   </p>
                 </div>
-                <span className="badge bg-brand-500/15 text-brand-400 capitalize flex-shrink-0">{act.tipo}</span>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="badge bg-brand-500/15 text-brand-400 capitalize">{act.tipo}</span>
+                  <ChevronRight size={14} className="text-gray-600 group-hover:text-gray-400 transition-colors" />
+                </div>
               </div>
               <div className="flex flex-wrap gap-3">
                 {act.distanciaKm != null && (
@@ -291,7 +323,7 @@ export default function RunnerProfile() {
                   </div>
                 )}
               </div>
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -507,6 +539,24 @@ export default function RunnerProfile() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Activity detail modal */}
+      {selectedActId && (
+        actLoading ? (
+          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center">
+            <div className="flex items-center gap-3 text-white">
+              <Clock size={16} className="animate-spin" /> Cargando actividad...
+            </div>
+          </div>
+        ) : actDetailData?.data ? (
+          <ActivityDetailModal
+            activity={actDetailData.data}
+            onClose={() => { setSelectedActId(null); confirmMutation.reset(); }}
+            onConfirm={isCoach ? () => confirmMutation.mutate() : undefined}
+            confirming={confirmMutation.isPending}
+          />
+        ) : null
       )}
 
       {/* Edit modal */}

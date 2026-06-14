@@ -134,7 +134,19 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
         include: { event: true },
         orderBy: { createdAt: 'desc' },
       },
-      activityLogs: { orderBy: { fecha: 'desc' }, take: 50 },
+      activityLogs: {
+        orderBy: { fecha: 'desc' },
+        take: 50,
+        // gpxContent excluded — fetched on-demand via GET /:id/activity-logs/:actId
+        select: {
+          id: true, runnerId: true, diaId: true, fuente: true, nombre: true, tipo: true,
+          fecha: true, distanciaKm: true, duracionMin: true, ritmoMinKm: true,
+          fcPromedio: true, fcMax: true, cadenciaPromedio: true, cadenciaMax: true,
+          elevacionM: true, elevacionPerdidaM: true, caloriasKcal: true,
+          potenciaW: true, gpxNombre: true, notas: true,
+          confirmadoPorCoach: true, confirmedAt: true, createdAt: true,
+        } as any,
+      },
       communicationLogs: { orderBy: { createdAt: 'desc' } },
     },
   });
@@ -291,6 +303,25 @@ router.get('/:id/activity-logs', coachOnly, async (req: AuthRequest, res: Respon
     orderBy: { fecha: 'desc' },
   });
   return res.json(logs);
+});
+
+// Detalle completo de una actividad (incluye gpxContent)
+router.get('/:id/activity-logs/:actId', coachOnly, async (req: AuthRequest, res: Response) => {
+  const log = await (prisma as any).activityLog.findFirst({
+    where: { id: Number(req.params.actId), runnerId: Number(req.params.id) },
+  });
+  if (!log) return res.status(404).json({ error: 'Actividad no encontrada' });
+  return res.json(log);
+});
+
+// Coach confirma actividad
+router.patch('/:id/activity-logs/:actId/confirm', coachOnly, async (req: AuthRequest, res: Response) => {
+  const result = await (prisma as any).activityLog.updateMany({
+    where: { id: Number(req.params.actId), runnerId: Number(req.params.id) },
+    data: { confirmadoPorCoach: true, confirmedAt: new Date() },
+  });
+  if (result.count === 0) return res.status(404).json({ error: 'Actividad no encontrada' });
+  return res.json({ ok: true });
 });
 
 // POST /runners/bulk-email — coach envía email a todos (o un subconjunto) de corredores activos
