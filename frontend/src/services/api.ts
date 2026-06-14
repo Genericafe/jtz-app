@@ -118,9 +118,10 @@ export const leadsApi = {
 };
 
 export const stripeApi = {
-  createCheckout: (paymentId: number) => api.post(`/stripe/checkout/${paymentId}`),
-  verifyPayment: (sessionId: string, paymentId: string) =>
-    api.get(`/stripe/verify?session_id=${sessionId}&payment_id=${paymentId}`),
+  createCheckout:      (paymentId: number)                     => api.post(`/stripe/checkout/${paymentId}`),
+  createOrderCheckout: (data: object)                          => api.post('/stripe/checkout/order', data),
+  verifyPayment:       (sessionId: string, paymentId: string)  => api.get(`/stripe/verify?session_id=${sessionId}&payment_id=${paymentId}`),
+  verifyOrderPayment:  (sessionId: string, orderId: string)    => api.get(`/stripe/verify-order?session_id=${sessionId}&order_id=${orderId}`),
 };
 
 export const chatApi = {

@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Package, X, ShoppingCart, Truck, CheckCircle, ImagePlus, Trash2, Edit2 } from 'lucide-react';
-import { productsApi, runnersApi } from '../services/api';
+import { Plus, Package, X, ShoppingCart, Truck, CheckCircle, ImagePlus, Trash2, Edit2, CreditCard } from 'lucide-react';
+import { productsApi, runnersApi, stripeApi } from '../services/api';
 import { Product, Order, Runner } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { format } from 'date-fns';
@@ -36,11 +36,30 @@ function BuyModal({ product, onClose }: { product: Product; onClose: () => void 
   const qc = useQueryClient();
   const [qty, setQty] = useState(1);
   const [nota, setNota] = useState('');
+  const [stripeLoading, setStripeLoading] = useState(false);
+  const [stripeError, setStripeError] = useState('');
 
-  const buyMutation = useMutation({
+  const cashMutation = useMutation({
     mutationFn: () => productsApi.buyNow({ items: [{ productId: product.id, cantidad: qty }], notas: nota || undefined }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['my-orders'] }); onClose(); },
   });
+
+  const handleStripeCheckout = async () => {
+    setStripeLoading(true);
+    setStripeError('');
+    try {
+      const res = await stripeApi.createOrderCheckout({
+        items: [{ productId: product.id, cantidad: qty }],
+        notas: nota || undefined,
+      });
+      window.location.href = res.data.url;
+    } catch (err: any) {
+      setStripeError(err?.response?.data?.error ?? 'Error al iniciar el pago. Intenta de nuevo.');
+      setStripeLoading(false);
+    }
+  };
+
+  const total = product.precio * qty;
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 px-4">
@@ -54,18 +73,22 @@ function BuyModal({ product, onClose }: { product: Product; onClose: () => void 
 
         <div className="mt-4">
           <p className="font-semibold text-white">{product.nombre}</p>
-          <p className="text-xs text-gray-400 capitalize mt-0.5">{tipoLabel[product.tipo] ?? product.tipo}{product.talla ? ` · Talla ${product.talla}` : ''}{product.color ? ` · ${product.color}` : ''}</p>
+          <p className="text-xs text-gray-400 capitalize mt-0.5">
+            {tipoLabel[product.tipo] ?? product.tipo}
+            {product.talla ? ` · Talla ${product.talla}` : ''}
+            {product.color ? ` · ${product.color}` : ''}
+          </p>
           <p className="text-brand-400 font-black text-xl mt-2">${product.precio.toLocaleString('es-MX')} MXN</p>
         </div>
 
         <div className="flex items-center gap-3 mt-4">
           <label className="text-sm text-gray-400">Cantidad</label>
           <div className="flex items-center gap-2">
-            <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-8 h-8 rounded-lg bg-surface-600 text-white font-bold flex items-center justify-center hover:bg-surface-500 transition-colors">-</button>
+            <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-8 h-8 rounded-lg bg-surface-600 text-white font-bold flex items-center justify-center hover:bg-surface-500 transition-colors">−</button>
             <span className="w-8 text-center font-bold text-white">{qty}</span>
             <button onClick={() => setQty(q => Math.min(product.stock, q + 1))} className="w-8 h-8 rounded-lg bg-surface-600 text-white font-bold flex items-center justify-center hover:bg-surface-500 transition-colors">+</button>
           </div>
-          <span className="text-xs text-gray-500 ml-auto">${(product.precio * qty).toLocaleString('es-MX')} MXN</span>
+          <span className="text-sm font-bold text-white ml-auto">${total.toLocaleString('es-MX')} MXN</span>
         </div>
 
         <div className="mt-3">
@@ -73,17 +96,45 @@ function BuyModal({ product, onClose }: { product: Product; onClose: () => void 
           <input value={nota} onChange={e => setNota(e.target.value)} placeholder="Ej: talla confirmada, color preferido..." className="input w-full text-sm" />
         </div>
 
-        <p className="text-xs text-gray-500 mt-3 bg-surface-600 rounded-lg p-3">
-          El pago se realiza directamente al coach (efectivo / transferencia). Tu pedido quedará en estado <strong className="text-yellow-400">pendiente</strong> hasta que el coach confirme el pago.
+        {stripeError && (
+          <p className="text-xs text-red-400 bg-red-500/10 rounded-lg px-3 py-2 mt-3">{stripeError}</p>
+        )}
+
+        {/* Pago con tarjeta (Stripe) */}
+        <button
+          onClick={handleStripeCheckout}
+          disabled={stripeLoading || cashMutation.isPending}
+          className="w-full mt-4 py-3 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {stripeLoading
+            ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Redirigiendo a Stripe…</>
+            : <><CreditCard size={15} /> Pagar con tarjeta — ${total.toLocaleString('es-MX')} MXN</>
+          }
+        </button>
+
+        {/* Separador */}
+        <div className="flex items-center gap-2 my-3">
+          <div className="flex-1 h-px bg-white/[0.06]" />
+          <span className="text-xs text-gray-600">o</span>
+          <div className="flex-1 h-px bg-white/[0.06]" />
+        </div>
+
+        {/* Pago en efectivo / transferencia */}
+        <button
+          onClick={() => cashMutation.mutate()}
+          disabled={cashMutation.isPending || stripeLoading}
+          className="w-full py-2.5 rounded-xl border border-white/[0.08] text-sm text-gray-400 hover:text-white hover:border-white/[0.2] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          <ShoppingCart size={14} />
+          {cashMutation.isPending ? 'Enviando pedido…' : 'Pagar en efectivo / transferencia'}
+        </button>
+        <p className="text-[11px] text-gray-600 text-center mt-1.5">
+          El pedido quedará pendiente hasta que el coach confirme el pago
         </p>
 
-        <div className="flex gap-2 mt-4">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-white/[0.08] text-sm text-gray-400 hover:text-white transition-colors">Cancelar</button>
-          <button onClick={() => buyMutation.mutate()} disabled={buyMutation.isPending}
-            className="flex-1 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-            <ShoppingCart size={15} /> {buyMutation.isPending ? 'Enviando...' : 'Hacer pedido'}
-          </button>
-        </div>
+        <button onClick={onClose} className="w-full mt-2 text-xs text-gray-600 hover:text-gray-400 transition-colors py-1">
+          Cancelar
+        </button>
       </div>
     </div>
   );
@@ -307,6 +358,33 @@ export default function Store() {
   const [showOrder, setShowOrder] = useState(false);
   const [buyProduct, setBuyProduct] = useState<Product | null>(null);
   const [orderForm, setOrderForm] = useState({ runnerId: '', items: [{ productId: '', cantidad: '1' }] });
+  const [stripeResult, setStripeResult] = useState<'success' | 'cancelled' | null>(null);
+
+  // Detectar regreso desde Stripe y verificar el pago
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session_id');
+    const orderId   = params.get('order_id');
+    const success   = params.get('order_success');
+    const cancelled = params.get('order_cancelled');
+
+    if (cancelled) {
+      setStripeResult('cancelled');
+      window.history.replaceState({}, '', '/tienda');
+      return;
+    }
+
+    if (success && sessionId && orderId) {
+      stripeApi.verifyOrderPayment(sessionId, orderId)
+        .then(() => {
+          qc.invalidateQueries({ queryKey: ['my-orders'] });
+          setStripeResult('success');
+          setTab('pedidos');
+        })
+        .catch(() => setStripeResult('success')); // mostrar éxito igual — el webhook es el respaldo
+      window.history.replaceState({}, '', '/tienda');
+    }
+  }, [qc]);
 
   const { data: productsData } = useQuery({ queryKey: ['products'], queryFn: () => productsApi.list() });
   const { data: ordersData }   = useQuery({ queryKey: ['orders'],   queryFn: () => productsApi.orders(),   enabled: isCoach });
@@ -355,6 +433,28 @@ export default function Store() {
           </div>
         )}
       </div>
+
+      {/* ── Banner resultado Stripe ──────────────────────────────────────── */}
+      {stripeResult === 'success' && (
+        <div className="mb-5 flex items-start gap-3 p-4 rounded-2xl bg-green-500/10 border border-green-500/20">
+          <CheckCircle size={18} className="text-green-400 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-bold text-green-400">¡Pago completado!</p>
+            <p className="text-xs text-green-600 mt-0.5">Tu pedido fue registrado y está siendo procesado por el coach.</p>
+          </div>
+          <button onClick={() => setStripeResult(null)} className="text-green-600 hover:text-green-400 transition-colors"><X size={15} /></button>
+        </div>
+      )}
+      {stripeResult === 'cancelled' && (
+        <div className="mb-5 flex items-start gap-3 p-4 rounded-2xl bg-yellow-500/10 border border-yellow-500/20">
+          <ShoppingCart size={18} className="text-yellow-400 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-bold text-yellow-400">Pago cancelado</p>
+            <p className="text-xs text-yellow-600 mt-0.5">No se realizó ningún cargo. Puedes intentarlo de nuevo cuando quieras.</p>
+          </div>
+          <button onClick={() => setStripeResult(null)} className="text-yellow-600 hover:text-yellow-400 transition-colors"><X size={15} /></button>
+        </div>
+      )}
 
       {/* ── COACH: pending deliveries banner ─────────────────────────────── */}
       {isCoach && pendingDeliveries.length > 0 && (
