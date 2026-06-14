@@ -134,6 +134,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
         include: { event: true },
         orderBy: { createdAt: 'desc' },
       },
+      activityLogs: { orderBy: { fecha: 'desc' }, take: 50 },
       communicationLogs: { orderBy: { createdAt: 'desc' } },
     },
   });
