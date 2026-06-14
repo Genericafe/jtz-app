@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Megaphone, AlertTriangle, Dumbbell, Calendar, Trash2, X,
-  Heart, Mail, Send, ChevronDown, ChevronUp, Sparkles, Users, Check,
+  Heart, Mail, Send, ChevronDown, ChevronUp, Sparkles, Users, Check, Edit2,
 } from 'lucide-react';
 import { announcementsApi, runnersApi } from '../services/api';
 import { Announcement, Runner } from '../types';
@@ -19,9 +19,14 @@ const typeConfig: Record<string, { icon: typeof Megaphone; gradient: string; emo
 };
 
 // ── PostCard ──────────────────────────────────────────────────────────────────
-function PostCard({ ann, onDelete, isCoach }: { ann: Announcement; onDelete: (id: number) => void; isCoach: boolean }) {
+function PostCard({ ann, onDelete, onEdit, isCoach }: {
+  ann: Announcement;
+  onDelete: (id: number) => void;
+  onEdit: (ann: Announcement) => void;
+  isCoach: boolean;
+}) {
   const [liked, setLiked] = useState(false);
-  const [likes, setLikes] = useState(Math.floor(Math.random() * 20) + 1);
+  const [likes] = useState(Math.floor(Math.random() * 20) + 1);
   const cfg = typeConfig[ann.tipo] ?? typeConfig.general;
 
   return (
@@ -45,17 +50,22 @@ function PostCard({ ann, onDelete, isCoach }: { ann: Announcement; onDelete: (id
             <p className="text-xs text-gray-500">{formatDistanceToNow(new Date(ann.createdAt), { locale: es, addSuffix: true })}</p>
           </div>
           {isCoach && (
-            <button onClick={() => onDelete(ann.id)} className="p-2 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-400/10 transition-all">
-              <Trash2 size={14} />
-            </button>
+            <div className="flex items-center gap-1">
+              <button onClick={() => onEdit(ann)} className="p-2 rounded-lg text-gray-600 hover:text-brand-400 hover:bg-brand-400/10 transition-all" title="Editar">
+                <Edit2 size={14} />
+              </button>
+              <button onClick={() => { if (confirm('¿Eliminar este anuncio?')) onDelete(ann.id); }} className="p-2 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-400/10 transition-all" title="Eliminar">
+                <Trash2 size={14} />
+              </button>
+            </div>
           )}
         </div>
         <h3 className="font-bold text-white mb-2">{ann.titulo}</h3>
         <p className="text-gray-400 text-sm leading-relaxed whitespace-pre-wrap">{ann.contenido}</p>
         <div className="flex items-center gap-4 mt-4 pt-4 border-t border-white/[0.05]">
-          <button onClick={() => { setLiked(!liked); setLikes(l => liked ? l - 1 : l + 1); }}
+          <button onClick={() => setLiked(v => !v)}
             className={`flex items-center gap-1.5 text-xs transition-all ${liked ? 'text-red-400' : 'text-gray-500 hover:text-red-400'}`}>
-            <Heart size={15} fill={liked ? 'currentColor' : 'none'} /> <span>{likes}</span>
+            <Heart size={15} fill={liked ? 'currentColor' : 'none'} /> <span>{likes + (liked ? 1 : 0)}</span>
           </button>
           <span className="text-xs text-gray-600">·</span>
           <span className="text-xs text-gray-600">JTZ Running Club</span>
@@ -342,6 +352,8 @@ export default function Communication() {
   const [tab, setTab] = useState<'feed' | 'email'>('feed');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ titulo: '', contenido: '', tipo: 'general' });
+  const [editAnn, setEditAnn] = useState<Announcement | null>(null);
+  const [editForm, setEditForm] = useState({ titulo: '', contenido: '', tipo: 'general' });
 
   const { data } = useQuery({ queryKey: ['announcements'], queryFn: () => announcementsApi.list() });
   const announcements: Announcement[] = data?.data ?? [];
@@ -359,6 +371,19 @@ export default function Communication() {
     mutationFn: (id: number) => announcementsApi.delete(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['announcements'] }),
   });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: object }) => announcementsApi.update(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['announcements'] });
+      setEditAnn(null);
+    },
+  });
+
+  const openEdit = (ann: Announcement) => {
+    setEditAnn(ann);
+    setEditForm({ titulo: ann.titulo, contenido: ann.contenido, tipo: ann.tipo });
+  };
 
   return (
     <div className="p-4 lg:p-6 max-w-3xl mx-auto">
@@ -411,7 +436,7 @@ export default function Communication() {
           )}
           <div className="space-y-4">
             {announcements.map(ann => (
-              <PostCard key={ann.id} ann={ann} onDelete={deleteMutation.mutate} isCoach={isCoach} />
+              <PostCard key={ann.id} ann={ann} onDelete={deleteMutation.mutate} onEdit={openEdit} isCoach={isCoach} />
             ))}
             {announcements.length === 0 && (
               <div className="text-center py-20">
@@ -427,6 +452,7 @@ export default function Communication() {
       {/* Tab: Email al equipo */}
       {tab === 'email' && isCoach && <EmailTab />}
 
+      {/* Modal nueva publicación */}
       {/* Modal nueva publicación */}
       {showForm && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 px-4">
@@ -465,6 +491,50 @@ export default function Communication() {
               <button onClick={() => createMutation.mutate(form)} disabled={createMutation.isPending}
                 className="flex-1 btn-primary py-2.5 text-sm">
                 {createMutation.isPending ? 'Publicando...' : '🚀 Publicar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal editar publicación */}
+      {editAnn && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+          <div className="card p-6 w-full max-w-lg animate-slide-up">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-black text-white">Editar publicación</h2>
+              <button onClick={() => setEditAnn(null)} className="btn-ghost p-2"><X size={18} /></button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-2">Tipo de mensaje</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {Object.entries(typeConfig).map(([key, cfg]) => (
+                    <button key={key} onClick={() => setEditForm({ ...editForm, tipo: key })}
+                      className={`flex flex-col items-center gap-1.5 py-3 rounded-xl border text-xs font-medium transition-all ${
+                        editForm.tipo === key ? 'bg-brand-500/20 border-brand-500/50 text-white' : 'bg-surface-600 border-white/[0.06] text-gray-400 hover:text-white'
+                      }`}>
+                      <span className="text-xl">{cfg.emoji}</span>{cfg.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5">Título</label>
+                <input value={editForm.titulo} onChange={e => setEditForm({ ...editForm, titulo: e.target.value })}
+                  className="input w-full text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5">Mensaje</label>
+                <textarea value={editForm.contenido} onChange={e => setEditForm({ ...editForm, contenido: e.target.value })}
+                  rows={5} className="input w-full text-sm resize-none" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setEditAnn(null)} className="flex-1 py-2.5 rounded-xl border border-white/[0.08] text-sm text-gray-400 hover:text-white transition-colors">Cancelar</button>
+              <button onClick={() => updateMutation.mutate({ id: editAnn.id, data: editForm })} disabled={updateMutation.isPending}
+                className="flex-1 btn-primary py-2.5 text-sm">
+                {updateMutation.isPending ? 'Guardando...' : '✓ Guardar cambios'}
               </button>
             </div>
           </div>

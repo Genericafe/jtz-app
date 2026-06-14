@@ -4,6 +4,12 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
+  // El seed NUNCA corre en producción — solo para setup inicial en desarrollo
+  if (process.env.NODE_ENV === 'production') {
+    console.log('Seed omitido en producción');
+    return;
+  }
+
   const hashed = await bcrypt.hash('coach123', 10);
 
   await prisma.user.upsert({
@@ -15,8 +21,8 @@ async function main() {
       role: 'coach',
       runner: {
         create: {
-          nombre: 'Jorge',
-          apellido: 'Torres',
+          nombre: 'Jotaze',
+          apellido: '',
           ciudad: 'Tijuana',
           nivel: 'elite',
         },
