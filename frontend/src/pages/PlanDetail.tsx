@@ -435,7 +435,7 @@ function DayCard({ day, isCoach, planId, onUpdate, myActivity, onActivityChange,
                       'border-white/[0.06] bg-surface-700 hover:border-white/[0.12]'
       }`}
     >
-      <div className="flex items-center gap-3 px-4 py-3 cursor-pointer" onClick={() => !isRest && setExpanded(!expanded)}>
+      <div className="flex items-center gap-3 px-4 py-3 cursor-pointer" onClick={() => setExpanded(!expanded)}>
         {isCoach && (
           <GripVertical size={14} className="text-gray-600 cursor-grab active:cursor-grabbing flex-shrink-0 -ml-1" />
         )}
@@ -450,25 +450,25 @@ function DayCard({ day, isCoach, planId, onUpdate, myActivity, onActivityChange,
           <div className="flex items-center gap-2 mt-0.5">
             {day.distanciaKm && <span className="text-xs text-gray-400">{day.distanciaKm}km</span>}
             {day.duracionMin  && <span className="text-xs text-gray-400">{day.duracionMin}min</span>}
-            <span className={`text-xs font-medium ${intensidadColor[day.intensidad] ?? 'text-gray-400'}`}>
-              {day.intensidad.replace(/-/g, ' ')}
-            </span>
+            {day.intensidad && day.intensidad !== 'descanso' && (
+              <span className={`text-xs font-medium ${intensidadColor[day.intensidad] ?? 'text-gray-400'}`}>
+                {day.intensidad.replace(/-/g, ' ')}
+              </span>
+            )}
           </div>
         </div>
-        {!isRest && (
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {activityBadge}
-            {isCoach && (
-              <button onClick={e => { e.stopPropagation(); setEditing(!editing); setExpanded(true); }}
-                className="p-1.5 text-gray-600 hover:text-white hover:bg-surface-500 rounded-lg transition-all">
-                <Edit2 size={13} />
-              </button>
-            )}
-            <span className={`text-gray-500 transition-transform ${expanded ? 'rotate-90' : ''}`}>
-              <ChevronRight size={14} />
-            </span>
-          </div>
-        )}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {activityBadge}
+          {isCoach && (
+            <button onClick={e => { e.stopPropagation(); setEditing(!editing); setExpanded(true); }}
+              className="p-1.5 text-gray-600 hover:text-white hover:bg-surface-500 rounded-lg transition-all">
+              <Edit2 size={13} />
+            </button>
+          )}
+          <span className={`text-gray-500 transition-transform ${expanded ? 'rotate-90' : ''}`}>
+            <ChevronRight size={14} />
+          </span>
+        </div>
       </div>
 
       {expanded && (
@@ -548,7 +548,7 @@ function DayCard({ day, isCoach, planId, onUpdate, myActivity, onActivityChange,
             <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{day.descripcion}</p>
           )}
 
-          {/* Sección de actividad del corredor */}
+          {/* Sección de actividad del corredor (solo en días de entrenamiento) */}
           {!isCoach && !isRest && (
             <RunnerUploadSection
               day={day}
@@ -558,7 +558,7 @@ function DayCard({ day, isCoach, planId, onUpdate, myActivity, onActivityChange,
           )}
 
           {/* Sección del coach: ver actividades enviadas */}
-          {isCoach && !isRest && (
+          {isCoach && (
             <CoachDayActivities diaId={day.id} expanded={expanded} />
           )}
         </div>
@@ -605,20 +605,33 @@ export default function PlanDetail() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['plan', Number(id)] }),
   });
 
+  // Intercambia el CONTENIDO de entrenamiento entre dos días; el día de la semana no cambia
   const swapDaysMutation = useMutation({
-    mutationFn: async ({ id1, dia1, id2, dia2 }: { id1: number; dia1: string; id2: number; dia2: string }) => {
-      await plansApi.updateDay(id1, { diaSemana: dia2 });
-      await plansApi.updateDay(id2, { diaSemana: dia1 });
+    mutationFn: async ({ source, target }: { source: TrainingDay; target: TrainingDay }) => {
+      await plansApi.updateDay(source.id, {
+        tipo:        target.tipo,
+        distanciaKm: target.distanciaKm ?? null,
+        duracionMin:  target.duracionMin ?? null,
+        intensidad:  target.intensidad,
+        descripcion: target.descripcion,
+      });
+      await plansApi.updateDay(target.id, {
+        tipo:        source.tipo,
+        distanciaKm: source.distanciaKm ?? null,
+        duracionMin:  source.duracionMin ?? null,
+        intensidad:  source.intensidad,
+        descripcion: source.descripcion,
+      });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['plan', Number(id)] }),
   });
 
   const handleDrop = (targetDay: TrainingDay) => {
     if (draggedId === null || draggedId === targetDay.id) { setDraggedId(null); setDragOverId(null); return; }
-    const week = plan?.semanas.find(s => s.numeroSemana === selectedWeek);
-    const sourceDay = week?.dias.find(d => d.id === draggedId);
+    const currentWeek = plan?.semanas.find(s => s.numeroSemana === selectedWeek);
+    const sourceDay = currentWeek?.dias.find(d => d.id === draggedId);
     if (!sourceDay) return;
-    swapDaysMutation.mutate({ id1: sourceDay.id, dia1: sourceDay.diaSemana, id2: targetDay.id, dia2: targetDay.diaSemana });
+    swapDaysMutation.mutate({ source: sourceDay, target: targetDay });
     setDraggedId(null);
     setDragOverId(null);
   };
@@ -639,10 +652,14 @@ export default function PlanDetail() {
   if (isLoading) return <div className="p-8 text-gray-400">Cargando plan...</div>;
   if (!plan) return <div className="p-8 text-gray-400">Plan no encontrado</div>;
 
+  const dayOrder = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+  const sortDias = (dias: TrainingDay[]) =>
+    [...dias].sort((a, b) => dayOrder.indexOf(a.diaSemana) - dayOrder.indexOf(b.diaSemana));
+
   const week = plan.semanas.find(s => s.numeroSemana === selectedWeek);
   const totalKm = plan.semanas.reduce((s, w) => s + w.dias.reduce((d, day) => d + (day.distanciaKm ?? 0), 0), 0);
   const avgKmWeek = Math.round(totalKm / plan.duracionSemanas);
-  const sesiones = week?.dias.filter(d => d.tipo !== 'descanso').length ?? 0;
+  const sesiones = week?.dias.filter(d => d.tipo !== 'descanso' && d.tipo !== 'recuperacion_activa').length ?? 0;
   const weekKm = week?.dias.reduce((s, d) => s + (d.distanciaKm ?? 0), 0) ?? 0;
 
   return (
@@ -809,7 +826,7 @@ export default function PlanDetail() {
                 className="space-y-2"
                 onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
               >
-                {week.dias.map(day => (
+                {sortDias(week.dias).map(day => (
                   <DayCard
                     key={day.id}
                     day={day}
