@@ -447,9 +447,9 @@ export default function Store() {
 
   return (
     <div className="p-4 lg:p-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-black text-white">Tienda JTZ</h1>
+          <h1 className="text-xl lg:text-2xl font-black text-white">Tienda JTZ</h1>
           <p className="text-gray-500 text-sm mt-0.5">{isCoach ? 'Inventario y pedidos del equipo' : 'Uniformes y artículos del club'}</p>
         </div>
         {isCoach && (
@@ -560,122 +560,209 @@ export default function Store() {
 
       {/* ── Catalog / Inventory ───────────────────────────────────────────── */}
       {tab === 'catalogo' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-          {products.map(p => (
-            <div key={p.id} className="card overflow-hidden hover:border-white/[0.12] transition-all group">
-              <ProductImage imagen={p.imagen} nombre={p.nombre} size="md" />
-              <div className="p-4">
-                <div className="flex items-start justify-between gap-2 mb-3">
-                  <div>
-                    <p className="font-bold text-white text-sm">{p.nombre}</p>
-                    <p className="text-xs text-gray-500 capitalize mt-0.5">{tipoLabel[p.tipo] ?? p.tipo}</p>
-                  </div>
-                  <p className="text-brand-400 font-black text-base whitespace-nowrap">${p.precio.toLocaleString('es-MX')}</p>
+        <>
+          {isCoach && selProdMode && (
+            <div className="flex items-center gap-3 mb-4 px-4 py-2.5 bg-surface-700 rounded-xl border border-white/[0.06]">
+              <button
+                onClick={() => setSelProdIds(selProdIds.size === products.length ? new Set() : new Set(products.map(p => p.id)))}
+                className="flex items-center gap-2.5 text-sm text-gray-300 hover:text-white transition-colors"
+              >
+                <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                  selProdIds.size === products.length ? 'bg-brand-500 border-brand-500'
+                  : selProdIds.size > 0 ? 'border-brand-500 bg-surface-800'
+                  : 'border-gray-500 bg-surface-800'
+                }`}>
+                  {selProdIds.size === products.length && <Check size={12} className="text-white" />}
+                  {selProdIds.size > 0 && selProdIds.size < products.length && <span className="w-2 h-0.5 bg-brand-400 rounded-full" />}
                 </div>
-
-                {(p.talla || p.color) && (
-                  <div className="flex gap-1.5 mb-3 flex-wrap">
-                    {p.talla  && <span className="text-xs bg-surface-600 text-gray-400 px-2 py-0.5 rounded-full">Talla {p.talla}</span>}
-                    {p.color  && <span className="text-xs bg-surface-600 text-gray-400 px-2 py-0.5 rounded-full">{p.color}</span>}
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between">
-                  {isCoach ? (
-                    <div className="flex items-center justify-between w-full">
-                      <div className="flex gap-3 text-center text-xs">
-                        <div>
-                          <p className="text-gray-500">Costo</p>
-                          <p className="font-semibold text-white">${p.costo.toLocaleString('es-MX')}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-500">Stock</p>
-                          <p className={`font-semibold ${p.stock < 5 ? 'text-red-400' : 'text-white'}`}>{p.stock}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-500">Margen</p>
-                          <p className="font-semibold text-green-400">${(p.precio - p.costo).toLocaleString('es-MX')}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => setEditProduct(p)}
-                          className="p-1.5 rounded-lg text-gray-500 hover:text-brand-400 hover:bg-brand-500/10 transition-all" title="Editar">
-                          <Edit2 size={14} />
-                        </button>
-                        <button onClick={() => { if (confirm(`¿Eliminar "${p.nombre}"?`)) deleteProductMutation.mutate(p.id); }}
-                          className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all" title="Eliminar">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${p.stock > 0 ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
-                        {p.stock > 0 ? `${p.stock} disponibles` : 'Sin stock'}
-                      </span>
-                    </div>
-                  )}
-                  {!isCoach && p.stock > 0 && (
-                    <button onClick={() => setBuyProduct(p)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold transition-all active:scale-95">
-                      <ShoppingCart size={12} /> Comprar
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-          {products.length === 0 && (
-            <div className="col-span-full text-center py-20 text-gray-500">
-              <Package size={36} className="mx-auto mb-3 opacity-30" />
-              <p>Sin productos en inventario</p>
+                {selProdIds.size === products.length
+                  ? 'Deseleccionar todos'
+                  : selProdIds.size > 0
+                  ? `${selProdIds.size} de ${products.length} seleccionados`
+                  : `Seleccionar todos (${products.length})`}
+              </button>
             </div>
           )}
-        </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+            {products.map(p => {
+              const isSelProd = selProdIds.has(p.id);
+              return (
+                <div
+                  key={p.id}
+                  onClick={isCoach && selProdMode ? () => toggleProd(p.id) : undefined}
+                  className={`card overflow-hidden transition-all group relative ${
+                    isCoach && selProdMode
+                      ? `cursor-pointer ${isSelProd ? 'border-brand-500 bg-brand-500/5' : 'hover:border-white/[0.12]'}`
+                      : 'hover:border-white/[0.12]'
+                  }`}
+                >
+                  {isCoach && selProdMode && (
+                    <div className="absolute top-3 right-3 z-10">
+                      <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all shadow ${
+                        isSelProd ? 'bg-brand-500 border-brand-500' : 'border-gray-400 bg-surface-700/90'
+                      }`}>
+                        {isSelProd && <Check size={14} className="text-white" />}
+                      </div>
+                    </div>
+                  )}
+                  <ProductImage imagen={p.imagen} nombre={p.nombre} size="md" />
+                  <div className="p-4">
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div>
+                        <p className="font-bold text-white text-sm">{p.nombre}</p>
+                        <p className="text-xs text-gray-500 capitalize mt-0.5">{tipoLabel[p.tipo] ?? p.tipo}</p>
+                      </div>
+                      <p className="text-brand-400 font-black text-base whitespace-nowrap">${p.precio.toLocaleString('es-MX')}</p>
+                    </div>
+
+                    {(p.talla || p.color) && (
+                      <div className="flex gap-1.5 mb-3 flex-wrap">
+                        {p.talla  && <span className="text-xs bg-surface-600 text-gray-400 px-2 py-0.5 rounded-full">Talla {p.talla}</span>}
+                        {p.color  && <span className="text-xs bg-surface-600 text-gray-400 px-2 py-0.5 rounded-full">{p.color}</span>}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between">
+                      {isCoach ? (
+                        <div className="flex items-center justify-between w-full">
+                          <div className="flex gap-3 text-center text-xs">
+                            <div>
+                              <p className="text-gray-500">Costo</p>
+                              <p className="font-semibold text-white">${p.costo.toLocaleString('es-MX')}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Stock</p>
+                              <p className={`font-semibold ${p.stock < 5 ? 'text-red-400' : 'text-white'}`}>{p.stock}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Margen</p>
+                              <p className="font-semibold text-green-400">${(p.precio - p.costo).toLocaleString('es-MX')}</p>
+                            </div>
+                          </div>
+                          {!selProdMode && (
+                            <div className="flex items-center gap-1">
+                              <button onClick={(e) => { e.stopPropagation(); setEditProduct(p); }}
+                                className="p-1.5 rounded-lg text-gray-500 hover:text-brand-400 hover:bg-brand-500/10 transition-all" title="Editar">
+                                <Edit2 size={14} />
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); if (confirm(`¿Eliminar "${p.nombre}"?`)) deleteProductMutation.mutate(p.id); }}
+                                className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all" title="Eliminar">
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${p.stock > 0 ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
+                            {p.stock > 0 ? `${p.stock} disponibles` : 'Sin stock'}
+                          </span>
+                        </div>
+                      )}
+                      {!isCoach && p.stock > 0 && (
+                        <button onClick={() => setBuyProduct(p)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold transition-all active:scale-95">
+                          <ShoppingCart size={12} /> Comprar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {products.length === 0 && (
+              <div className="col-span-full text-center py-20 text-gray-500">
+                <Package size={36} className="mx-auto mb-3 opacity-30" />
+                <p>Sin productos en inventario</p>
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       {/* ── Orders table ─────────────────────────────────────────────────── */}
       {tab === 'pedidos' && (
-        <div className="card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="border-b border-white/[0.06]">
-              <tr>
-                {isCoach && <th className="text-left px-5 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">Corredor</th>}
-                <th className="text-left px-5 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">Artículos</th>
-                <th className="text-left px-5 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">Total</th>
-                <th className="text-left px-5 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">Estado</th>
-                <th className="text-left px-5 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">Fecha</th>
-                {isCoach && <th className="px-5 py-3" />}
-              </tr>
-            </thead>
-            <tbody>
-              {(isCoach ? orders : myOrders).map(o => (
-                <tr key={o.id} className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
-                  {isCoach && <td className="px-5 py-3 font-medium text-white">{o.runner?.nombre} {o.runner?.apellido}</td>}
-                  <td className="px-5 py-3 text-gray-400">
-                    {o.items?.map(i => `${i.product?.nombre} ×${i.cantidad}`).join(', ') ?? `${o.items?.length ?? 0} art.`}
-                  </td>
-                  <td className="px-5 py-3 font-semibold text-white">${o.total.toLocaleString('es-MX')}</td>
-                  <td className="px-5 py-3">
-                    <span className={`text-xs px-2.5 py-1 rounded-full font-semibold capitalize ${estadoBadge[o.estado] ?? estadoBadge.pendiente}`}>{o.estado}</span>
-                  </td>
-                  <td className="px-5 py-3 text-gray-500 text-xs">{format(new Date(o.createdAt), "d MMM yyyy", { locale: es })}</td>
-                  {isCoach && (
-                    <td className="px-5 py-3">
-                      <select value={o.estado} onChange={e => updateOrderMutation.mutate({ id: o.id, estado: e.target.value })}
-                        className="text-xs bg-surface-600 border border-white/[0.08] rounded-lg px-2 py-1.5 text-white focus:outline-none focus:border-brand-500/50">
-                        {['pendiente', 'pagado', 'entregado', 'cancelado'].map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </td>
-                  )}
+        <>
+          {isCoach && selOrdMode && (
+            <div className="flex items-center gap-3 mb-4 px-4 py-2.5 bg-surface-700 rounded-xl border border-white/[0.06]">
+              <button
+                onClick={() => setSelOrdIds(selOrdIds.size === orders.length ? new Set() : new Set(orders.map(o => o.id)))}
+                className="flex items-center gap-2.5 text-sm text-gray-300 hover:text-white transition-colors"
+              >
+                <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                  selOrdIds.size === orders.length ? 'bg-brand-500 border-brand-500'
+                  : selOrdIds.size > 0 ? 'border-brand-500 bg-surface-800'
+                  : 'border-gray-500 bg-surface-800'
+                }`}>
+                  {selOrdIds.size === orders.length && <Check size={12} className="text-white" />}
+                  {selOrdIds.size > 0 && selOrdIds.size < orders.length && <span className="w-2 h-0.5 bg-brand-400 rounded-full" />}
+                </div>
+                {selOrdIds.size === orders.length
+                  ? 'Deseleccionar todos'
+                  : selOrdIds.size > 0
+                  ? `${selOrdIds.size} de ${orders.length} seleccionados`
+                  : `Seleccionar todos (${orders.length})`}
+              </button>
+            </div>
+          )}
+          <div className="card overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b border-white/[0.06]">
+                <tr>
+                  {isCoach && selOrdMode && <th className="px-3 py-3 w-10" />}
+                  {isCoach && <th className="text-left px-5 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">Corredor</th>}
+                  <th className="text-left px-5 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">Artículos</th>
+                  <th className="text-left px-5 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">Total</th>
+                  <th className="text-left px-5 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">Estado</th>
+                  <th className="text-left px-5 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">Fecha</th>
+                  {isCoach && !selOrdMode && <th className="px-5 py-3" />}
                 </tr>
-              ))}
-              {(isCoach ? orders : myOrders).length === 0 && (
-                <tr><td colSpan={6} className="text-center py-12 text-gray-500">Sin pedidos</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {(isCoach ? orders : myOrders).map(o => {
+                  const isSelOrd = selOrdIds.has(o.id);
+                  return (
+                    <tr
+                      key={o.id}
+                      onClick={isCoach && selOrdMode ? () => toggleOrd(o.id) : undefined}
+                      className={`border-b border-white/[0.04] transition-colors ${
+                        isCoach && selOrdMode ? `cursor-pointer ${isSelOrd ? 'bg-brand-500/5' : 'hover:bg-white/[0.02]'}` : 'hover:bg-white/[0.02]'
+                      }`}
+                    >
+                      {isCoach && selOrdMode && (
+                        <td className="px-3 py-3">
+                          <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${isSelOrd ? 'bg-brand-500 border-brand-500' : 'border-gray-500'}`}>
+                            {isSelOrd && <Check size={12} className="text-white" />}
+                          </div>
+                        </td>
+                      )}
+                      {isCoach && <td className="px-5 py-3 font-medium text-white">{o.runner?.nombre} {o.runner?.apellido}</td>}
+                      <td className="px-5 py-3 text-gray-400">
+                        {o.items?.map(i => `${i.product?.nombre} ×${i.cantidad}`).join(', ') ?? `${o.items?.length ?? 0} art.`}
+                      </td>
+                      <td className="px-5 py-3 font-semibold text-white">${o.total.toLocaleString('es-MX')}</td>
+                      <td className="px-5 py-3">
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-semibold capitalize ${estadoBadge[o.estado] ?? estadoBadge.pendiente}`}>{o.estado}</span>
+                      </td>
+                      <td className="px-5 py-3 text-gray-500 text-xs">{format(new Date(o.createdAt), "d MMM yyyy", { locale: es })}</td>
+                      {isCoach && !selOrdMode && (
+                        <td className="px-5 py-3">
+                          <select value={o.estado} onChange={e => updateOrderMutation.mutate({ id: o.id, estado: e.target.value })}
+                            className="text-xs bg-surface-600 border border-white/[0.08] rounded-lg px-2 py-1.5 text-white focus:outline-none focus:border-brand-500/50">
+                            {['pendiente', 'pagado', 'entregado', 'cancelado'].map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+                {(isCoach ? orders : myOrders).length === 0 && (
+                  <tr><td colSpan={7} className="text-center py-12 text-gray-500">Sin pedidos</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {/* ── Coach: new order modal ────────────────────────────────────────── */}

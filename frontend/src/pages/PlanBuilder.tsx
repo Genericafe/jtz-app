@@ -141,7 +141,7 @@ export default function PlanBuilder() {
   };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-4 lg:p-6 max-w-4xl mx-auto">
       <button onClick={() => step > 1 ? setStep(step - 1) : navigate('/planes')}
         className="flex items-center gap-2 text-sm text-gray-500 hover:text-white mb-5 transition-colors">
         <ArrowLeft size={16} /> {step > 1 ? 'Atrás' : 'Planes'}

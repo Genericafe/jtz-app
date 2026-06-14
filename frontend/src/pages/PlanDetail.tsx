@@ -649,8 +649,8 @@ export default function PlanDetail() {
 
   const plan: Plan & { isTemplate?: boolean } | undefined = data?.data;
 
-  if (isLoading) return <div className="p-8 text-gray-400">Cargando plan...</div>;
-  if (!plan) return <div className="p-8 text-gray-400">Plan no encontrado</div>;
+  if (isLoading) return <div className="p-4 lg:p-8 text-gray-400">Cargando plan...</div>;
+  if (!plan) return <div className="p-4 lg:p-8 text-gray-400">Plan no encontrado</div>;
 
   const dayOrder = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
   const sortDias = (dias: TrainingDay[]) =>
@@ -663,7 +663,7 @@ export default function PlanDetail() {
   const weekKm = week?.dias.reduce((s, d) => s + (d.distanciaKm ?? 0), 0) ?? 0;
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-4 lg:p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-5">
         <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-gray-500 hover:text-white transition-colors">
           <ArrowLeft size={16} /> Volver

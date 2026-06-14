@@ -1055,9 +1055,9 @@ export default function Events() {
 
   return (
     <div className="p-4 lg:p-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-black text-white">Eventos</h1>
+          <h1 className="text-xl lg:text-2xl font-black text-white">Eventos</h1>
           <p className="text-gray-500 text-sm mt-0.5">Carreras, trails y encuentros del equipo JTZ</p>
         </div>
         {isCoach && (

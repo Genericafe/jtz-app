@@ -51,10 +51,10 @@ export default function Profile() {
     elite:        'bg-brand-500/15 text-brand-400',
   };
 
-  if (isLoading) return <div className="p-8 text-gray-400">Cargando...</div>;
+  if (isLoading) return <div className="p-4 lg:p-8 text-gray-400">Cargando...</div>;
 
   return (
-    <div className="p-8 max-w-2xl">
+    <div className="p-4 lg:p-8 max-w-2xl">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white">Mi perfil</h1>
         <p className="text-gray-400 text-sm mt-0.5">Actualiza tu información personal</p>

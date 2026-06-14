@@ -82,13 +82,13 @@ export default function RunnerProfile() {
   };
 
   if (isLoading) return (
-    <div className="p-8 flex items-center gap-3 text-gray-500">
+    <div className="p-4 lg:p-8 flex items-center gap-3 text-gray-500">
       <Clock size={16} className="animate-spin" /> Cargando perfil...
     </div>
   );
 
   const runner = data?.data;
-  if (!runner) return <div className="p-8 text-gray-500">Corredor no encontrado</div>;
+  if (!runner) return <div className="p-4 lg:p-8 text-gray-500">Corredor no encontrado</div>;
 
   const nivel = runner.nivel ?? 'principiante';
   const cfg = nivelConfig[nivel] ?? nivelConfig.principiante;

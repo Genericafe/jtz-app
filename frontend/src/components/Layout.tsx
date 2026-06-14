@@ -136,9 +136,9 @@ export default function Layout() {
 
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <main className="flex-1 flex flex-col overflow-auto min-h-screen lg:ml-64 min-w-0">
+      <main className="flex-1 flex flex-col h-screen overflow-hidden lg:ml-64 min-w-0">
         {/* Mobile top bar */}
-        <div className="lg:hidden sticky top-0 z-20 flex items-center gap-3 px-4 py-3 bg-surface-800/95 backdrop-blur border-b border-white/[0.05]">
+        <div className="lg:hidden flex-shrink-0 flex items-center gap-3 px-4 py-3 bg-surface-800/95 backdrop-blur border-b border-white/[0.05] z-20">
           <button
             onClick={() => setSidebarOpen(true)}
             className="text-gray-400 hover:text-white transition-colors p-1 -ml-1"
@@ -155,7 +155,7 @@ export default function Layout() {
         </div>
 
         <div className="pointer-events-none fixed top-0 left-64 right-0 h-64 bg-glow-green z-0 hidden lg:block" />
-        <div className="relative z-10 flex-1">
+        <div className="relative z-10 flex-1 min-h-0 overflow-auto">
           <Outlet />
         </div>
       </main>

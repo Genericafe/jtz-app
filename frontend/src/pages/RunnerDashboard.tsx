@@ -43,10 +43,10 @@ export default function RunnerDashboard() {
   const estadoIcon = { pagado: CheckCircle, pendiente: Clock, vencido: AlertTriangle } as const;
   const estadoColor = { pagado: 'text-green-400', pendiente: 'text-yellow-400', vencido: 'text-red-400' } as const;
 
-  if (isLoading) return <div className="p-8 text-gray-400">Cargando tu perfil...</div>;
+  if (isLoading) return <div className="p-4 lg:p-8 text-gray-400">Cargando tu perfil...</div>;
 
   return (
-    <div className="p-8 max-w-5xl">
+    <div className="p-4 lg:p-8 max-w-5xl">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white">
           ¡Hola, {me?.nombre ?? user?.runner?.nombre}! 👋

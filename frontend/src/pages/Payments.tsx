@@ -86,10 +86,10 @@ export default function Payments() {
   const pendingSelected = filtered.filter(p => selectedIds.has(p.id) && p.estado !== 'pagado').length;
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 lg:p-8">
+      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-white">{isCoach ? 'Pagos' : 'Mis pagos'}</h1>
+          <h1 className="text-xl lg:text-2xl font-bold text-white">{isCoach ? 'Pagos' : 'Mis pagos'}</h1>
           <p className="text-gray-400 text-sm mt-0.5">
             {isCoach ? 'Membresías y planes personalizados' : 'Historial y pagos pendientes'}
           </p>
@@ -162,8 +162,8 @@ export default function Payments() {
         </div>
       )}
 
-      <div className="card rounded-xl overflow-hidden">
-        <table className="w-full">
+      <div className="card rounded-xl overflow-x-auto">
+        <table className="w-full min-w-[600px]">
           <thead>
             <tr className="border-b border-dark-700">
               {isCoach && selectionMode && <th className="px-3 py-3 w-10" />}
