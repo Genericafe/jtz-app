@@ -31,6 +31,9 @@ process.on('unhandledRejection', (err) => console.error('[unhandledRejection]', 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
 
+// Confiar en el proxy (Railway, Render, Heroku) para leer X-Forwarded-Proto/Host
+app.set('trust proxy', 1);
+
 const allowedOrigins = (process.env.FRONTEND_URL ?? 'http://localhost:5173').split(',').map(s => s.trim());
 app.use(cors({
   origin: (origin, cb) => cb(null, !origin || allowedOrigins.some(o => origin.startsWith(o))),

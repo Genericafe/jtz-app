@@ -203,7 +203,19 @@ router.get('/:id/gpx-token', async (req: AuthRequest, res: Response) => {
 
   const secret = process.env.JWT_SECRET ?? 'jtz-secret';
   const token = jwt.sign({ eventId: event.id, gpx: true }, secret, { expiresIn: '1h' });
-  const backendUrl = process.env.BACKEND_URL ?? 'http://localhost:3001';
+
+  // Construir la URL pública del backend:
+  // 1. Variable de entorno explícita (preferida en producción)
+  // 2. Headers del proxy (X-Forwarded-* — Railway, Render, Heroku los inyectan)
+  // 3. Protocolo y host del request actual
+  const proto = process.env.BACKEND_URL
+    ? null
+    : (req.get('x-forwarded-proto') ?? req.protocol);
+  const host = process.env.BACKEND_URL
+    ? null
+    : (req.get('x-forwarded-host') ?? req.get('host') ?? 'localhost:3001');
+  const backendUrl = process.env.BACKEND_URL ?? `${proto}://${host}`;
+
   const url = `${backendUrl}/api/public/gpx/${event.id}?token=${token}`;
   return res.json({ url, gpxNombre: event.gpxNombre });
 });
