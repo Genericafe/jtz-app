@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Plus, MapPin, Users, X, Calendar, Clock, Trophy, Share2, ExternalLink, CreditCard, CheckCircle, User, Trash2, Sparkles, Mail, Edit2, Download, FileSpreadsheet, Upload, Route } from 'lucide-react';
+import { Plus, MapPin, Users, X, Calendar, Clock, Trophy, Share2, ExternalLink, CreditCard, CheckCircle, User, Trash2, Sparkles, Mail, Edit2, Download, FileSpreadsheet, Upload, Route, Check } from 'lucide-react';
 import { eventsApi, publicApi, runnersApi, default as api } from '../services/api';
 import { Event } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -808,7 +808,7 @@ function CoachEventDetailModal({ ev, onClose }: { ev: Event; onClose: () => void
   );
 }
 
-function EventCard({ ev, onRegisterClick, onViewDetail, myRegistrations, isCoach, onShare, onDelete, onEdit }: {
+function EventCard({ ev, onRegisterClick, onViewDetail, myRegistrations, isCoach, onShare, onDelete, onEdit, selectable, selected, onToggleSelect }: {
   ev: Event;
   onRegisterClick?: (ev: Event) => void;
   onViewDetail?: (ev: Event) => void;
@@ -817,12 +817,16 @@ function EventCard({ ev, onRegisterClick, onViewDetail, myRegistrations, isCoach
   onShare: (ev: Event) => void;
   onDelete?: (id: number) => void;
   onEdit?: (ev: Event) => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
 }) {
   const cfg = typeConfig[ev.tipo] ?? typeConfig.carrera;
   const isPast = !isAfter(new Date(ev.fecha), new Date());
   const isRegistered = myRegistrations?.has(ev.id);
 
   const handleCardClick = () => {
+    if (selectable) { onToggleSelect?.(); return; }
     if (isCoach) {
       // navegado desde el botón "Ver inscritos" o clic en card
     } else if (isRegistered) {
@@ -834,9 +838,16 @@ function EventCard({ ev, onRegisterClick, onViewDetail, myRegistrations, isCoach
 
   return (
     <div
-      className={`card overflow-hidden group transition-all duration-200 hover:border-white/[0.12] hover:-translate-y-0.5 ${isPast ? 'opacity-60' : ''} ${!isCoach && !isPast ? 'cursor-pointer' : isCoach ? 'cursor-pointer' : ''}`}
+      className={`card overflow-hidden group transition-all duration-200 hover:border-white/[0.12] hover:-translate-y-0.5 relative ${isPast ? 'opacity-60' : ''} ${selectable ? 'cursor-pointer' : !isCoach && !isPast ? 'cursor-pointer' : isCoach ? 'cursor-pointer' : ''} ${selected ? 'ring-2 ring-brand-500 bg-brand-500/5' : ''}`}
       onClick={handleCardClick}
     >
+      {selectable && (
+        <div className="absolute top-3 left-3 z-20">
+          <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all shadow-lg ${selected ? 'bg-brand-500 border-brand-500' : 'border-white/70 bg-black/40'}`}>
+            {selected && <Check size={12} className="text-white" />}
+          </div>
+        </div>
+      )}
       {/* Gradient banner */}
       <div className={`${cfg.gradient} relative h-32 p-4 flex flex-col justify-between`}>
         <div className="flex items-start justify-between">
@@ -955,6 +966,9 @@ export default function Events() {
     ciudad: '', estado: '', distanciaKm: '', cupoMaximo: '', precio: '0',
   });
   const [improvingText, setImprovingText] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkPending, setBulkPending] = useState(false);
 
   const { data } = useQuery({ queryKey: ['events'], queryFn: () => eventsApi.list() });
   const { data: meData } = useQuery({
@@ -978,6 +992,24 @@ export default function Events() {
     mutationFn: (id: number) => eventsApi.delete(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['events'] }),
   });
+
+  const handleToggleSelectEv = (id: number) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const exitSelectionEv = () => { setSelectionMode(false); setSelectedIds(new Set()); };
+  const handleSelectAllEv = () => {
+    const allIds = shown.map(e => e.id);
+    setSelectedIds(selectedIds.size === allIds.length ? new Set() : new Set(allIds));
+  };
+  const handleBulkDeleteEv = async () => {
+    if (!confirm(`¿Eliminar ${selectedIds.size} evento(s)?`)) return;
+    setBulkPending(true);
+    try {
+      await Promise.all(Array.from(selectedIds).map(id => eventsApi.delete(id)));
+      qc.invalidateQueries({ queryKey: ['events'] });
+      exitSelectionEv();
+    } finally { setBulkPending(false); }
+  };
+  const allSelectedEv = shown.length > 0 && selectedIds.size === shown.length;
+  const someSelectedEv = selectedIds.size > 0 && !allSelectedEv;
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: object }) => eventsApi.update(id, data),
@@ -1029,9 +1061,23 @@ export default function Events() {
           <p className="text-gray-500 text-sm mt-0.5">Carreras, trails y encuentros del equipo JTZ</p>
         </div>
         {isCoach && (
-          <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2 px-4 py-2.5 text-sm">
-            <Plus size={16} /> Crear evento
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {selectionMode && selectedIds.size > 0 && (
+              <button onClick={handleBulkDeleteEv} disabled={bulkPending}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 border border-red-500/20 transition-all disabled:opacity-40">
+                <Trash2 size={14} /> Eliminar ({selectedIds.size})
+              </button>
+            )}
+            <button onClick={() => selectionMode ? exitSelectionEv() : setSelectionMode(true)}
+              className={`px-3 py-2 rounded-xl text-sm font-medium transition-all ${selectionMode ? 'bg-surface-600 text-white border border-white/[0.08]' : 'text-gray-400 hover:text-white hover:bg-surface-600'}`}>
+              {selectionMode ? 'Cancelar' : 'Gestionar'}
+            </button>
+            {!selectionMode && (
+              <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2 px-4 py-2.5 text-sm">
+                <Plus size={16} /> Crear evento
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -1058,6 +1104,19 @@ export default function Events() {
         ))}
       </div>
 
+      {/* Selection bar */}
+      {isCoach && selectionMode && (
+        <div className="flex items-center gap-3 mb-4 px-4 py-3 bg-surface-700 rounded-xl border border-white/[0.06]">
+          <button onClick={handleSelectAllEv} className="flex items-center gap-2.5 text-sm text-gray-300 hover:text-white transition-colors">
+            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${allSelectedEv ? 'bg-brand-500 border-brand-500' : someSelectedEv ? 'border-brand-500 bg-surface-800' : 'border-gray-500 bg-surface-800'}`}>
+              {allSelectedEv && <Check size={12} className="text-white" />}
+              {someSelectedEv && <span className="w-2 h-0.5 bg-brand-400 rounded-full" />}
+            </div>
+            {allSelectedEv ? 'Deseleccionar todos' : selectedIds.size > 0 ? `${selectedIds.size} de ${shown.length} seleccionados` : `Seleccionar todos (${shown.length})`}
+          </button>
+        </div>
+      )}
+
       {upcoming.length > 0 && (
         <div className="mb-8">
           <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -1066,7 +1125,7 @@ export default function Events() {
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {upcoming.map((ev) => (
               <div key={ev.id} className="flex flex-col gap-2">
-                <EventCard ev={ev} onRegisterClick={!isCoach ? setRegisterEvent : undefined} onViewDetail={!isCoach ? setRunnerDetailEvent : undefined} myRegistrations={myRegistrations} isCoach={isCoach} onShare={setShareEvent} onDelete={isCoach ? (id) => deleteMutation.mutate(id) : undefined} onEdit={isCoach ? openEdit : undefined} />
+                <EventCard ev={ev} onRegisterClick={!isCoach ? setRegisterEvent : undefined} onViewDetail={!isCoach ? setRunnerDetailEvent : undefined} myRegistrations={myRegistrations} isCoach={isCoach} onShare={setShareEvent} onDelete={isCoach && !selectionMode ? (id) => deleteMutation.mutate(id) : undefined} onEdit={isCoach && !selectionMode ? openEdit : undefined} selectable={isCoach && selectionMode} selected={selectedIds.has(ev.id)} onToggleSelect={() => handleToggleSelectEv(ev.id)} />
                 {isCoach && (
                   <div className="flex gap-2">
                     <button onClick={() => navigate(`/eventos/${ev.id}/inscritos`)}
@@ -1090,7 +1149,7 @@ export default function Events() {
           <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Anteriores</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {past.slice(0, 6).map((ev) => (
-              <EventCard key={ev.id} ev={ev} onViewDetail={!isCoach ? setRunnerDetailEvent : undefined} myRegistrations={myRegistrations} isCoach={isCoach} onShare={setShareEvent} onDelete={isCoach ? (id) => deleteMutation.mutate(id) : undefined} onEdit={isCoach ? openEdit : undefined} />
+              <EventCard key={ev.id} ev={ev} onViewDetail={!isCoach ? setRunnerDetailEvent : undefined} myRegistrations={myRegistrations} isCoach={isCoach} onShare={setShareEvent} onDelete={isCoach && !selectionMode ? (id) => deleteMutation.mutate(id) : undefined} onEdit={isCoach && !selectionMode ? openEdit : undefined} selectable={isCoach && selectionMode} selected={selectedIds.has(ev.id)} onToggleSelect={() => handleToggleSelectEv(ev.id)} />
             ))}
           </div>
         </div>

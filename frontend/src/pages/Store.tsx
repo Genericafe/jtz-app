@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Package, X, ShoppingCart, Truck, CheckCircle, ImagePlus, Trash2, Edit2, CreditCard } from 'lucide-react';
+import { Plus, Package, X, ShoppingCart, Truck, CheckCircle, ImagePlus, Trash2, Edit2, CreditCard, Check } from 'lucide-react';
 import { productsApi, runnersApi, stripeApi } from '../services/api';
 import { Product, Order, Runner } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -358,6 +358,14 @@ export default function Store() {
   const [showOrder, setShowOrder] = useState(false);
   const [buyProduct, setBuyProduct] = useState<Product | null>(null);
   const [orderForm, setOrderForm] = useState({ runnerId: '', items: [{ productId: '', cantidad: '1' }] });
+  // Multi-select — productos
+  const [selProdMode, setSelProdMode] = useState(false);
+  const [selProdIds, setSelProdIds] = useState<Set<number>>(new Set());
+  const [bulkProdPending, setBulkProdPending] = useState(false);
+  // Multi-select — órdenes
+  const [selOrdMode, setSelOrdMode] = useState(false);
+  const [selOrdIds, setSelOrdIds] = useState<Set<number>>(new Set());
+  const [bulkOrdPending, setBulkOrdPending] = useState(false);
   const [stripeResult, setStripeResult] = useState<'success' | 'cancelled' | null>(null);
 
   // Detectar regreso desde Stripe y verificar el pago
@@ -411,6 +419,29 @@ export default function Store() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['products'] }),
   });
 
+  // Helpers productos
+  const toggleProd = (id: number) => setSelProdIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const exitSelProd = () => { setSelProdMode(false); setSelProdIds(new Set()); };
+  const handleBulkDeleteProds = async () => {
+    if (!confirm(`¿Eliminar ${selProdIds.size} producto(s)?`)) return;
+    setBulkProdPending(true);
+    try { await Promise.all(Array.from(selProdIds).map(id => productsApi.deleteProduct(id))); qc.invalidateQueries({ queryKey: ['products'] }); exitSelProd(); }
+    finally { setBulkProdPending(false); }
+  };
+
+  // Helpers órdenes
+  const toggleOrd = (id: number) => setSelOrdIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const exitSelOrd = () => { setSelOrdMode(false); setSelOrdIds(new Set()); };
+  const coachOrders: Order[] = isCoach ? orders : myOrders;
+  const handleBulkDeliver = async () => {
+    const targets = coachOrders.filter(o => selOrdIds.has(o.id) && o.estado === 'pagado');
+    if (!targets.length) return alert('Solo se pueden marcar como entregadas las órdenes con estado "pagado".');
+    if (!confirm(`¿Marcar ${targets.length} orden(es) como entregadas?`)) return;
+    setBulkOrdPending(true);
+    try { await Promise.all(targets.map(o => productsApi.updateOrder(o.id, 'entregado'))); qc.invalidateQueries({ queryKey: ['orders'] }); exitSelOrd(); }
+    finally { setBulkOrdPending(false); }
+  };
+
   // Coach: orders paid but not delivered
   const pendingDeliveries = orders.filter(o => o.estado === 'pagado');
 
@@ -422,14 +453,45 @@ export default function Store() {
           <p className="text-gray-500 text-sm mt-0.5">{isCoach ? 'Inventario y pedidos del equipo' : 'Uniformes y artículos del club'}</p>
         </div>
         {isCoach && (
-          <div className="flex gap-2">
-            <button onClick={() => setShowOrder(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/[0.08] text-sm text-gray-300 hover:text-white hover:bg-surface-600 transition-all">
-              <ShoppingCart size={15} /> Nuevo pedido
-            </button>
-            <button onClick={() => setShowProductForm(true)} className="btn-primary flex items-center gap-2 px-4 py-2.5 text-sm">
-              <Plus size={15} /> Agregar producto
-            </button>
+          <div className="flex gap-2 flex-wrap">
+            {/* Bulk actions — productos */}
+            {tab === 'catalogo' && selProdMode && selProdIds.size > 0 && (
+              <button onClick={handleBulkDeleteProds} disabled={bulkProdPending}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 border border-red-500/20 transition-all disabled:opacity-40">
+                <Trash2 size={14} /> Eliminar ({selProdIds.size})
+              </button>
+            )}
+            {/* Bulk actions — órdenes */}
+            {tab === 'pedidos' && selOrdMode && selOrdIds.size > 0 && (
+              <button onClick={handleBulkDeliver} disabled={bulkOrdPending}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-green-400 hover:bg-green-500/10 border border-green-500/20 transition-all disabled:opacity-40">
+                <Truck size={14} /> Marcar entregados ({selOrdIds.size})
+              </button>
+            )}
+            {/* Gestionar */}
+            {tab === 'catalogo' && (
+              <button onClick={() => selProdMode ? exitSelProd() : setSelProdMode(true)}
+                className={`px-3 py-2 rounded-xl text-sm font-medium transition-all ${selProdMode ? 'bg-surface-600 text-white border border-white/[0.08]' : 'text-gray-400 hover:text-white hover:bg-surface-600'}`}>
+                {selProdMode ? 'Cancelar' : 'Gestionar'}
+              </button>
+            )}
+            {tab === 'pedidos' && (
+              <button onClick={() => selOrdMode ? exitSelOrd() : setSelOrdMode(true)}
+                className={`px-3 py-2 rounded-xl text-sm font-medium transition-all ${selOrdMode ? 'bg-surface-600 text-white border border-white/[0.08]' : 'text-gray-400 hover:text-white hover:bg-surface-600'}`}>
+                {selOrdMode ? 'Cancelar' : 'Gestionar'}
+              </button>
+            )}
+            {!selProdMode && !selOrdMode && (
+              <>
+                <button onClick={() => setShowOrder(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/[0.08] text-sm text-gray-300 hover:text-white hover:bg-surface-600 transition-all">
+                  <ShoppingCart size={15} /> Nuevo pedido
+                </button>
+                <button onClick={() => setShowProductForm(true)} className="btn-primary flex items-center gap-2 px-4 py-2.5 text-sm">
+                  <Plus size={15} /> Agregar producto
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

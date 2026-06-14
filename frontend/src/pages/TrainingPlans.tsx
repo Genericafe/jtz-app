@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { ClipboardList, Target, Clock, Users, X, Zap, ChevronRight, Trash2, BookmarkPlus, BookmarkCheck } from 'lucide-react';
+import { ClipboardList, Target, Clock, Users, X, Zap, ChevronRight, Trash2, BookmarkPlus, BookmarkCheck, Check } from 'lucide-react';
 import { plansApi, runnersApi } from '../services/api';
 import { TrainingPlan, Runner } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -41,6 +41,23 @@ export default function TrainingPlans() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['plans'] }),
   });
 
+  const [selMode, setSelMode] = useState(false);
+  const [selIds, setSelIds] = useState<Set<number>>(new Set());
+  const [bulkPending, setBulkPending] = useState(false);
+
+  const toggleSel = (id: number) => setSelIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+  const toggleAll = () => setSelIds(selIds.size === plans.length ? new Set() : new Set(plans.map(p => p.id)));
+  const exitSel = () => { setSelMode(false); setSelIds(new Set()); };
+
+  const handleBulkDelete = async () => {
+    if (!confirm(`¿Eliminar ${selIds.size} plan${selIds.size !== 1 ? 'es' : ''}?`)) return;
+    setBulkPending(true);
+    await Promise.all([...selIds].map(id => plansApi.delete(id)));
+    await qc.invalidateQueries({ queryKey: ['plans'] });
+    setBulkPending(false);
+    exitSel();
+  };
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
@@ -54,12 +71,39 @@ export default function TrainingPlans() {
           </p>
         </div>
         {isCoach && (
-          <button
-            onClick={() => navigate('/planes/nuevo')}
-            className="flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
-          >
-            <Zap size={16} /> Crear plan con IA
-          </button>
+          <div className="flex gap-2 flex-wrap">
+            {selMode && selIds.size > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkPending}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 border border-red-500/20 transition-all disabled:opacity-40"
+              >
+                <Trash2 size={14} /> Eliminar ({selIds.size})
+              </button>
+            )}
+            {selMode && (
+              <button
+                onClick={toggleAll}
+                className="px-3 py-2 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:bg-surface-600 transition-all"
+              >
+                {selIds.size === plans.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
+              </button>
+            )}
+            <button
+              onClick={() => selMode ? exitSel() : setSelMode(true)}
+              className={`px-3 py-2 rounded-xl text-sm font-medium transition-all ${selMode ? 'bg-surface-600 text-white border border-white/[0.08]' : 'text-gray-400 hover:text-white hover:bg-surface-600'}`}
+            >
+              {selMode ? 'Cancelar' : 'Gestionar'}
+            </button>
+            {!selMode && (
+              <button
+                onClick={() => navigate('/planes/nuevo')}
+                className="flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+              >
+                <Zap size={16} /> Crear plan con IA
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -67,20 +111,32 @@ export default function TrainingPlans() {
         {plans.map((plan) => (
           <div
             key={plan.id}
-            onClick={() => navigate(`/planes/${plan.id}`)}
-            className="bg-dark-800 border border-dark-700 rounded-xl p-5 flex flex-col cursor-pointer hover:border-brand-500/40 hover:bg-dark-700 transition-all group"
+            onClick={() => selMode ? toggleSel(plan.id) : navigate(`/planes/${plan.id}`)}
+            className={`bg-dark-800 border rounded-xl p-5 flex flex-col cursor-pointer transition-all group ${
+              selMode && selIds.has(plan.id)
+                ? 'border-brand-500 bg-brand-500/5'
+                : 'border-dark-700 hover:border-brand-500/40 hover:bg-dark-700'
+            }`}
           >
             <div className="flex items-start gap-3 mb-3">
-              <div className="p-2 bg-dark-700 rounded-lg group-hover:bg-dark-600 transition-colors">
-                <ClipboardList size={18} className="text-brand-400" />
-              </div>
+              {selMode ? (
+                <div className={`w-9 h-9 rounded-lg border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                  selIds.has(plan.id) ? 'bg-brand-500 border-brand-500' : 'border-dark-500 bg-dark-700'
+                }`}>
+                  {selIds.has(plan.id) && <Check size={16} className="text-white" />}
+                </div>
+              ) : (
+                <div className="p-2 bg-dark-700 rounded-lg group-hover:bg-dark-600 transition-colors">
+                  <ClipboardList size={18} className="text-brand-400" />
+                </div>
+              )}
               <div className="flex-1 min-w-0">
                 <h3 className="font-semibold text-white leading-snug">{plan.nombre}</h3>
                 <span className={`text-xs px-2 py-0.5 rounded mt-0.5 inline-block ${nivelColors[plan.nivel] ?? nivelColors.intermedio}`}>
                   {plan.nivel}
                 </span>
               </div>
-              <ChevronRight size={16} className="text-gray-600 group-hover:text-brand-400 transition-colors flex-shrink-0 mt-1" />
+              {!selMode && <ChevronRight size={16} className="text-gray-600 group-hover:text-brand-400 transition-colors flex-shrink-0 mt-1" />}
             </div>
 
             {plan.descripcion && (
@@ -103,7 +159,7 @@ export default function TrainingPlans() {
               )}
             </div>
 
-            {isCoach && (
+            {isCoach && !selMode && (
               <div className="mt-auto space-y-2">
                 <button
                   onClick={(e) => { e.stopPropagation(); setAssignPlan(plan); }}
