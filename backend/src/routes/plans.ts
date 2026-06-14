@@ -9,12 +9,32 @@ const prisma = new PrismaClient();
 
 router.use(authMiddleware);
 
-router.get('/', async (_req: AuthRequest, res: Response) => {
-  const plans = await prisma.trainingPlan.findMany({
-    include: { _count: { select: { asignaciones: true, semanas: true } } },
+router.get('/', async (req: AuthRequest, res: Response) => {
+  const user = await prisma.user.findUnique({ where: { id: req.userId! } });
+
+  if (user?.role === 'coach') {
+    const plans = await prisma.trainingPlan.findMany({
+      include: { _count: { select: { asignaciones: true, semanas: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+    return res.json(plans);
+  }
+
+  // Runner: solo ve los planes que le fueron asignados
+  const runner = await prisma.runner.findUnique({ where: { userId: req.userId! } });
+  if (!runner) return res.json([]);
+
+  const assignments = await prisma.trainingPlanAssignment.findMany({
+    where: { runnerId: runner.id, activo: true },
+    include: {
+      plan: {
+        include: { _count: { select: { semanas: true } } },
+      },
+    },
     orderBy: { createdAt: 'desc' },
   });
-  return res.json(plans);
+
+  return res.json(assignments.map(a => a.plan));
 });
 
 // ── Coach preferences — must be BEFORE /:id to avoid route shadowing ──────────
@@ -39,6 +59,30 @@ router.put('/preferences', coachOnly, async (req: AuthRequest, res: Response) =>
 });
 
 router.get('/:id', async (req: AuthRequest, res: Response) => {
+  const user = await prisma.user.findUnique({ where: { id: req.userId! } });
+
+  if (user?.role !== 'coach') {
+    // Runner: verificar que esté asignado a este plan
+    const runner = await prisma.runner.findUnique({ where: { userId: req.userId! } });
+    if (!runner) return res.status(403).json({ error: 'Acceso no autorizado' });
+
+    const assignment = await prisma.trainingPlanAssignment.findFirst({
+      where: { runnerId: runner.id, planId: Number(req.params.id), activo: true },
+    });
+    if (!assignment) return res.status(403).json({ error: 'No tienes acceso a este plan' });
+
+    // Devolver el plan sin info de otros corredores
+    const plan = await prisma.trainingPlan.findUnique({
+      where: { id: Number(req.params.id) },
+      include: {
+        semanas: { include: { dias: true }, orderBy: { numeroSemana: 'asc' } },
+      },
+    });
+    if (!plan) return res.status(404).json({ error: 'Plan no encontrado' });
+    return res.json(plan);
+  }
+
+  // Coach: plan completo con todos los corredores asignados
   const plan = await prisma.trainingPlan.findUnique({
     where: { id: Number(req.params.id) },
     include: {

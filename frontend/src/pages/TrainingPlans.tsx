@@ -46,7 +46,12 @@ export default function TrainingPlans() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white">Planes de entrenamiento</h1>
-          <p className="text-gray-400 text-sm mt-0.5">{plans.length} planes disponibles</p>
+          <p className="text-gray-400 text-sm mt-0.5">
+            {isCoach
+              ? `${plans.length} planes disponibles`
+              : plans.length > 0 ? `${plans.length} plan${plans.length !== 1 ? 'es' : ''} asignado${plans.length !== 1 ? 's' : ''}`
+              : 'Sin planes asignados'}
+          </p>
         </div>
         {isCoach && (
           <button
@@ -91,9 +96,11 @@ export default function TrainingPlans() {
                   <Target size={12} /> {plan.objetivo}
                 </div>
               )}
-              <div className="flex items-center gap-1.5 text-xs text-gray-400">
-                <Users size={12} /> {plan._count?.asignaciones ?? 0} asignados
-              </div>
+              {isCoach && (
+                <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                  <Users size={12} /> {plan._count?.asignaciones ?? 0} asignados
+                </div>
+              )}
             </div>
 
             {isCoach && (
@@ -133,14 +140,18 @@ export default function TrainingPlans() {
         {plans.length === 0 && (
           <div className="col-span-full text-center py-16 text-gray-500">
             <ClipboardList size={36} className="mx-auto mb-3 opacity-30" />
-            <p className="text-sm mb-4">No hay planes creados todavía</p>
-            {isCoach && (
-              <button
-                onClick={() => navigate('/planes/nuevo')}
-                className="inline-flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors"
-              >
-                <Zap size={15} /> Crear primer plan con IA
-              </button>
+            {isCoach ? (
+              <>
+                <p className="text-sm mb-4">No hay planes creados todavía</p>
+                <button
+                  onClick={() => navigate('/planes/nuevo')}
+                  className="inline-flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors"
+                >
+                  <Zap size={15} /> Crear primer plan con IA
+                </button>
+              </>
+            ) : (
+              <p className="text-sm">Tu entrenador aún no te ha asignado un plan de entrenamiento</p>
             )}
           </div>
         )}
