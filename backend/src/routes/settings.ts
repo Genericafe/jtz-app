@@ -47,7 +47,8 @@ router.get('/email/google/auth', authMiddleware, coachOnly, (req: AuthRequest, r
 // GET /settings/email/google/callback — Google redirects here after consent
 router.get('/email/google/callback', async (req: Request, res: Response) => {
   const { code, state, error } = req.query as Record<string, string>;
-  const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+  // Take the first comma-separated value in case FRONTEND_URL has multiple origins
+  const frontendUrl = (process.env.FRONTEND_URL ?? 'http://localhost:5173').split(',')[0].trim();
 
   if (error || !code || !state) {
     return res.redirect(`${frontendUrl}/configuracion?email_error=acceso_denegado`);
