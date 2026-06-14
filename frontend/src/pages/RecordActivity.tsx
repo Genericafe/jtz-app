@@ -1,25 +1,82 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Play, Pause, Square, MapPin, Zap, Heart, Clock, ChevronLeft, CheckCircle } from 'lucide-react';
+import { useState, useMemo, lazy, Suspense } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Play, Pause, Square, MapPin, Zap, Heart, Clock, ChevronLeft, CheckCircle, Map, Navigation } from 'lucide-react';
 import { integrationsApi } from '../services/api';
 import { useActivityRecorder, formatPace, formatElapsed } from '../hooks/useActivityRecorder';
+import { parseGpx } from '../utils/gpxParser';
+import type { MapPoint } from '../components/LiveTrackingMap';
+
+const LiveTrackingMap = lazy(() => import('../components/LiveTrackingMap'));
 
 const TIPOS = [
-  { value: 'correr', label: 'Correr' },
-  { value: 'trail', label: 'Trail' },
+  { value: 'correr',   label: 'Correr'   },
+  { value: 'trail',    label: 'Trail'    },
   { value: 'ciclismo', label: 'Ciclismo' },
   { value: 'natacion', label: 'Natación' },
-  { value: 'otro', label: 'Otro' },
+  { value: 'otro',     label: 'Otro'     },
 ];
+
+function haversineM(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371000, d2r = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * d2r;
+  const dLng = (b.lng - a.lng) * d2r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * d2r) * Math.cos(b.lat * d2r) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
 
 export default function RecordActivity() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const routeId = searchParams.get('routeId') ? Number(searchParams.get('routeId')) : null;
+
   const qc = useQueryClient();
   const { state, start, pause, resume, finish, reset, getGpx } = useActivityRecorder();
   const [tipo, setTipo] = useState('correr');
   const [nombre, setNombre] = useState('');
   const [saved, setSaved] = useState(false);
+  const [showMap, setShowMap] = useState(!!routeId);
+
+  // Fetch reference route when ?routeId=X is present
+  const { data: refActivityData } = useQuery({
+    queryKey: ['ref-activity', routeId],
+    queryFn: () => integrationsApi.getActivity(routeId!),
+    enabled: !!routeId,
+  });
+
+  const referenceRoute = useMemo<MapPoint[]>(() => {
+    const gpx = refActivityData?.data?.gpxContent;
+    if (!gpx) return [];
+    try {
+      const { trackPoints } = parseGpx(gpx);
+      return trackPoints.map(p => ({ lat: p.lat, lng: p.lng }));
+    } catch { return []; }
+  }, [refActivityData]);
+
+  // Convert recorded track to MapPoint[]
+  const trackMapPoints = useMemo<MapPoint[]>(
+    () => state.track.map(p => ({ lat: p.lat, lng: p.lng, accuracy: p.accuracy })),
+    [state.track],
+  );
+
+  const currentPos: MapPoint | undefined = trackMapPoints.length > 0
+    ? trackMapPoints[trackMapPoints.length - 1]
+    : undefined;
+
+  // Navigation: closest route point + off-route distance + remaining km
+  const navInfo = useMemo(() => {
+    if (!currentPos || referenceRoute.length === 0) return null;
+    let minDist = Infinity, minIdx = 0;
+    for (let i = 0; i < referenceRoute.length; i++) {
+      const d = haversineM(currentPos, referenceRoute[i]);
+      if (d < minDist) { minDist = d; minIdx = i; }
+    }
+    let remM = 0;
+    for (let i = minIdx; i < referenceRoute.length - 1; i++) {
+      remM += haversineM(referenceRoute[i], referenceRoute[i + 1]);
+    }
+    return { offRouteM: minDist, remainingKm: remM / 1000 };
+  }, [currentPos, referenceRoute]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -45,7 +102,7 @@ export default function RecordActivity() {
     },
   });
 
-  // Pantalla de éxito
+  // Éxito
   if (saved) {
     return (
       <div className="min-h-screen bg-dark-900 flex flex-col items-center justify-center p-8 text-center">
@@ -63,7 +120,7 @@ export default function RecordActivity() {
     );
   }
 
-  // Pantalla de resumen post-actividad
+  // Resumen post-actividad
   if (state.status === 'finished') {
     return (
       <div className="min-h-screen bg-dark-900 p-6 flex flex-col">
@@ -116,25 +173,92 @@ export default function RecordActivity() {
   }
 
   // Pantalla principal de grabación
+  const isActive = state.status === 'running' || state.status === 'paused';
+
   return (
     <div className="min-h-screen bg-dark-900 flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between p-4 pt-safe">
-        {state.status === 'idle' ? (
-          <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-gray-400 hover:text-white">
-            <ChevronLeft size={20} /> Cancelar
+        <div>
+          {state.status === 'idle' ? (
+            <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-gray-400 hover:text-white">
+              <ChevronLeft size={20} /> Cancelar
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className={`w-2.5 h-2.5 rounded-full ${state.status === 'running' ? 'bg-green-400 animate-pulse' : 'bg-yellow-400'}`} />
+              <span className="text-sm text-gray-400">{state.status === 'running' ? 'Grabando' : 'Pausado'}</span>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {/* Map toggle */}
+          <button
+            onClick={() => setShowMap(m => !m)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+              showMap
+                ? 'bg-brand-500/20 text-brand-400 border border-brand-500/30'
+                : 'bg-dark-700 text-gray-500 border border-dark-600 hover:text-white'
+            }`}
+          >
+            <Map size={13} /> Mapa
           </button>
-        ) : (
-          <div className="flex items-center gap-2">
-            <span className={`w-2.5 h-2.5 rounded-full ${state.status === 'running' ? 'bg-green-400 animate-pulse' : 'bg-yellow-400'}`} />
-            <span className="text-sm text-gray-400">{state.status === 'running' ? 'Grabando' : 'Pausado'}</span>
+          <div className="flex items-center gap-1.5">
+            <MapPin size={14} className="text-brand-400" />
+            <span className="text-xs text-gray-500">GPS</span>
           </div>
-        )}
-        <div className="flex items-center gap-2">
-          <MapPin size={14} className="text-brand-400" />
-          <span className="text-xs text-gray-500">GPS</span>
         </div>
       </div>
+
+      {/* Reference route banner */}
+      {routeId && referenceRoute.length > 0 && (
+        <div className="mx-4 mb-3 px-4 py-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center gap-2">
+          <Navigation size={14} className="text-blue-400 flex-shrink-0" />
+          <span className="text-xs text-blue-300">
+            Modo navegación ·{' '}
+            {referenceRoute.length > 0
+              ? `${(referenceRoute.reduce((acc, _, i, arr) => i === 0 ? acc : acc + haversineM(arr[i - 1], arr[i]), 0) / 1000).toFixed(1)} km total`
+              : 'Cargando ruta...'}
+          </span>
+        </div>
+      )}
+
+      {/* Navigation status (only when running with a route) */}
+      {routeId && isActive && navInfo && (
+        <div className={`mx-4 mb-3 px-4 py-2.5 rounded-xl border flex items-center justify-between ${
+          navInfo.offRouteM <= 50
+            ? 'bg-green-500/10 border-green-500/20'
+            : 'bg-red-500/10 border-red-500/20'
+        }`}>
+          <div className="flex items-center gap-2">
+            {navInfo.offRouteM <= 50 ? (
+              <CheckCircle size={14} className="text-green-400" />
+            ) : (
+              <Navigation size={14} className="text-red-400" />
+            )}
+            <span className={`text-xs font-semibold ${navInfo.offRouteM <= 50 ? 'text-green-400' : 'text-red-400'}`}>
+              {navInfo.offRouteM <= 50 ? 'En ruta' : `Desviado ${Math.round(navInfo.offRouteM)} m`}
+            </span>
+          </div>
+          <span className="text-xs text-gray-400">
+            {navInfo.remainingKm.toFixed(2)} km restantes
+          </span>
+        </div>
+      )}
+
+      {/* Live map */}
+      {showMap && (
+        <div className="mx-4 mb-3 rounded-2xl overflow-hidden border border-dark-700" style={{ height: 200 }}>
+          <Suspense fallback={<div className="w-full h-full bg-dark-800 flex items-center justify-center"><div className="w-6 h-6 border-2 border-brand-400 border-t-transparent rounded-full animate-spin" /></div>}>
+            <LiveTrackingMap
+              track={trackMapPoints}
+              referenceRoute={referenceRoute.length > 0 ? referenceRoute : undefined}
+              currentPos={currentPos}
+              className="w-full h-full"
+            />
+          </Suspense>
+        </div>
+      )}
 
       {/* Tipo (solo en idle) */}
       {state.status === 'idle' && (
@@ -155,7 +279,7 @@ export default function RecordActivity() {
         </div>
       )}
 
-      {/* Métricas principales */}
+      {/* Métricas */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 gap-6">
         {/* Tiempo */}
         <div className="text-center">
@@ -193,7 +317,6 @@ export default function RecordActivity() {
           </div>
         </div>
 
-        {/* Puntos GPS acumulados */}
         {state.track.length > 0 && (
           <p className="text-xs text-gray-600">{state.track.length} puntos GPS grabados</p>
         )}

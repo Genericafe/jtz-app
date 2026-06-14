@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { integrationsApi } from '../services/api';
-import { Plus, Trash2, Upload, X, FileText, ChevronRight, CheckCircle2, Clock3, Radio, Heart } from 'lucide-react';
+import { Plus, Trash2, Upload, X, FileText, ChevronRight, CheckCircle2, Clock3, Radio, Heart, Navigation } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { parseGpx } from '../utils/gpxParser';
@@ -415,6 +415,15 @@ export default function MyActivities() {
                     <div className="pt-4">
                       <ActivityStatsView activity={a} showGpxDetails />
                     </div>
+                    {/* Solo actividades con GPX pueden repetirse con navegación */}
+                    {a.gpxNombre && (
+                      <button
+                        onClick={() => navigate(`/grabar?routeId=${a.id}`)}
+                        className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-brand-500/30 bg-brand-500/10 text-brand-400 text-sm font-semibold hover:bg-brand-500/20 transition-all"
+                      >
+                        <Navigation size={14} /> Seguir esta ruta
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

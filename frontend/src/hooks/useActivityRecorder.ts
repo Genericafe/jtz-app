@@ -1,15 +1,16 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Geolocation, type Position } from '@capacitor/geolocation';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 
-export interface TrackPoint { lat: number; lng: number; ele?: number; time: string; }
+export interface TrackPoint {
+  lat: number; lng: number; ele?: number; time: string; accuracy?: number;
+}
 
 export interface RecorderState {
   status: 'idle' | 'running' | 'paused' | 'finished';
-  elapsed: number;          // seconds
+  elapsed: number;
   distanceKm: number;
-  paceMinKm: number | null; // min/km promedio
+  paceMinKm: number | null;
   currentPaceMinKm: number | null;
   fcActual: number | null;
   track: TrackPoint[];
@@ -17,20 +18,19 @@ export interface RecorderState {
 }
 
 function haversineKm(a: TrackPoint, b: TrackPoint) {
-  const R = 6371;
-  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
-  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const R = 6371, d2r = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * d2r, dLng = (b.lng - a.lng) * d2r;
   const h =
     Math.sin(dLat / 2) ** 2 +
-    Math.cos((a.lat * Math.PI) / 180) *
-      Math.cos((b.lat * Math.PI) / 180) *
-      Math.sin(dLng / 2) ** 2;
+    Math.cos(a.lat * d2r) * Math.cos(b.lat * d2r) * Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
 function buildGpx(track: TrackPoint[], name: string): string {
   const pts = track
-    .map(p => `    <trkpt lat="${p.lat}" lon="${p.lng}">${p.ele != null ? `<ele>${p.ele}</ele>` : ''}<time>${p.time}</time></trkpt>`)
+    .map(p =>
+      `    <trkpt lat="${p.lat}" lon="${p.lng}">${p.ele != null ? `<ele>${p.ele}</ele>` : ''}<time>${p.time}</time></trkpt>`,
+    )
     .join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="JTZ Running Club">
@@ -47,132 +47,123 @@ export function useActivityRecorder() {
     fcActual: null, track: [], error: null,
   });
 
-  const watchIdRef = useRef<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Browser watchPosition returns a number, not a string
+  const watchIdRef  = useRef<number | null>(null);
+  const timerRef    = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastPointRef = useRef<TrackPoint | null>(null);
   const recentDistRef = useRef<{ time: number; dist: number }[]>([]);
 
-  const clearTimer = () => { if (timerRef.current) clearInterval(timerRef.current); };
-  const clearWatch = async () => {
-    if (watchIdRef.current) {
-      await Geolocation.clearWatch({ id: watchIdRef.current });
+  const clearTimer = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+  };
+
+  // Synchronous — browser API
+  const clearWatch = () => {
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
   };
 
-  const start = useCallback(async () => {
-    try {
-      if (Capacitor.isNativePlatform()) {
-        await Geolocation.requestPermissions();
-      }
-
-      setState(s => ({ ...s, status: 'running', error: null }));
-
-      // Timer cada segundo
-      timerRef.current = setInterval(() => {
-        setState(s => {
-          if (s.status !== 'running') return s;
-          const elapsed = s.elapsed + 1;
-          const paceMinKm = s.distanceKm > 0.05 ? elapsed / 60 / s.distanceKm : null;
-
-          // Pace actual: promedio de los últimos 30 segundos
-          const now = Date.now();
-          const window = recentDistRef.current.filter(p => now - p.time < 30_000);
-          recentDistRef.current = window;
-          const recentDist = window.reduce((a, b) => a + b.dist, 0);
-          const recentSecs = window.length > 0 ? (now - window[0].time) / 1000 : 0;
-          const currentPaceMinKm = recentDist > 0.01 && recentSecs > 5
-            ? recentSecs / 60 / recentDist : null;
-
-          return { ...s, elapsed, paceMinKm, currentPaceMinKm };
-        });
-      }, 1000);
-
-      // GPS watch
-      const id = await Geolocation.watchPosition(
-        { enableHighAccuracy: true, timeout: 10000 },
-        (pos: Position | null, err?: any) => {
-          if (err || !pos) return;
-          const point: TrackPoint = {
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            ele: pos.coords.altitude ?? undefined,
-            time: new Date(pos.timestamp).toISOString(),
-          };
-          setState(s => {
-            if (s.status === 'paused') return s;
-            let addedKm = 0;
-            if (lastPointRef.current) {
-              addedKm = haversineKm(lastPointRef.current, point);
-              if (addedKm < 0.0005) return s; // filtrar ruido < 0.5m
-              recentDistRef.current.push({ time: Date.now(), dist: addedKm });
-            }
-            lastPointRef.current = point;
-            return { ...s, distanceKm: s.distanceKm + addedKm, track: [...s.track, point] };
-          });
-        }
-      );
-      watchIdRef.current = id;
-    } catch (e: any) {
-      setState(s => ({ ...s, status: 'idle', error: e.message ?? 'Error GPS' }));
-    }
-  }, []);
-
-  const pause = useCallback(async () => {
-    clearTimer();
-    await clearWatch();
-    if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Medium });
-    setState(s => ({ ...s, status: 'paused' }));
-  }, []);
-
-  const resume = useCallback(async () => {
-    setState(s => ({ ...s, status: 'running' }));
+  const startTimer = () => {
     timerRef.current = setInterval(() => {
       setState(s => {
         if (s.status !== 'running') return s;
-        return { ...s, elapsed: s.elapsed + 1 };
+        const elapsed = s.elapsed + 1;
+        const paceMinKm = s.distanceKm > 0.05 ? elapsed / 60 / s.distanceKm : null;
+
+        const now = Date.now();
+        const window = recentDistRef.current.filter(p => now - p.time < 30_000);
+        recentDistRef.current = window;
+        const recentDist = window.reduce((a, b) => a + b.dist, 0);
+        const recentSecs = window.length > 0 ? (now - window[0].time) / 1000 : 0;
+        const currentPaceMinKm =
+          recentDist > 0.01 && recentSecs > 5 ? recentSecs / 60 / recentDist : null;
+
+        return { ...s, elapsed, paceMinKm, currentPaceMinKm };
       });
     }, 1000);
-    const id = await Geolocation.watchPosition(
-      { enableHighAccuracy: true, timeout: 10000 },
-      (pos: Position | null, err?: any) => {
-        if (err || !pos) return;
+  };
+
+  const startGpsWatch = () => {
+    if (!navigator.geolocation) {
+      setState(s => ({ ...s, error: 'GPS no disponible en este dispositivo' }));
+      return;
+    }
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
         const point: TrackPoint = {
-          lat: pos.coords.latitude, lng: pos.coords.longitude,
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
           ele: pos.coords.altitude ?? undefined,
           time: new Date(pos.timestamp).toISOString(),
+          accuracy: pos.coords.accuracy ?? undefined,
         };
         setState(s => {
           if (s.status === 'paused') return s;
           let addedKm = 0;
           if (lastPointRef.current) {
             addedKm = haversineKm(lastPointRef.current, point);
-            if (addedKm < 0.0005) return s;
+            if (addedKm < 0.0005) return s; // filter noise < 0.5 m
+            recentDistRef.current.push({ time: Date.now(), dist: addedKm });
           }
           lastPointRef.current = point;
           return { ...s, distanceKm: s.distanceKm + addedKm, track: [...s.track, point] };
         });
-      }
+      },
+      (err) => {
+        setState(s => ({ ...s, error: err.message }));
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
     );
-    watchIdRef.current = id;
-  }, []);
+  };
+
+  const start = useCallback(async () => {
+    if (!navigator.geolocation) {
+      setState(s => ({ ...s, error: 'GPS no disponible en este dispositivo' }));
+      return;
+    }
+    setState(s => ({ ...s, status: 'running', error: null }));
+    startTimer();
+    startGpsWatch();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pause = useCallback(async () => {
+    clearTimer();
+    clearWatch();
+    if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Medium });
+    setState(s => ({ ...s, status: 'paused' }));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const resume = useCallback(async () => {
+    setState(s => ({ ...s, status: 'running' }));
+    startTimer();
+    startGpsWatch();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const finish = useCallback(async () => {
     clearTimer();
-    await clearWatch();
+    clearWatch();
     if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Heavy });
     setState(s => ({ ...s, status: 'finished' }));
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const reset = useCallback(() => {
     lastPointRef.current = null;
     recentDistRef.current = [];
-    setState({ status: 'idle', elapsed: 0, distanceKm: 0, paceMinKm: null, currentPaceMinKm: null, fcActual: null, track: [], error: null });
+    setState({
+      status: 'idle', elapsed: 0, distanceKm: 0,
+      paceMinKm: null, currentPaceMinKm: null,
+      fcActual: null, track: [], error: null,
+    });
   }, []);
 
-  const getGpx = useCallback((name: string) => buildGpx(state.track, name), [state.track]);
+  const getGpx = useCallback(
+    (name: string) => buildGpx(state.track, name),
+    [state.track],
+  );
 
-  useEffect(() => () => { clearTimer(); clearWatch(); }, []);
+  useEffect(() => () => { clearTimer(); clearWatch(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { state, start, pause, resume, finish, reset, getGpx };
 }
