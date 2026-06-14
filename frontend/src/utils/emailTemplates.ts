@@ -42,7 +42,7 @@ export const PLANTILLAS: Plantilla[] = [
       const cuandoStr = d === 1 ? '¡es MAÑANA!' : d === 0 ? '¡es HOY!' : `es en ${d} días`;
       return {
         asunto: `⏰ Recordatorio — ${ev.nombre} ${cuandoStr}`,
-        mensaje: `¡Hola corredor/a! 👋
+        mensaje: `¡Hola {nombre}! 👋
 
 Te recordamos que ${ev.nombre} ${cuandoStr.toLowerCase()}.
 
@@ -68,7 +68,7 @@ Asegúrate de tener todo listo:
     descripcion: 'Instrucciones de entrega de número y camiseta',
     generar: (ev) => ({
       asunto: `👕 Entrega de kit — ${ev.nombre}`,
-      mensaje: `¡Hola corredor/a! 👋
+      mensaje: `¡Hola {nombre}! 👋
 
 La entrega de kit para ${ev.nombre} se realizará el día previo al evento.
 
@@ -100,7 +100,7 @@ Si tienes alguna duda, contáctanos con anticipación.
       const d = dias(ev.fecha);
       return {
         asunto: `🔥 ¡${d <= 3 ? 'Ya casi es hora' : 'Tú puedes lograrlo'}! — ${ev.nombre}`,
-        mensaje: `¡Hola corredor/a! 🙌
+        mensaje: `¡Hola {nombre}! 🙌
 
 ${d <= 1
   ? '¡El momento ha llegado! Mañana es el gran día.'
@@ -130,7 +130,7 @@ Nuestros consejos finales:
     descripcion: 'Detalles de llegada, estacionamiento y horarios',
     generar: (ev) => ({
       asunto: `📋 Información importante — ${ev.nombre}`,
-      mensaje: `¡Hola corredor/a! 👋
+      mensaje: `¡Hola {nombre}! 👋
 
 Queremos asegurarnos de que tengas toda la información necesaria para el día de ${ev.nombre}.
 
@@ -165,7 +165,7 @@ Cualquier pregunta, escríbenos.
     descripcion: 'Comunicado de última hora antes del evento',
     generar: (ev) => ({
       asunto: `🚨 Último aviso — ${ev.nombre} ¡es mañana!`,
-      mensaje: `¡Hola corredor/a! 🎽
+      mensaje: `¡Hola {nombre}! 🎽
 
 ¡MAÑANA ES EL DÍA! ${ev.nombre} está a horas de comenzar.
 
@@ -199,7 +199,7 @@ Cualquier pregunta, escríbenos.
     descripcion: 'Felicitaciones post-evento a los participantes',
     generar: (ev) => ({
       asunto: `🏅 ¡Lo lograste! Gracias por correr ${ev.nombre}`,
-      mensaje: `¡Hola corredor/a! 🎉
+      mensaje: `¡Hola {nombre}! 🎉
 
 ¡FELICIDADES! Completaste ${ev.nombre} y eso es algo de lo que debes estar muy orgulloso/a.
 

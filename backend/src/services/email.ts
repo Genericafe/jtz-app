@@ -229,11 +229,11 @@ export async function sendBulkUpdate(opts: {
 }) {
   const { send, from } = await getSender(opts.coachUserId);
   for (const r of opts.recipients) {
+    const mensajePersonalizado = opts.mensaje.replace(/\{nombre\}/gi, r.nombre);
     await send({ from, to: r.email, subject: opts.subject, html: baseTemplate(`
-      <div class="header"><h1>📢 Actualización del evento</h1><p>${opts.eventName}</p></div>
+      <div class="header"><h1>📢 ${opts.eventName}</h1><p>JTZ Running Club</p></div>
       <div class="body">
-        <p>Hola, <strong style="color:white">${r.nombre}</strong> 👋</p>
-        <div style="white-space:pre-wrap;color:#cbd5e1;font-size:15px;line-height:1.7">${opts.mensaje}</div>
+        <div style="white-space:pre-wrap;color:#cbd5e1;font-size:15px;line-height:1.7">${mensajePersonalizado}</div>
         <p style="margin-top:24px;color:#94a3b8;font-size:13px">— Coach JTZ Running Club</p>
       </div>
     `) });
