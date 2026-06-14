@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Users, ClipboardList, Calendar,
-  CreditCard, ShoppingBag, MessageSquare, LogOut, Zap, User, Settings, MessageCircle, X,
+  CreditCard, ShoppingBag, MessageSquare, LogOut, Zap, User, Settings, MessageCircle, X, Activity,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useQuery } from '@tanstack/react-query';
@@ -21,15 +21,16 @@ const coachNav = [
 ];
 
 const runnerNav = [
-  { to: '/',             label: 'Mi inicio',        icon: LayoutDashboard },
-  { to: '/planes',       label: 'Mis planes',       icon: ClipboardList },
-  { to: '/eventos',      label: 'Eventos',          icon: Calendar },
-  { to: '/pagos',        label: 'Mis pagos',        icon: CreditCard },
-  { to: '/tienda',       label: 'Tienda',           icon: ShoppingBag },
-  { to: '/comunicacion', label: 'Comunicación',     icon: MessageSquare },
-  { to: '/chat',         label: 'Chat con coach',   icon: MessageCircle },
-  { to: '/perfil',       label: 'Mi perfil',        icon: User },
-  { to: '/configuracion', label: 'Configuración',  icon: Settings },
+  { to: '/',              label: 'Mi inicio',       icon: LayoutDashboard },
+  { to: '/planes',        label: 'Mis planes',      icon: ClipboardList },
+  { to: '/actividades',   label: 'Actividades',     icon: Activity },
+  { to: '/eventos',       label: 'Eventos',         icon: Calendar },
+  { to: '/pagos',         label: 'Mis pagos',       icon: CreditCard },
+  { to: '/tienda',        label: 'Tienda',          icon: ShoppingBag },
+  { to: '/comunicacion',  label: 'Comunicación',    icon: MessageSquare },
+  { to: '/chat',          label: 'Chat con coach',  icon: MessageCircle },
+  { to: '/perfil',        label: 'Mi perfil',       icon: User },
+  { to: '/configuracion', label: 'Configuración',   icon: Settings },
 ];
 
 function Avatar({ name, email, role }: { name?: string; email?: string; role?: string }) {

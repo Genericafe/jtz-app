@@ -21,6 +21,7 @@ import leadsRoutes from './routes/leads';
 import settingsRoutes from './routes/settings';
 import aiRoutes from './routes/ai';
 import chatRoutes from './routes/chat';
+import integrationsRoutes from './routes/integrations';
 
 dotenv.config();
 
@@ -55,6 +56,7 @@ app.use('/api/coach', leadsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/integrations', integrationsRoutes);
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', app: 'JTZ API' }));
 

@@ -55,6 +55,10 @@ model Runner {
   fotoPerfil      String?
   activo          Boolean   @default(true)
   notas           String?
+  stravaAthleteId String?
+  stravaToken     String?
+  stravaRefresh   String?
+  stravaExpiry    DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -68,18 +72,28 @@ model Runner {
 }
 
 model ActivityLog {
-  id          Int          @id @default(autoincrement())
-  runnerId    Int
-  runner      Runner       @relation(fields: [runnerId], references: [id], onDelete: Cascade)
-  diaId       Int?
-  dia         TrainingDay? @relation(fields: [diaId], references: [id])
-  fecha       DateTime     @default(now())
-  gpxContent  String?      @db.Text
-  gpxNombre   String?
-  distanciaKm Float?
-  duracionMin Int?
-  notas       String?
-  createdAt   DateTime     @default(now())
+  id            Int          @id @default(autoincrement())
+  runnerId      Int
+  runner        Runner       @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  diaId         Int?
+  dia           TrainingDay? @relation(fields: [diaId], references: [id])
+  fuente        String       @default("manual") // "manual" | "strava" | "gpx"
+  stravaId      String?      @unique
+  nombre        String?
+  tipo          String       @default("correr")  // "correr" | "trail" | "ciclismo" | "natacion" | "otro"
+  fecha         DateTime     @default(now())
+  distanciaKm   Float?
+  duracionMin   Float?
+  ritmoMinKm    Float?       // min/km
+  fcPromedio    Int?
+  fcMax         Int?
+  elevacionM    Float?
+  caloriasKcal  Int?
+  potenciaW     Int?
+  gpxContent    String?      @db.Text
+  gpxNombre     String?
+  notas         String?
+  createdAt     DateTime     @default(now())
 }
 
 model CommunicationLog {

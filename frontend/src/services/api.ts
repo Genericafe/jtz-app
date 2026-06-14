@@ -129,4 +129,14 @@ export const chatApi = {
   send: (runnerId: number, content: string) => api.post(`/chat/${runnerId}`, { content }),
 };
 
+export const integrationsApi = {
+  stravaStatus:     ()            => api.get('/integrations/strava/status'),
+  stravaConnect:    ()            => api.get('/integrations/strava/connect'),
+  stravaDisconnect: ()            => api.post('/integrations/strava/disconnect'),
+  stravaSync:       ()            => api.post('/integrations/strava/sync'),
+  getActivities:    ()            => api.get('/integrations/activities'),
+  logActivity:      (d: object)   => api.post('/integrations/activities', d),
+  deleteActivity:   (id: number)  => api.delete(`/integrations/activities/${id}`),
+};
+
 export default api;
