@@ -205,16 +205,21 @@ router.post('/activities', async (req: AuthRequest, res: Response) => {
   const ritmoMinKm = d.distanciaKm && d.duracionMin
     ? d.duracionMin / d.distanciaKm : undefined;
 
-  const log = await (prisma as any).activityLog.create({
-    data: {
-      runnerId: runner.id,
-      fuente:   d.gpxContent ? 'gpx' : 'manual',
-      ...d,
-      ritmoMinKm,
-      fecha: d.fecha ? new Date(d.fecha) : new Date(),
-    },
-  });
-  return res.status(201).json(log);
+  try {
+    const log = await (prisma as any).activityLog.create({
+      data: {
+        runnerId: runner.id,
+        fuente:   d.gpxContent ? 'gpx' : 'manual',
+        ...d,
+        ritmoMinKm,
+        fecha: d.fecha ? new Date(d.fecha) : new Date(),
+      },
+    });
+    return res.status(201).json(log);
+  } catch (err: any) {
+    console.error('[activity log create]', err?.message ?? err);
+    return res.status(500).json({ error: err?.message ?? 'Error al guardar la actividad' });
+  }
 });
 
 router.delete('/activities/:id', async (req: AuthRequest, res: Response) => {

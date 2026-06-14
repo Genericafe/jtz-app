@@ -148,6 +148,11 @@ export default function MyActivities() {
     setUploadMsg('');
     try {
       const content = await file.text();
+      if (!content.includes('<gpx') && !content.includes('<trk')) {
+        setUploadMsg('⚠ El archivo no parece ser un GPX válido. Asegúrate de exportar en formato GPX.');
+        setUploading(false);
+        return;
+      }
       const nameMatch = content.match(/<name>(.*?)<\/name>/);
       await integrationsApi.logActivity({
         tipo: 'correr',
@@ -155,13 +160,17 @@ export default function MyActivities() {
         fecha: new Date().toISOString(),
         gpxContent: content,
         gpxNombre: file.name,
-        fuente: 'gpx',
       });
       qc.invalidateQueries({ queryKey: ['my-activities'] });
       setUploadMsg('✓ Actividad importada correctamente');
       setTimeout(() => setUploadMsg(''), 4000);
-    } catch {
-      setUploadMsg('⚠ Error al importar. Verifica que sea un archivo .gpx válido');
+    } catch (err: any) {
+      const msg = err?.response?.data?.error ?? err?.message ?? 'Error desconocido';
+      if (msg.includes('Network') || msg.includes('ECONNREFUSED')) {
+        setUploadMsg('⚠ El servidor no responde. Intenta en un momento.');
+      } else {
+        setUploadMsg(`⚠ ${msg}`);
+      }
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
