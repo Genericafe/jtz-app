@@ -38,6 +38,8 @@ const allowedOrigins = [
   'https://jtz-app.vercel.app',
   'http://localhost:5173',
   'http://localhost:3000',
+  'https://localhost',       // Capacitor Android WebView
+  'capacitor://localhost',   // Capacitor iOS WebView
   ...(process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',').map(s => s.trim()).filter(Boolean) : []),
 ];
 app.use(cors({
@@ -72,43 +74,6 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/integrations', integrationsRoutes);
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', app: 'JTZ API' }));
-
-// Endpoint de recuperación — crea el coach si no existe
-app.post('/api/setup/coach', express.json(), async (req: any, res: any) => {
-  const { secret, email, password, nombre, apellido } = req.body ?? {};
-  if (secret !== process.env.SETUP_SECRET && secret !== 'jtz-setup-2024') {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  const bcrypt = await import('bcryptjs');
-  const { PrismaClient } = await import('@prisma/client');
-  const prisma = new PrismaClient();
-  try {
-    const coachEmail = email ?? 'coach@jtz.mx';
-    const existing = await prisma.user.findUnique({ where: { email: coachEmail } });
-    if (existing) {
-      const hashed = await bcrypt.hash(password ?? 'coach123', 10);
-      await prisma.user.update({ where: { email: coachEmail }, data: { password: hashed } });
-      // Also create runner record if missing
-      const hasRunner = await prisma.runner.findUnique({ where: { userId: existing.id } });
-      if (!hasRunner) {
-        await prisma.runner.create({
-          data: { userId: existing.id, nombre: nombre ?? 'Jorge', apellido: apellido ?? 'Torres', ciudad: 'México', nivel: 'elite' },
-        });
-      }
-      return res.json({ ok: true, action: 'password_updated', email: coachEmail, runnerCreated: !hasRunner });
-    }
-    const hashed = await bcrypt.hash(password ?? 'coach123', 10);
-    await prisma.user.create({
-      data: {
-        email: coachEmail,
-        password: hashed,
-        role: 'coach',
-        runner: { create: { nombre: nombre ?? 'Jorge', apellido: apellido ?? 'Torres', ciudad: 'México', nivel: 'elite' } },
-      },
-    });
-    return res.json({ ok: true, action: 'created', email: coachEmail });
-  } finally { await prisma.$disconnect(); }
-});
 
 app.listen(PORT, () => {
   console.log(`JTZ API corriendo en http://localhost:${PORT}`);
