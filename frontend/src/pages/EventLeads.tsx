@@ -51,6 +51,26 @@ export default function EventLeads() {
   // Copy link
   const [copied, setCopied] = useState(false);
 
+  const downloadCSV = () => {
+    if (!rows.length) return;
+    const headers = ['Nombre', 'Email', 'Teléfono', 'Ciudad', 'Estado', 'Monto (MXN)', 'Fuente', 'Fecha'];
+    const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const csvRows = rows.map(r => [
+      r.nombre, r.email, r.telefono, r.ciudad, r.estado, r.monto, r.fuente,
+      format(new Date(r.fecha), "d/MM/yyyy HH:mm", { locale: es }),
+    ].map(escape).join(','));
+    const csv = '﻿' + [headers.join(','), ...csvRows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(event?.nombre ?? 'inscritos').replace(/\s+/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const { data: eventData, isLoading } = useQuery({
     queryKey: ['event-detail', id],
     queryFn: () => eventsApi.get(Number(id)),
@@ -211,10 +231,10 @@ export default function EventLeads() {
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-600 border border-white/[0.08] text-xs text-gray-300 hover:text-white transition-all">
                 <ExternalLink size={12} /> Landing
               </a>
-              <a href={leadsApi.exportUrl(Number(id))}
+              <button onClick={downloadCSV}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-600 border border-white/[0.08] text-xs text-gray-300 hover:text-white transition-all">
                 <FileSpreadsheet size={12} /> CSV
-              </a>
+              </button>
             </div>
           </div>
         </div>
