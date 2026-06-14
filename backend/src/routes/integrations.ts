@@ -146,7 +146,7 @@ router.post('/strava/sync', authMiddleware, async (req: AuthRequest, res: Respon
           tipo:         tipoMap[a.type] ?? 'otro',
           fecha:        new Date(a.start_date),
           distanciaKm:  a.distance ? a.distance / 1000 : null,
-          duracionMin:  a.moving_time ? a.moving_time / 60 : null,
+          duracionMin:  a.moving_time ? Math.round(a.moving_time / 60) : null,
           ritmoMinKm:   a.average_speed && a.average_speed > 0
                           ? 1000 / (a.average_speed * 60) : null,
           fcPromedio:   a.average_heartrate ? Math.round(a.average_heartrate) : null,
@@ -185,7 +185,7 @@ router.post('/activities', async (req: AuthRequest, res: Response) => {
     tipo:         z.string().default('correr'),
     fecha:        z.string().optional(),
     distanciaKm:  z.number().optional(),
-    duracionMin:  z.number().optional(),
+    duracionMin:  z.number().optional().transform(v => v != null ? Math.round(v) : v),
     fcPromedio:   z.number().int().optional(),
     fcMax:        z.number().int().optional(),
     elevacionM:   z.number().optional(),

@@ -83,7 +83,7 @@ model ActivityLog {
   tipo          String       @default("correr")  // "correr" | "trail" | "ciclismo" | "natacion" | "otro"
   fecha         DateTime     @default(now())
   distanciaKm   Float?
-  duracionMin   Float?
+  duracionMin   Int?
   ritmoMinKm    Float?       // min/km
   fcPromedio    Int?
   fcMax         Int?
