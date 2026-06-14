@@ -55,10 +55,6 @@ model Runner {
   fotoPerfil      String?
   activo          Boolean   @default(true)
   notas           String?
-  stravaAthleteId String?
-  stravaToken     String?
-  stravaRefresh   String?
-  stravaExpiry    DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -77,8 +73,7 @@ model ActivityLog {
   runner        Runner       @relation(fields: [runnerId], references: [id], onDelete: Cascade)
   diaId         Int?
   dia           TrainingDay? @relation(fields: [diaId], references: [id])
-  fuente        String       @default("manual") // "manual" | "strava" | "gpx"
-  stravaId      String?      @unique
+  fuente        String       @default("manual") // "manual" | "gpx"
   nombre        String?
   tipo          String       @default("correr")  // "correr" | "trail" | "ciclismo" | "natacion" | "otro"
   fecha         DateTime     @default(now())
