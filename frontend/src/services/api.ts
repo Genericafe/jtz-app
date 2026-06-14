@@ -130,13 +130,17 @@ export const chatApi = {
 };
 
 export const integrationsApi = {
-  stravaStatus:     ()            => api.get('/integrations/strava/status'),
-  stravaConnect:    ()            => api.get('/integrations/strava/connect'),
-  stravaDisconnect: ()            => api.post('/integrations/strava/disconnect'),
-  stravaSync:       ()            => api.post('/integrations/strava/sync'),
-  getActivities:    ()            => api.get('/integrations/activities'),
-  logActivity:      (d: object)   => api.post('/integrations/activities', d),
-  deleteActivity:   (id: number)  => api.delete(`/integrations/activities/${id}`),
+  stravaStatus:       ()             => api.get('/integrations/strava/status'),
+  stravaConnect:      ()             => api.get('/integrations/strava/connect'),
+  stravaDisconnect:   ()             => api.post('/integrations/strava/disconnect'),
+  stravaSync:         ()             => api.post('/integrations/strava/sync'),
+  getActivities:      ()             => api.get('/integrations/activities'),
+  getActivity:        (id: number)   => api.get(`/integrations/activities/${id}`),
+  getDayActivities:   (diaId: number) => api.get(`/integrations/activities/day/${diaId}`),
+  logActivity:        (d: object)    => api.post('/integrations/activities', d),
+  confirmActivity:    (id: number)   => api.patch(`/integrations/activities/${id}/confirm`, {}),
+  unconfirmActivity:  (id: number)   => api.patch(`/integrations/activities/${id}/unconfirm`, {}),
+  deleteActivity:     (id: number)   => api.delete(`/integrations/activities/${id}`),
 };
 
 export default api;

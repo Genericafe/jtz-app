@@ -1,17 +1,18 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { plansApi } from '../services/api';
+import { plansApi, integrationsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import {
-  ArrowLeft, Calendar, Target, Clock, Dumbbell,
+  ArrowLeft, Calendar, Target, Dumbbell,
   ChevronDown, ChevronRight, Edit2, Check, X,
   Zap, TrendingUp, Shield, Bike, Waves, Trash2, BookmarkPlus, BookmarkCheck,
-  GripVertical, Users,
+  GripVertical, Users, Upload, CheckCircle2, Clock3, AlertCircle,
 } from 'lucide-react';
-import { differenceInWeeks, addWeeks } from 'date-fns';
-import { es } from 'date-fns/locale';
 import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { parseGpx } from '../utils/gpxParser';
+import ActivityStatsView, { ActivityLog } from '../components/ActivityStatsView';
 
 interface TrainingDay {
   id: number; diaSemana: string; tipo: string;
@@ -78,9 +79,314 @@ const diasLabel: Record<string, string> = {
   viernes: 'Vie', sábado: 'Sáb', domingo: 'Dom',
 };
 
-function DayCard({ day, isCoach, planId, onUpdate, onDragStart, onDragOver, onDrop, isDragOver, isDragging }: {
+// ──────────────────────────────────────────────────────────────────────────────
+// Sub-componente: botón de upload de actividad para el corredor
+// ──────────────────────────────────────────────────────────────────────────────
+function RunnerUploadSection({
+  day,
+  myActivity,
+  onUploaded,
+}: {
+  day: TrainingDay;
+  myActivity: ActivityLog | null;
+  onUploaded: () => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [viewActivity, setViewActivity] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const qc = useQueryClient();
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => integrationsApi.deleteActivity(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['my-activities'] }); onUploaded(); setViewActivity(false); },
+  });
+
+  const handleFile = async (file: File) => {
+    setUploading(true);
+    setMsg('');
+    try {
+      const content = await file.text();
+      if (!content.includes('<gpx') && !content.includes('<trk')) {
+        setMsg('El archivo no parece ser un GPX válido');
+        return;
+      }
+
+      let parsed;
+      try { parsed = parseGpx(content); } catch { parsed = null; }
+
+      await integrationsApi.logActivity({
+        diaId:               day.id,
+        tipo:                parsed?.tipo ?? 'correr',
+        nombre:              parsed?.name ?? file.name.replace('.gpx', ''),
+        fecha:               (parsed?.fecha ?? new Date()).toISOString(),
+        gpxContent:          content,
+        gpxNombre:           file.name,
+        distanciaKm:         parsed?.distanciaKm,
+        duracionMin:         parsed?.duracionMin,
+        tiempoElapsadoMin:   parsed?.tiempoElapsadoMin,
+        ritmoMinKm:          parsed?.ritmoMinKm,
+        fcPromedio:          parsed?.fcPromedio,
+        fcMax:               parsed?.fcMax,
+        cadenciaPromedio:    parsed?.cadenciaPromedio,
+        cadenciaMax:         parsed?.cadenciaMax,
+        elevacionM:          parsed?.elevacionM,
+        elevacionPerdidaM:   parsed?.elevacionPerdidaM,
+        potenciaW:           parsed?.potenciaW,
+        potenciaMax:         parsed?.potenciaMax,
+        potenciaPonderada:   parsed?.potenciaPonderada,
+        potenciaPromedio30s: parsed?.potenciaPromedio30s,
+      });
+
+      qc.invalidateQueries({ queryKey: ['my-activities'] });
+      onUploaded();
+      setMsg('✓ Actividad enviada al entrenador');
+      setTimeout(() => setMsg(''), 4000);
+    } catch (err: any) {
+      setMsg(err?.response?.data?.error ?? err?.message ?? 'Error al subir');
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  // Sin actividad enviada: mostrar botón de upload
+  if (!myActivity) {
+    return (
+      <div className="mt-4 pt-4 border-t border-white/[0.05] space-y-3">
+        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Tu actividad</p>
+        <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-dashed cursor-pointer transition-all ${
+          uploading
+            ? 'border-brand-500/40 bg-brand-500/5'
+            : 'border-white/[0.08] hover:border-brand-500/40 hover:bg-brand-500/5'
+        }`}>
+          {uploading
+            ? <div className="w-5 h-5 border-2 border-brand-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+            : <Upload size={15} className="text-brand-400 flex-shrink-0" />
+          }
+          <div>
+            <p className="text-sm font-semibold text-white">
+              {uploading ? 'Subiendo actividad…' : 'Subir archivo GPX'}
+            </p>
+            <p className="text-xs text-gray-500">Exporta desde Garmin, Apple Watch, COROS, Strava…</p>
+          </div>
+          <input ref={fileRef} type="file" accept=".gpx" className="hidden"
+            onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
+            disabled={uploading} />
+        </label>
+        {msg && (
+          <p className={`text-xs px-3 py-2 rounded-xl ${
+            msg.startsWith('✓') ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+          }`}>{msg}</p>
+        )}
+      </div>
+    );
+  }
+
+  // Con actividad enviada: mostrar estado + opción de ver/eliminar
+  const isConfirmed = myActivity.confirmadoPorCoach;
+
+  return (
+    <div className="mt-4 pt-4 border-t border-white/[0.05] space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Tu actividad</p>
+        <div className="flex items-center gap-2">
+          {isConfirmed
+            ? (
+              <span className="flex items-center gap-1 text-[11px] text-green-400 font-medium">
+                <CheckCircle2 size={11} /> Confirmado
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-[11px] text-yellow-400 font-medium">
+                <Clock3 size={11} /> Pendiente de confirmación
+              </span>
+            )
+          }
+        </div>
+      </div>
+
+      {/* Resumen compacto */}
+      <div
+        className="bg-surface-700 rounded-xl p-3 border border-white/[0.05] cursor-pointer hover:border-white/[0.12] transition-all"
+        onClick={() => setViewActivity(v => !v)}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-base">
+              {myActivity.tipo === 'trail' ? '🏔️' : myActivity.tipo === 'ciclismo' ? '🚴' : '🏃'}
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-white">
+                {myActivity.nombre ?? tipoLabel[myActivity.tipo] ?? myActivity.tipo}
+              </p>
+              <p className="text-xs text-gray-500">
+                {format(new Date(myActivity.fecha), "d MMM · HH:mm", { locale: es })}
+                {myActivity.gpxNombre && ` · ${myActivity.gpxNombre}`}
+              </p>
+            </div>
+          </div>
+          <ChevronRight size={14} className={`text-gray-500 transition-transform ${viewActivity ? 'rotate-90' : ''}`} />
+        </div>
+
+        {/* Mini stats */}
+        <div className="flex flex-wrap gap-2 mt-2">
+          {myActivity.distanciaKm != null && (
+            <span className="text-xs text-gray-300 bg-surface-600 rounded-lg px-2 py-0.5">
+              {myActivity.distanciaKm.toFixed(2)} km
+            </span>
+          )}
+          {myActivity.duracionMin != null && (
+            <span className="text-xs text-gray-300 bg-surface-600 rounded-lg px-2 py-0.5">
+              {Math.floor(myActivity.duracionMin / 60) > 0
+                ? `${Math.floor(myActivity.duracionMin / 60)}h ${myActivity.duracionMin % 60}m`
+                : `${myActivity.duracionMin} min`}
+            </span>
+          )}
+          {myActivity.fcPromedio != null && (
+            <span className="text-xs text-red-400 bg-red-500/10 rounded-lg px-2 py-0.5">
+              ♥ {myActivity.fcPromedio} bpm
+            </span>
+          )}
+          {myActivity.elevacionM != null && myActivity.elevacionM > 0 && (
+            <span className="text-xs text-blue-400 bg-blue-500/10 rounded-lg px-2 py-0.5">
+              ↑ {Math.round(myActivity.elevacionM)} m
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Detalle completo */}
+      {viewActivity && (
+        <div className="bg-surface-800 rounded-xl p-4 border border-white/[0.05] space-y-4">
+          <ActivityStatsView activity={myActivity} showGpxDetails />
+          <div className="flex gap-2 pt-2 border-t border-white/[0.05]">
+            <button
+              onClick={() => { if (confirm('¿Eliminar esta actividad?')) deleteMutation.mutate(myActivity.id); }}
+              disabled={deleteMutation.isPending}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-red-400 border border-red-500/20 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+            >
+              <Trash2 size={12} /> Eliminar y volver a subir
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Sub-componente: sección del coach para ver y confirmar actividades del día
+// ──────────────────────────────────────────────────────────────────────────────
+function CoachDayActivities({ diaId, expanded }: { diaId: number; expanded: boolean }) {
+  const qc = useQueryClient();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['day-activities', diaId],
+    queryFn: () => integrationsApi.getDayActivities(diaId),
+    enabled: expanded,
+  });
+
+  const activities: (ActivityLog & { runner?: { id: number; nombre: string; apellido: string } })[] =
+    data?.data ?? [];
+
+  const confirmMutation = useMutation({
+    mutationFn: (id: number) => integrationsApi.confirmActivity(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['day-activities', diaId] }),
+  });
+
+  const unconfirmMutation = useMutation({
+    mutationFn: (id: number) => integrationsApi.unconfirmActivity(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['day-activities', diaId] }),
+  });
+
+  const [viewId, setViewId] = useState<number | null>(null);
+
+  if (!expanded) return null;
+  if (isLoading) return (
+    <div className="mt-4 pt-4 border-t border-white/[0.05]">
+      <p className="text-xs text-gray-500">Cargando actividades…</p>
+    </div>
+  );
+
+  if (activities.length === 0) return (
+    <div className="mt-4 pt-4 border-t border-white/[0.05]">
+      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Actividades enviadas</p>
+      <p className="text-xs text-gray-600 italic">Ningún corredor ha enviado actividad para este día</p>
+    </div>
+  );
+
+  return (
+    <div className="mt-4 pt-4 border-t border-white/[0.05] space-y-3">
+      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+        Actividades enviadas · {activities.length}
+      </p>
+
+      {activities.map(act => (
+        <div key={act.id} className="bg-surface-800 rounded-xl border border-white/[0.06] overflow-hidden">
+          {/* Header del corredor */}
+          <div
+            className="flex items-center justify-between px-3 py-2.5 cursor-pointer hover:bg-white/[0.02] transition-colors"
+            onClick={() => setViewId(viewId === act.id ? null : act.id)}
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-full bg-brand-500/20 text-brand-400 text-xs font-bold flex items-center justify-center flex-shrink-0">
+                {act.runner?.nombre?.[0]}{act.runner?.apellido?.[0]}
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">
+                  {act.runner?.nombre} {act.runner?.apellido}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {format(new Date(act.fecha), "d MMM · HH:mm", { locale: es })}
+                  {act.distanciaKm != null && ` · ${act.distanciaKm.toFixed(2)} km`}
+                  {act.duracionMin != null && ` · ${act.duracionMin} min`}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {act.confirmadoPorCoach ? (
+                <button
+                  onClick={e => { e.stopPropagation(); unconfirmMutation.mutate(act.id); }}
+                  disabled={unconfirmMutation.isPending}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-green-500/15 text-green-400 border border-green-500/20 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-colors disabled:opacity-50"
+                >
+                  <CheckCircle2 size={11} /> Confirmado
+                </button>
+              ) : (
+                <button
+                  onClick={e => { e.stopPropagation(); confirmMutation.mutate(act.id); }}
+                  disabled={confirmMutation.isPending}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-brand-500/15 text-brand-400 border border-brand-500/20 hover:bg-brand-500/25 transition-colors disabled:opacity-50"
+                >
+                  <AlertCircle size={11} /> Confirmar
+                </button>
+              )}
+              <ChevronRight size={13} className={`text-gray-500 transition-transform ${viewId === act.id ? 'rotate-90' : ''}`} />
+            </div>
+          </div>
+
+          {/* Detalle expandible */}
+          {viewId === act.id && (
+            <div className="px-3 pb-3 border-t border-white/[0.05]">
+              <div className="pt-3">
+                <ActivityStatsView activity={act} showGpxDetails />
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// DayCard principal
+// ──────────────────────────────────────────────────────────────────────────────
+function DayCard({ day, isCoach, planId, onUpdate, myActivity, onActivityChange, onDragStart, onDragOver, onDrop, isDragOver, isDragging }: {
   day: TrainingDay; isCoach: boolean; planId: number;
   onUpdate: () => void;
+  myActivity?: ActivityLog | null;
+  onActivityChange?: () => void;
   onDragStart?: () => void;
   onDragOver?: (e: React.DragEvent) => void;
   onDrop?: () => void;
@@ -107,13 +413,21 @@ function DayCard({ day, isCoach, planId, onUpdate, onDragStart, onDragOver, onDr
   const isRest = day.tipo === 'descanso' || day.tipo === 'recuperacion_activa';
   const cfg = tipoIcon[day.tipo] ?? tipoIcon.descanso;
 
+  // Badge de estado para runner
+  const activityBadge = !isCoach && !isRest ? (
+    myActivity?.confirmadoPorCoach
+      ? <span className="flex items-center gap-1 text-[10px] text-green-400 font-medium"><CheckCircle2 size={10} /> Confirmado</span>
+      : myActivity
+        ? <span className="flex items-center gap-1 text-[10px] text-yellow-400 font-medium"><Clock3 size={10} /> Enviado</span>
+        : null
+  ) : null;
+
   return (
     <div
       draggable={isCoach}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}
-      onDragEnd={() => {/* handled by parent */}}
       className={`rounded-xl border transition-all select-none ${
         isDragOver  ? 'border-brand-500/60 bg-brand-500/10 scale-[1.01]' :
         isDragging  ? 'opacity-40 border-white/[0.03]' :
@@ -142,7 +456,8 @@ function DayCard({ day, isCoach, planId, onUpdate, onDragStart, onDragOver, onDr
           </div>
         </div>
         {!isRest && (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {activityBadge}
             {isCoach && (
               <button onClick={e => { e.stopPropagation(); setEditing(!editing); setExpanded(true); }}
                 className="p-1.5 text-gray-600 hover:text-white hover:bg-surface-500 rounded-lg transition-all">
@@ -160,7 +475,6 @@ function DayCard({ day, isCoach, planId, onUpdate, onDragStart, onDragOver, onDr
         <div className="px-4 pb-4 pt-1 border-t border-white/[0.05]">
           {editing ? (
             <div className="space-y-3">
-              {/* Type + Day row */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-gray-400 mb-1">Tipo de actividad</label>
@@ -233,12 +547,29 @@ function DayCard({ day, isCoach, planId, onUpdate, onDragStart, onDragOver, onDr
           ) : (
             <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{day.descripcion}</p>
           )}
+
+          {/* Sección de actividad del corredor */}
+          {!isCoach && !isRest && (
+            <RunnerUploadSection
+              day={day}
+              myActivity={myActivity ?? null}
+              onUploaded={onActivityChange ?? (() => {})}
+            />
+          )}
+
+          {/* Sección del coach: ver actividades enviadas */}
+          {isCoach && !isRest && (
+            <CoachDayActivities diaId={day.id} expanded={expanded} />
+          )}
         </div>
       )}
     </div>
   );
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Página principal PlanDetail
+// ──────────────────────────────────────────────────────────────────────────────
 export default function PlanDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -252,6 +583,17 @@ export default function PlanDetail() {
     queryKey: ['plan', Number(id)],
     queryFn: () => plansApi.get(Number(id)),
   });
+
+  // Actividades del corredor (solo si no es coach)
+  const { data: activitiesData, refetch: refetchActivities } = useQuery({
+    queryKey: ['my-activities'],
+    queryFn: () => integrationsApi.getActivities(),
+    enabled: !isCoach,
+  });
+  const myActivities: ActivityLog[] = activitiesData?.data ?? [];
+  const activityByDay: Record<number, ActivityLog> = Object.fromEntries(
+    myActivities.filter(a => a.diaId != null).map(a => [a.diaId!, a])
+  );
 
   const deletePlanMutation = useMutation({
     mutationFn: () => plansApi.delete(Number(id)),
@@ -413,6 +755,13 @@ export default function PlanDetail() {
               const wKm = Math.round(s.dias.reduce((sum, d) => sum + (d.distanciaKm ?? 0), 0));
               const isSelected = s.numeroSemana === selectedWeek;
               const desc = s.descripcion?.split('·')[0]?.trim() ?? '';
+
+              // Contar cuántas actividades hay en esta semana (para runner)
+              const weekActivityCount = !isCoach
+                ? s.dias.filter(d => activityByDay[d.id] != null).length
+                : 0;
+              const weekTotal = s.dias.filter(d => d.tipo !== 'descanso' && d.tipo !== 'recuperacion_activa').length;
+
               return (
                 <button key={s.numeroSemana}
                   onClick={() => setSelectedWeek(s.numeroSemana)}
@@ -421,7 +770,12 @@ export default function PlanDetail() {
                   }`}>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold">Semana {s.numeroSemana}</span>
-                    {wKm > 0 && <span className="text-xs text-gray-500">{wKm}km</span>}
+                    <div className="flex items-center gap-1.5">
+                      {wKm > 0 && <span className="text-xs text-gray-500">{wKm}km</span>}
+                      {!isCoach && weekActivityCount > 0 && (
+                        <span className="text-[10px] text-green-400 font-medium">{weekActivityCount}/{weekTotal}</span>
+                      )}
+                    </div>
                   </div>
                   <p className="text-xs text-gray-500 mt-0.5 truncate">{desc}</p>
                 </button>
@@ -456,8 +810,14 @@ export default function PlanDetail() {
                 onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
               >
                 {week.dias.map(day => (
-                  <DayCard key={day.id} day={day} isCoach={isCoach} planId={plan.id}
+                  <DayCard
+                    key={day.id}
+                    day={day}
+                    isCoach={isCoach}
+                    planId={plan.id}
                     onUpdate={() => qc.invalidateQueries({ queryKey: ['plan', plan.id] })}
+                    myActivity={activityByDay[day.id] ?? null}
+                    onActivityChange={() => refetchActivities()}
                     isDragging={draggedId === day.id}
                     isDragOver={dragOverId === day.id}
                     onDragStart={() => setDraggedId(day.id)}

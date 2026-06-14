@@ -1,12 +1,11 @@
 import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { integrationsApi } from '../services/api';
-import {
-  Plus, Trash2, Heart, Flame, TrendingUp, Clock, Upload, X,
-  Zap, CheckCircle, FileText,
-} from 'lucide-react';
+import { Plus, Trash2, Upload, X, FileText, ChevronRight, CheckCircle2, Clock3 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { parseGpx } from '../utils/gpxParser';
+import ActivityStatsView, { ActivityLog } from '../components/ActivityStatsView';
 
 const TIPOS = [
   { id: 'correr',   label: 'Correr',   emoji: '🏃' },
@@ -75,15 +74,8 @@ const DISPOSITIVOS = [
   },
 ];
 
-interface Activity {
-  id: number; nombre?: string; tipo: string; fuente: string;
-  fecha: string; distanciaKm?: number; duracionMin?: number;
-  ritmoMinKm?: number; fcPromedio?: number; fcMax?: number;
-  elevacionM?: number; caloriasKcal?: number; potenciaW?: number; notas?: string;
-}
-
 function fmtPace(minKm?: number) {
-  if (!minKm) return null;
+  if (!minKm || minKm <= 0) return null;
   const m = Math.floor(minKm);
   const s = Math.round((minKm - m) * 60);
   return `${m}:${s.toString().padStart(2, '0')} /km`;
@@ -96,10 +88,7 @@ function fmtDuration(min?: number) {
   return h > 0 ? `${h}h ${m}m` : `${m} min`;
 }
 
-const FUENTE_BADGE: Record<string, string> = {
-  gpx:    'bg-brand-500/15 text-brand-400',
-  manual: 'bg-gray-500/15 text-gray-400',
-};
+const tipoEmoji = (t: string) => TIPOS.find(x => x.id === t)?.emoji ?? '💪';
 
 export default function MyActivities() {
   const qc = useQueryClient();
@@ -108,6 +97,7 @@ export default function MyActivities() {
   const [showGuide, setShowGuide] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState('');
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const [form, setForm] = useState({
     nombre: '', tipo: 'correr',
@@ -120,7 +110,7 @@ export default function MyActivities() {
     queryKey: ['my-activities'],
     queryFn: () => integrationsApi.getActivities(),
   });
-  const activities: Activity[] = activitiesData?.data ?? [];
+  const activities: ActivityLog[] = activitiesData?.data ?? [];
 
   const logMutation = useMutation({
     mutationFn: (d: object) => integrationsApi.logActivity(d),
@@ -149,28 +139,40 @@ export default function MyActivities() {
     try {
       const content = await file.text();
       if (!content.includes('<gpx') && !content.includes('<trk')) {
-        setUploadMsg('⚠ El archivo no parece ser un GPX válido. Asegúrate de exportar en formato GPX.');
-        setUploading(false);
+        setUploadMsg('⚠ El archivo no parece ser un GPX válido.');
         return;
       }
-      const nameMatch = content.match(/<name>(.*?)<\/name>/);
+
+      let parsed;
+      try { parsed = parseGpx(content); } catch { parsed = null; }
+
       await integrationsApi.logActivity({
-        tipo: 'correr',
-        nombre: nameMatch?.[1]?.trim() ?? file.name.replace('.gpx', ''),
-        fecha: new Date().toISOString(),
-        gpxContent: content,
-        gpxNombre: file.name,
+        tipo:                parsed?.tipo ?? 'correr',
+        nombre:              parsed?.name ?? file.name.replace('.gpx', ''),
+        fecha:               (parsed?.fecha ?? new Date()).toISOString(),
+        gpxContent:          content,
+        gpxNombre:           file.name,
+        distanciaKm:         parsed?.distanciaKm,
+        duracionMin:         parsed?.duracionMin,
+        tiempoElapsadoMin:   parsed?.tiempoElapsadoMin,
+        fcPromedio:          parsed?.fcPromedio,
+        fcMax:               parsed?.fcMax,
+        cadenciaPromedio:    parsed?.cadenciaPromedio,
+        cadenciaMax:         parsed?.cadenciaMax,
+        elevacionM:          parsed?.elevacionM,
+        elevacionPerdidaM:   parsed?.elevacionPerdidaM,
+        potenciaW:           parsed?.potenciaW,
+        potenciaMax:         parsed?.potenciaMax,
+        potenciaPonderada:   parsed?.potenciaPonderada,
+        potenciaPromedio30s: parsed?.potenciaPromedio30s,
       });
+
       qc.invalidateQueries({ queryKey: ['my-activities'] });
       setUploadMsg('✓ Actividad importada correctamente');
       setTimeout(() => setUploadMsg(''), 4000);
     } catch (err: any) {
       const msg = err?.response?.data?.error ?? err?.message ?? 'Error desconocido';
-      if (msg.includes('Network') || msg.includes('ECONNREFUSED')) {
-        setUploadMsg('⚠ El servidor no responde. Intenta en un momento.');
-      } else {
-        setUploadMsg(`⚠ ${msg}`);
-      }
+      setUploadMsg(`⚠ ${msg}`);
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -194,8 +196,6 @@ export default function MyActivities() {
       notas:        form.notas || undefined,
     });
   };
-
-  const tipoEmoji = (t: string) => TIPOS.find(x => x.id === t)?.emoji ?? '💪';
 
   return (
     <div className="p-4 lg:p-6 max-w-3xl mx-auto space-y-6">
@@ -242,7 +242,7 @@ export default function MyActivities() {
               {uploading ? 'Importando actividad…' : 'Arrastra tu archivo GPX aquí'}
             </p>
             <p className="text-xs text-gray-500 mt-1">
-              {uploading ? 'Un momento…' : 'o haz clic para seleccionar · Compatible con Garmin, Apple Watch, Polar, Suunto, COROS'}
+              {uploading ? 'Extrayendo métricas…' : 'o haz clic para seleccionar · Compatible con Garmin, Apple Watch, Polar, Suunto, COROS'}
             </p>
           </div>
           <input ref={fileRef} type="file" accept=".gpx" className="hidden"
@@ -258,16 +258,14 @@ export default function MyActivities() {
           }`}>{uploadMsg}</p>
         )}
 
-        {/* How to export guide */}
+        {/* Guía de exportación */}
         {showGuide && (
           <div className="space-y-3 pt-2 border-t border-white/[0.06]">
             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Cómo exportar GPX desde tu dispositivo</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {DISPOSITIVOS.map(d => (
                 <div key={d.nombre} className="bg-surface-700 rounded-xl p-4">
-                  <p className="text-sm font-bold text-white mb-2">
-                    {d.logo} {d.nombre}
-                  </p>
+                  <p className="text-sm font-bold text-white mb-2">{d.logo} {d.nombre}</p>
                   <ol className="space-y-1">
                     {d.pasos.map((paso, i) => (
                       <li key={i} className="text-xs text-gray-400 flex gap-2">
@@ -301,57 +299,78 @@ export default function MyActivities() {
           </div>
         ) : (
           activities.map(a => {
-            const metrics = [
-              a.distanciaKm != null && { label: 'km', value: a.distanciaKm.toFixed(2), color: 'text-white' },
-              fmtDuration(a.duracionMin) && { label: 'Duración', value: fmtDuration(a.duracionMin)!, color: 'text-white' },
-              fmtPace(a.ritmoMinKm) && { label: 'Ritmo', value: fmtPace(a.ritmoMinKm)!, color: 'text-white' },
-              a.fcPromedio != null && { label: 'FC prom', value: `${a.fcPromedio} bpm`, color: 'text-red-400', icon: <Heart size={10} /> },
-              a.fcMax != null && { label: 'FC máx', value: `${a.fcMax} bpm`, color: 'text-red-300', icon: <Heart size={10} /> },
-              a.elevacionM != null && { label: 'Elevación', value: `${Math.round(a.elevacionM)} m`, color: 'text-blue-400', icon: <TrendingUp size={10} /> },
-              a.caloriasKcal != null && { label: 'Calorías', value: `${a.caloriasKcal} kcal`, color: 'text-orange-400', icon: <Flame size={10} /> },
-              a.potenciaW != null && { label: 'Potencia', value: `${a.potenciaW} W`, color: 'text-yellow-400', icon: <Zap size={10} /> },
-            ].filter(Boolean) as { label: string; value: string; color: string; icon?: React.ReactNode }[];
+            const isExpanded = expandedId === a.id;
 
             return (
-              <div key={a.id} className="card p-4">
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">{tipoEmoji(a.tipo)}</span>
-                    <div>
+              <div key={a.id} className="card overflow-hidden">
+                {/* Fila resumen — clic para expandir */}
+                <div
+                  className="flex items-start gap-3 p-4 cursor-pointer hover:bg-white/[0.02] transition-colors"
+                  onClick={() => setExpandedId(isExpanded ? null : a.id)}
+                >
+                  <span className="text-2xl mt-0.5">{tipoEmoji(a.tipo)}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-white text-sm">
                         {a.nombre ?? TIPOS.find(t => t.id === a.tipo)?.label ?? a.tipo}
                       </p>
-                      <p className="text-xs text-gray-500">
-                        {format(new Date(a.fecha), "EEEE d 'de' MMMM · HH:mm", { locale: es })}
-                      </p>
+                      {/* Estado de confirmación */}
+                      {a.diaId && (
+                        a.confirmadoPorCoach
+                          ? <span className="flex items-center gap-1 text-[10px] text-green-400 font-medium"><CheckCircle2 size={10} /> Confirmado</span>
+                          : <span className="flex items-center gap-1 text-[10px] text-yellow-400 font-medium"><Clock3 size={10} /> Pendiente</span>
+                      )}
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
+                        a.fuente === 'gpx' ? 'bg-brand-500/15 text-brand-400' : 'bg-gray-500/15 text-gray-400'
+                      }`}>
+                        {a.fuente === 'gpx' ? 'GPX' : 'Manual'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {format(new Date(a.fecha), "EEEE d 'de' MMMM · HH:mm", { locale: es })}
+                    </p>
+
+                    {/* Mini métricas siempre visibles */}
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {a.distanciaKm != null && (
+                        <span className="text-xs font-bold text-white">{a.distanciaKm.toFixed(2)} km</span>
+                      )}
+                      {a.duracionMin != null && (
+                        <span className="text-xs text-gray-400">{fmtDuration(a.duracionMin)}</span>
+                      )}
+                      {a.ritmoMinKm != null && a.ritmoMinKm > 0 && (
+                        <span className="text-xs text-gray-400">{fmtPace(a.ritmoMinKm)}</span>
+                      )}
+                      {a.fcPromedio != null && (
+                        <span className="text-xs text-red-400">♥ {a.fcPromedio} bpm</span>
+                      )}
+                      {a.elevacionM != null && a.elevacionM > 0 && (
+                        <span className="text-xs text-blue-400">↑ {Math.round(a.elevacionM)} m</span>
+                      )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${FUENTE_BADGE[a.fuente] ?? FUENTE_BADGE.manual}`}>
-                      {a.fuente === 'gpx' ? 'GPX' : 'Manual'}
-                    </span>
-                    <button onClick={() => { if (confirm('¿Eliminar esta actividad?')) deleteMutation.mutate(a.id); }}
-                      className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all">
+
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        if (confirm('¿Eliminar esta actividad?')) deleteMutation.mutate(a.id);
+                      }}
+                      className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
+                    >
                       <Trash2 size={13} />
                     </button>
+                    <ChevronRight size={14} className={`text-gray-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                   </div>
                 </div>
 
-                {metrics.length > 0 && (
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                    {metrics.map(m => (
-                      <div key={m.label} className="bg-surface-700 rounded-xl p-2.5 text-center">
-                        <p className={`text-sm font-black ${m.color}`}>{m.value}</p>
-                        <p className="text-[10px] text-gray-500 mt-0.5 flex items-center justify-center gap-0.5">
-                          {m.icon}{m.label}
-                        </p>
-                      </div>
-                    ))}
+                {/* Detalle expandido con stats completos */}
+                {isExpanded && (
+                  <div className="px-4 pb-4 border-t border-white/[0.05]">
+                    <div className="pt-4">
+                      <ActivityStatsView activity={a} showGpxDetails />
+                    </div>
                   </div>
-                )}
-
-                {a.notas && (
-                  <p className="text-xs text-gray-500 mt-2.5 italic">"{a.notas}"</p>
                 )}
               </div>
             );
@@ -359,7 +378,7 @@ export default function MyActivities() {
         )}
       </div>
 
-      {/* Manual log modal */}
+      {/* Modal de registro manual */}
       {showForm && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 sm:px-4">
           <div className="card w-full sm:max-w-lg max-h-[92vh] overflow-y-auto animate-slide-up rounded-b-none sm:rounded-2xl">
@@ -425,7 +444,7 @@ export default function MyActivities() {
                 <label className="block text-xs font-semibold text-gray-400 mb-1.5">Notas</label>
                 <textarea value={form.notas}
                   onChange={e => setForm(f => ({ ...f, notas: e.target.value }))}
-                  rows={2} placeholder="¿Cómo te sentiste? ¿Algo especial del entrenamiento?"
+                  rows={2} placeholder="¿Cómo te sentiste?"
                   className="input w-full text-sm resize-none" />
               </div>
 

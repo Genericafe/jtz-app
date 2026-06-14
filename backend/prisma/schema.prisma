@@ -79,15 +79,24 @@ model ActivityLog {
   fecha         DateTime     @default(now())
   distanciaKm   Float?
   duracionMin   Int?
+  tiempoElapsadoMin Float?
   ritmoMinKm    Float?       // min/km
   fcPromedio    Int?
   fcMax         Int?
+  cadenciaPromedio  Int?
+  cadenciaMax       Int?
   elevacionM    Float?
+  elevacionPerdidaM Float?
   caloriasKcal  Int?
   potenciaW     Int?
+  potenciaMax   Int?
+  potenciaPonderada   Int?
+  potenciaPromedio30s Int?
   gpxContent    String?      @db.Text
   gpxNombre     String?
   notas         String?
+  confirmadoPorCoach Boolean  @default(false)
+  confirmedAt   DateTime?
   createdAt     DateTime     @default(now())
 }
 
