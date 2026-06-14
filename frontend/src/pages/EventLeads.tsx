@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { leadsApi, eventsApi, default as api } from '../services/api';
+import { PLANTILLAS } from '../utils/emailTemplates';
 import {
   ArrowLeft, Users, Send, Download, Copy, ExternalLink,
   CheckCircle, Sparkles, Mail, Route, Upload, Trash2,
-  Calendar, MapPin, Trophy, Clock, FileSpreadsheet, X,
+  Calendar, MapPin, Trophy, Clock, FileSpreadsheet, X, ChevronDown,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -37,13 +38,12 @@ export default function EventLeads() {
   const qc = useQueryClient();
 
   // Email composer state
-  const [emailPrompt, setEmailPrompt] = useState('');
   const [emailSubject, setEmailSubject] = useState('');
   const [emailMensaje, setEmailMensaje] = useState('');
   const [soloConfirmados, setSoloConfirmados] = useState(true);
-  const [generating, setGenerating] = useState(false);
   const [sendResult, setSendResult] = useState<'idle' | 'ok' | 'error'>('idle');
   const [sentCount, setSentCount] = useState(0);
+  const [plantillaOpen, setPlantillaOpen] = useState(false);
 
   // GPX state
   const [gpxStatus, setGpxStatus] = useState<'idle' | 'uploading' | 'ok' | 'error'>('idle');
@@ -132,23 +132,26 @@ export default function EventLeads() {
       setSendResult('ok');
       setEmailSubject('');
       setEmailMensaje('');
-      setEmailPrompt('');
     },
     onError: () => setSendResult('error'),
   });
 
-  const generateEmail = async () => {
-    if (!emailPrompt.trim()) return;
-    setGenerating(true);
-    try {
-      const res = await api.post(`/coach/events/${id}/generate-email`, { prompt: emailPrompt });
-      setEmailSubject(res.data.asunto ?? '');
-      setEmailMensaje(res.data.mensaje ?? '');
-    } catch {
-      // keep form empty so coach can try again
-    } finally {
-      setGenerating(false);
-    }
+  const aplicarPlantilla = (plantillaId: string) => {
+    if (!event) return;
+    const p = PLANTILLAS.find(t => t.id === plantillaId);
+    if (!p) return;
+    const { asunto, mensaje } = p.generar({
+      nombre: event.nombre,
+      fecha: event.fecha,
+      lugar: event.lugar,
+      ciudad: event.ciudad,
+      estado: event.estado,
+      distanciaKm: event.distanciaKm,
+      precio: event.precio,
+    });
+    setEmailSubject(asunto);
+    setEmailMensaje(mensaje);
+    setPlantillaOpen(false);
   };
 
   const uploadGpx = async (file: File) => {
@@ -362,7 +365,7 @@ export default function EventLeads() {
         )}
       </div>
 
-      {/* Email masivo con IA */}
+      {/* Email masivo */}
       <div className="card p-5 space-y-5">
         <div className="flex items-center gap-2">
           <Mail size={16} className="text-brand-400" />
@@ -386,29 +389,46 @@ export default function EventLeads() {
           ))}
         </div>
 
-        {/* AI prompt */}
+        {/* Selector de plantilla */}
         <div>
-          <label className="block text-xs font-semibold text-gray-400 mb-1.5">
-            ¿Qué quieres comunicar?
-          </label>
-          <div className="flex gap-2">
-            <input
-              value={emailPrompt}
-              onChange={e => setEmailPrompt(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && generateEmail()}
-              placeholder="Ej: recordatorio de que falta 1 semana, que estén listos y descansen bien…"
-              className="input flex-1 text-sm"
-            />
-            <button onClick={generateEmail} disabled={generating || !emailPrompt.trim()}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold transition-all disabled:opacity-50 whitespace-nowrap">
-              {generating
-                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                : <Sparkles size={14} />}
-              {generating ? 'Generando…' : 'Generar con IA'}
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs font-semibold text-gray-400">Plantilla de mensaje</label>
+            {(emailSubject || emailMensaje) && (
+              <button onClick={() => { setEmailSubject(''); setEmailMensaje(''); }}
+                className="text-xs text-gray-500 hover:text-red-400 transition-colors">
+                Limpiar
+              </button>
+            )}
+          </div>
+
+          {/* Dropdown */}
+          <div className="relative">
+            <button onClick={() => setPlantillaOpen(o => !o)}
+              className="w-full flex items-center justify-between gap-2 px-4 py-3 rounded-xl bg-surface-600 border border-white/[0.08] text-sm text-gray-300 hover:text-white hover:border-brand-500/30 transition-all">
+              <span className="flex items-center gap-2">
+                <Sparkles size={14} className="text-brand-400" />
+                Elegir plantilla para generar el mensaje…
+              </span>
+              <ChevronDown size={14} className={`transition-transform ${plantillaOpen ? 'rotate-180' : ''}`} />
             </button>
+
+            {plantillaOpen && (
+              <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-surface-700 border border-white/[0.1] rounded-xl shadow-xl overflow-hidden">
+                {PLANTILLAS.map(p => (
+                  <button key={p.id} onClick={() => aplicarPlantilla(p.id)}
+                    className="w-full text-left px-4 py-3 hover:bg-surface-600 transition-colors border-b border-white/[0.04] last:border-0 flex items-start gap-3">
+                    <span className="text-xl flex-shrink-0 mt-0.5">{p.emoji}</span>
+                    <div>
+                      <p className="text-sm font-semibold text-white">{p.label}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{p.descripcion}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <p className="text-xs text-gray-600 mt-1.5">
-            La IA redactará el correo con el contexto del evento. Podrás editarlo antes de enviarlo.
+            La plantilla se rellena automáticamente con los datos del evento. Puedes editar el texto antes de enviar.
           </p>
         </div>
 
@@ -423,8 +443,8 @@ export default function EventLeads() {
           <div>
             <label className="block text-xs font-semibold text-gray-400 mb-1.5">Mensaje</label>
             <textarea value={emailMensaje} onChange={e => setEmailMensaje(e.target.value)}
-              rows={6} placeholder="Escribe o genera el mensaje aquí…"
-              className="input w-full text-sm resize-none" />
+              rows={8} placeholder="Elige una plantilla o escribe el mensaje aquí…"
+              className="input w-full text-sm resize-none font-mono" />
           </div>
         </div>
 

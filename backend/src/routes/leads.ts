@@ -1,6 +1,5 @@
 import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import Anthropic from '@anthropic-ai/sdk';
 import { authMiddleware, coachOnly, AuthRequest } from '../middleware/auth';
 import { sendBulkUpdate } from '../services/email';
 import { z } from 'zod';
@@ -84,52 +83,6 @@ router.post('/events/:id/broadcast', async (req: AuthRequest, res: Response) => 
   });
 
   return res.json({ ok: true, sent: recipients.length });
-});
-
-// AI email generator
-router.post('/events/:id/generate-email', async (req: AuthRequest, res: Response) => {
-  const { prompt } = req.body;
-  if (!prompt) return res.status(400).json({ error: 'Prompt requerido' });
-
-  const event = await prisma.event.findUnique({ where: { id: Number(req.params.id) } });
-  if (!event) return res.status(404).json({ error: 'Evento no encontrado' });
-
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return res.status(503).json({ error: 'API de IA no configurada' });
-
-  const client = new Anthropic({ apiKey });
-  const diasAlEvento = Math.ceil((new Date(event.fecha).getTime() - Date.now()) / 86400000);
-  const fechaStr = new Date(event.fecha).toLocaleDateString('es-MX', { dateStyle: 'full', timeZone: 'America/Tijuana' });
-
-  try {
-    const msg = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
-      messages: [{
-        role: 'user',
-        content: `Eres el asistente de comunicación de JTZ Running Club.
-
-Evento: ${event.nombre}
-Fecha: ${fechaStr} (en ${diasAlEvento} días)
-Lugar: ${event.lugar}${event.ciudad ? `, ${event.ciudad}` : ''}
-${event.distanciaKm ? `Distancia: ${event.distanciaKm} km` : ''}
-
-El coach quiere comunicar: "${prompt}"
-
-Genera un correo motivador y profesional para los corredores inscritos en español mexicano.
-Responde ÚNICAMENTE con JSON válido (sin markdown, sin código, sin explicaciones):
-{"asunto":"...","mensaje":"..."}`
-      }],
-    });
-
-    const text = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '{}';
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const result = JSON.parse(jsonMatch?.[0] ?? text);
-    return res.json(result);
-  } catch (err) {
-    console.error('[generate-email]', err);
-    return res.status(500).json({ error: 'Error generando el mensaje' });
-  }
 });
 
 // Update lead status manually
