@@ -86,10 +86,16 @@ app.post('/api/setup/coach', express.json(), async (req: any, res: any) => {
     const coachEmail = email ?? 'coach@jtz.mx';
     const existing = await prisma.user.findUnique({ where: { email: coachEmail } });
     if (existing) {
-      // Actualizar contraseña
       const hashed = await bcrypt.hash(password ?? 'coach123', 10);
       await prisma.user.update({ where: { email: coachEmail }, data: { password: hashed } });
-      return res.json({ ok: true, action: 'password_updated', email: coachEmail });
+      // Also create runner record if missing
+      const hasRunner = await prisma.runner.findUnique({ where: { userId: existing.id } });
+      if (!hasRunner) {
+        await prisma.runner.create({
+          data: { userId: existing.id, nombre: nombre ?? 'Jorge', apellido: apellido ?? 'Torres', ciudad: 'México', nivel: 'elite' },
+        });
+      }
+      return res.json({ ok: true, action: 'password_updated', email: coachEmail, runnerCreated: !hasRunner });
     }
     const hashed = await bcrypt.hash(password ?? 'coach123', 10);
     await prisma.user.create({

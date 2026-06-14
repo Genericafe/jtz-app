@@ -35,7 +35,21 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
     }),
     prisma.user.findUnique({ where: { id: req.userId! }, select: { email: true } }),
   ]);
-  if (!runner) return res.status(404).json({ error: 'Perfil no encontrado' });
+  if (!runner) {
+    if (req.userRole === 'coach') {
+      // Coach with no runner record yet — return synthetic profile
+      return res.json({
+        id: 0, userId: req.userId, nombre: '', apellido: '',
+        ciudad: 'México', estado: 'México', pais: 'México',
+        nivel: 'elite', telefono: null, genero: null,
+        tallaCamiseta: null, notas: null, activo: true,
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        trainingPlans: [], payments: [], eventRegistrations: [], activityLogs: [],
+        paidLeadEventIds: [],
+      });
+    }
+    return res.status(404).json({ error: 'Perfil no encontrado' });
+  }
 
   // Include paid/confirmed EventLeads (for runners who registered via landing page)
   const paidLeads = user ? await prisma.eventLead.findMany({
@@ -74,10 +88,15 @@ router.put('/me', async (req: AuthRequest, res: Response) => {
         data: parse.data,
       });
     } else {
+      // Verify user exists before create — prevents FK violation if JWT is stale
+      const userExists = await prisma.user.findUnique({ where: { id: req.userId! }, select: { id: true } });
+      if (!userExists) {
+        return res.status(401).json({ error: 'Sesión inválida. Cierra sesión y vuelve a iniciar.' });
+      }
       runner = await prisma.runner.create({
         data: {
           userId:   req.userId!,
-          nombre:   parse.data.nombre   ?? 'Coach',
+          nombre:   parse.data.nombre   ?? '',
           apellido: parse.data.apellido ?? '',
           ciudad:   parse.data.ciudad   ?? 'México',
           ...parse.data,
