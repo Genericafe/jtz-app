@@ -7,7 +7,7 @@ import {
   ArrowLeft, Users, Send, Download, Copy, ExternalLink,
   CheckCircle, Sparkles, Mail, Route, Upload, Trash2,
   Calendar, MapPin, Trophy, Clock, FileSpreadsheet, X, ChevronDown,
-  Share2, Instagram, Facebook,
+  Share2, Instagram, Facebook, Shirt,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -271,6 +271,15 @@ export default function EventLeads() {
     return acc;
   }, {});
 
+  // Stats de tallas
+  const ORDEN_TALLAS = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+  const tallaStats = ORDEN_TALLAS.map(t => ({
+    talla: t,
+    count: uniqueRows.filter(r => r.tallaPlayera === t).length,
+  }));
+  const totalConTalla = uniqueRows.filter(r => r.tallaPlayera).length;
+  const sinTalla = uniqueRows.filter(r => !r.tallaPlayera).length;
+
   const downloadCSV = () => {
     if (!rows.length) return;
     const headers = ['Nombre', 'Email', 'Teléfono', 'Ciudad', 'Fecha Nac.', 'Talla', 'Estado', 'Monto (MXN)', 'Canal', 'UTM Source', 'UTM Medium', 'Fecha inscripción'];
@@ -424,6 +433,56 @@ export default function EventLeads() {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Tallas de playera */}
+      {totalConTalla > 0 && (
+        <div className="card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-bold text-white flex items-center gap-2">
+              <Shirt size={15} className="text-brand-400" /> Tallas de playera
+            </h2>
+            <span className="text-xs text-gray-500">
+              {totalConTalla} de {stats.total} registraron talla
+            </span>
+          </div>
+
+          <div className="space-y-2.5">
+            {tallaStats.map(({ talla, count }) => (
+              <div key={talla} className="flex items-center gap-3">
+                <span className="text-xs font-black text-white w-8 flex-shrink-0">{talla}</span>
+                <div className="flex-1 bg-surface-800 rounded-full h-3 overflow-hidden">
+                  <div
+                    className="bg-brand-500 h-3 rounded-full transition-all duration-500"
+                    style={{ width: totalConTalla > 0 ? `${(count / totalConTalla) * 100}%` : '0%' }}
+                  />
+                </div>
+                <span className={`text-sm font-black w-6 text-right flex-shrink-0 ${count > 0 ? 'text-white' : 'text-gray-700'}`}>
+                  {count}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Resumen de pedido */}
+          <div className="mt-4 pt-4 border-t border-white/[0.06]">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Resumen para pedir al proveedor</p>
+            <div className="flex flex-wrap gap-2">
+              {tallaStats.filter(t => t.count > 0).map(({ talla, count }) => (
+                <div key={talla} className="flex items-center gap-1.5 bg-surface-700 border border-white/[0.08] rounded-xl px-3 py-2">
+                  <span className="text-xs font-bold text-white">{talla}</span>
+                  <span className="text-brand-400 font-black text-sm">×{count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {sinTalla > 0 && (
+            <p className="text-xs text-yellow-400 mt-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-3 py-2">
+              ⚠️ {sinTalla} inscrito{sinTalla > 1 ? 's' : ''} aún sin talla registrada — recuérdales completar su registro
+            </p>
+          )}
         </div>
       )}
 
