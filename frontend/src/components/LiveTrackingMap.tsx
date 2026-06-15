@@ -8,6 +8,7 @@ interface Props {
   track: MapPoint[];
   referenceRoute?: MapPoint[];
   currentPos?: MapPoint;
+  heading?: number | null;
   className?: string;
 }
 
@@ -52,7 +53,7 @@ function closestAheadIdx(route: MapPoint[], pos: MapPoint, pastIdx: number): num
 }
 
 const LiveTrackingMap = memo(function LiveTrackingMap({
-  track, referenceRoute, currentPos, className = '',
+  track, referenceRoute, currentPos, heading, className = '',
 }: Props) {
   const containerRef    = useRef<HTMLDivElement>(null);
   const mapRef          = useRef<maplibregl.Map | null>(null);
@@ -248,6 +249,10 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
 
     if (autoFollowRef.current) {
       map.panTo([currentPos.lng, currentPos.lat], { duration: 800 });
+      // Rotate map to face direction of travel (course-up)
+      if (heading != null) {
+        map.rotateTo(heading, { duration: 600, easing: t => t });
+      }
     }
 
     // Update next-waypoint marker

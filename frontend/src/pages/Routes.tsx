@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   MapPin, Plus, Play, Star, Globe, Lock, Trash2, Upload,
-  Mountain, Bike, Waves, ChevronDown, X, BookOpen,
+  Mountain, Bike, Waves, ChevronDown, X, BookOpen, Map,
 } from 'lucide-react';
 import { routesApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import RouteMapBuilder, { type BuiltRoute } from '../components/RouteMapBuilder';
 
 type Tipo = 'correr' | 'trail' | 'ciclismo' | 'natacion' | 'otro';
 type Tab = 'club' | 'mias' | 'publicas';
@@ -67,10 +68,22 @@ export default function RoutesPage() {
   const qc        = useQueryClient();
   const { user, isCoach } = useAuth();
   const [tab, setTab] = useState<Tab>('club');
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm]         = useState(false);
+  const [showMapBuilder, setShowMapBuilder] = useState(false);
   const [form, setForm]     = useState<CreateForm>(EMPTY_FORM);
   const [gpxError, setGpxError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleMapRoute = (route: BuiltRoute) => {
+    setForm(f => ({
+      ...f,
+      distanciaKm: route.distanceKm.toFixed(2),
+      gpxContent:  route.gpxContent,
+      gpxNombre:   'ruta-trazada.gpx',
+    }));
+    setShowMapBuilder(false);
+    setShowForm(true);
+  };
 
   const { data, isLoading } = useQuery<RouteItem[]>({
     queryKey: ['routes'],
@@ -264,9 +277,9 @@ export default function RoutesPage() {
                 />
               </div>
 
-              {/* GPX upload */}
+              {/* Route source */}
               <div>
-                <label className="block text-xs text-gray-400 mb-1.5">Archivo GPX (opcional)</label>
+                <label className="block text-xs text-gray-400 mb-1.5">Trayecto (opcional)</label>
                 {form.gpxNombre ? (
                   <div className="flex items-center justify-between bg-dark-700 border border-green-500/30 rounded-xl px-4 py-3">
                     <span className="text-sm text-green-400 truncate">{form.gpxNombre}</span>
@@ -276,12 +289,20 @@ export default function RoutesPage() {
                     </button>
                   </div>
                 ) : (
-                  <button
-                    onClick={() => fileRef.current?.click()}
-                    className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-dark-600 hover:border-brand-500 rounded-xl py-4 text-gray-400 hover:text-white transition-all text-sm"
-                  >
-                    <Upload size={16} /> Subir archivo .gpx
-                  </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => { setShowForm(false); setShowMapBuilder(true); }}
+                      className="flex items-center justify-center gap-2 border-2 border-dark-600 hover:border-brand-500 rounded-xl py-4 text-gray-400 hover:text-white transition-all text-sm font-medium"
+                    >
+                      <Map size={16} /> Trazar en mapa
+                    </button>
+                    <button
+                      onClick={() => fileRef.current?.click()}
+                      className="flex items-center justify-center gap-2 border-2 border-dashed border-dark-600 hover:border-brand-500 rounded-xl py-4 text-gray-400 hover:text-white transition-all text-sm font-medium"
+                    >
+                      <Upload size={16} /> Subir GPX
+                    </button>
+                  </div>
                 )}
                 <input ref={fileRef} type="file" accept=".gpx" className="hidden"
                   onChange={e => { if (e.target.files?.[0]) handleGpx(e.target.files[0]); }} />
@@ -323,6 +344,15 @@ export default function RoutesPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Map-based route builder */}
+      {showMapBuilder && (
+        <RouteMapBuilder
+          tipoActividad={form.tipo}
+          onConfirm={handleMapRoute}
+          onCancel={() => { setShowMapBuilder(false); setShowForm(true); }}
+        />
       )}
     </div>
   );

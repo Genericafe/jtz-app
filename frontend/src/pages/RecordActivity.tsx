@@ -6,7 +6,7 @@ import {
   CheckCircle, Map, Navigation, Zap, TrendingUp, Mountain,
 } from 'lucide-react';
 import { integrationsApi, routesApi } from '../services/api';
-import { useActivityRecorder, formatPace, formatElapsed } from '../hooks/useActivityRecorder';
+import { useActivityRecorder, formatPace, formatElapsed, bearingDeg } from '../hooks/useActivityRecorder';
 import { parseGpx } from '../utils/gpxParser';
 import type { MapPoint } from '../components/LiveTrackingMap';
 
@@ -80,8 +80,16 @@ export default function RecordActivity() {
     }
     let remM = 0;
     for (let i = minIdx; i < referenceRoute.length - 1; i++) remM += haversineM(referenceRoute[i], referenceRoute[i + 1]);
-    return { offRouteM: minDist, remainingKm: remM / 1000 };
-  }, [currentPos, referenceRoute]);
+    // Bearing to a point slightly ahead on the route
+    const aheadIdx = Math.min(minIdx + 8, referenceRoute.length - 1);
+    const nextPt = referenceRoute[aheadIdx];
+    const absBearing = bearingDeg(currentPos, nextPt);
+    // Relative to current heading so arrow points left/right/forward
+    const relBearing = state.headingDeg != null
+      ? (absBearing - state.headingDeg + 360) % 360
+      : absBearing;
+    return { offRouteM: minDist, remainingKm: remM / 1000, relBearing, absBearing };
+  }, [currentPos, referenceRoute, state.headingDeg]);
 
   const totalRouteKm = useMemo(() => {
     if (referenceRoute.length < 2) return 0;
@@ -218,6 +226,7 @@ export default function RecordActivity() {
               track={trackMapPoints}
               referenceRoute={referenceRoute.length > 0 ? referenceRoute : undefined}
               currentPos={currentPos}
+              heading={state.headingDeg}
               className="w-full h-full"
             />
           </Suspense>
@@ -228,10 +237,18 @@ export default function RecordActivity() {
 
           {/* Navigation status */}
           {(routeId || savedRouteId) && isActive && navInfo && (
-            <div className={`flex items-center justify-between px-5 py-2 border-b border-white/[0.06] ${
+            <div className={`flex items-center justify-between px-4 py-2 border-b border-white/[0.06] ${
               onRoute ? 'bg-green-500/10' : 'bg-red-500/10'
             }`}>
               <div className="flex items-center gap-2">
+                {/* Direction arrow */}
+                <div
+                  className="w-8 h-8 rounded-full bg-blue-500/20 border border-blue-400/40 flex items-center justify-center flex-shrink-0"
+                  style={{ transform: `rotate(${navInfo.relBearing}deg)`, transition: 'transform 0.6s ease' }}
+                  title={`${Math.round(navInfo.absBearing)}°`}
+                >
+                  <Navigation size={14} className="text-blue-300" />
+                </div>
                 {onRoute
                   ? <CheckCircle size={14} className="text-green-400" />
                   : <Navigation size={14} className="text-red-400" />}

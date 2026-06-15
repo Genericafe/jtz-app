@@ -18,6 +18,19 @@ export interface RecorderState {
   error: string | null;
   elevationGainM: number;
   currentAltitudeM: number | null;
+  headingDeg: number | null;
+}
+
+export function bearingDeg(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number },
+): number {
+  const d2r = Math.PI / 180;
+  const φ1 = from.lat * d2r, φ2 = to.lat * d2r;
+  const Δλ = (to.lng - from.lng) * d2r;
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 }
 
 function haversineKm(a: TrackPoint, b: TrackPoint) {
@@ -48,7 +61,7 @@ export function useActivityRecorder() {
     status: 'idle', elapsed: 0, distanceKm: 0,
     paceMinKm: null, currentPaceMinKm: null,
     fcActual: null, track: [], error: null,
-    elevationGainM: 0, currentAltitudeM: null,
+    elevationGainM: 0, currentAltitudeM: null, headingDeg: null,
   });
 
   // Capacitor returns string IDs, browser returns numbers
@@ -117,12 +130,19 @@ export function useActivityRecorder() {
         lastAltitudeRef.current = point.ele;
       }
 
+      // Heading — computed from last GPS point to current (only when moving)
+      let headingDeg = s.headingDeg;
+      if (lastPointRef.current && addedKm > 0.002) {
+        headingDeg = bearingDeg(lastPointRef.current, point);
+      }
+
       return {
         ...s,
         distanceKm: s.distanceKm + addedKm,
         track: [...s.track, point],
         elevationGainM,
         currentAltitudeM: point.ele ?? s.currentAltitudeM,
+        headingDeg,
       };
     });
   };
@@ -212,7 +232,7 @@ export function useActivityRecorder() {
       status: 'idle', elapsed: 0, distanceKm: 0,
       paceMinKm: null, currentPaceMinKm: null,
       fcActual: null, track: [], error: null,
-      elevationGainM: 0, currentAltitudeM: null,
+      elevationGainM: 0, currentAltitudeM: null, headingDeg: null,
     });
   }, []);
 
