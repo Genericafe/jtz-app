@@ -44,11 +44,17 @@ router.get('/events/:id', async (req: Request, res: Response) => {
 });
 
 const leadSchema = z.object({
-  nombre:   z.string().min(1),
-  apellido: z.string().min(1),
-  email:    z.string().email(),
-  telefono: z.string().optional(),
-  ciudad:   z.string().optional(),
+  nombre:          z.string().min(1),
+  apellido:        z.string().min(1),
+  email:           z.string().email(),
+  telefono:        z.string().optional(),
+  ciudad:          z.string().optional(),
+  fechaNacimiento: z.string().optional(),
+  tallaPlayera:    z.string().optional(),
+  fuente:          z.string().optional(),
+  utmSource:       z.string().optional(),
+  utmMedium:       z.string().optional(),
+  utmCampaign:     z.string().optional(),
 });
 
 // Free event registration
@@ -60,10 +66,17 @@ router.post('/events/:id/register', async (req: Request, res: Response) => {
   if (!event) return res.status(404).json({ error: 'Evento no encontrado' });
   if (event.precio > 0) return res.status(400).json({ error: 'Este evento requiere pago' });
 
+  const { fechaNacimiento, ...leadRest } = parse.data;
   const lead = await prisma.eventLead.upsert({
     where: { eventId_email: { eventId: event.id, email: parse.data.email } },
     update: { estado: 'confirmado' },
-    create: { ...parse.data, eventId: event.id, estado: 'confirmado', monto: 0 },
+    create: {
+      ...leadRest,
+      fechaNacimiento: fechaNacimiento ? new Date(fechaNacimiento) : undefined,
+      eventId: event.id,
+      estado: 'confirmado',
+      monto: 0,
+    },
   });
 
   // Send confirmation email (fire-and-forget)
@@ -92,10 +105,17 @@ router.post('/events/:id/checkout', async (req: Request, res: Response) => {
   if (event.precio <= 0) return res.status(400).json({ error: 'Este evento es gratuito' });
 
   // Create or update lead as pending
+  const { fechaNacimiento: fnPaid, ...leadRestPaid } = parse.data;
   const lead = await prisma.eventLead.upsert({
     where: { eventId_email: { eventId: event.id, email: parse.data.email } },
-    update: { ...parse.data, estado: 'pendiente' },
-    create: { ...parse.data, eventId: event.id, estado: 'pendiente', monto: event.precio },
+    update: { ...leadRestPaid, fechaNacimiento: fnPaid ? new Date(fnPaid) : undefined, estado: 'pendiente' },
+    create: {
+      ...leadRestPaid,
+      fechaNacimiento: fnPaid ? new Date(fnPaid) : undefined,
+      eventId: event.id,
+      estado: 'pendiente',
+      monto: event.precio,
+    },
   });
 
   const stripeKey = process.env.STRIPE_SECRET_KEY;

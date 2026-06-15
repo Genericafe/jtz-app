@@ -7,6 +7,7 @@ import {
   ArrowLeft, Users, Send, Download, Copy, ExternalLink,
   CheckCircle, Sparkles, Mail, Route, Upload, Trash2,
   Calendar, MapPin, Trophy, Clock, FileSpreadsheet, X, ChevronDown,
+  Share2, Instagram, Facebook,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -17,9 +18,13 @@ interface Row {
   email: string;
   telefono: string;
   ciudad: string;
+  fechaNacimiento?: string;
+  tallaPlayera?: string;
   estado: string;
   monto: number;
-  fuente: 'App' | 'Landing';
+  fuente: string;
+  utmSource?: string;
+  utmMedium?: string;
   fecha: string;
   leadId?: number;
 }
@@ -32,44 +37,163 @@ const estadoStyle: Record<string, string> = {
   inscrito:   'bg-brand-500/15 text-brand-400',
 };
 
+const fuenteStyle: Record<string, { label: string; color: string }> = {
+  instagram: { label: 'Instagram', color: 'bg-pink-500/15 text-pink-400' },
+  facebook:  { label: 'Facebook',  color: 'bg-blue-500/15 text-blue-400' },
+  whatsapp:  { label: 'WhatsApp',  color: 'bg-green-500/15 text-green-400' },
+  app:       { label: 'App',       color: 'bg-brand-500/15 text-brand-400' },
+  web:       { label: 'Web',       color: 'bg-gray-500/15 text-gray-400' },
+};
+
+function fuenteBadge(fuente: string) {
+  const cfg = fuenteStyle[fuente] ?? { label: fuente || 'Web', color: 'bg-gray-500/15 text-gray-400' };
+  return (
+    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg.color}`}>{cfg.label}</span>
+  );
+}
+
+// ── Share Panel ───────────────────────────────────────────────────────────────
+function SharePanel({ landingUrl, eventNombre }: { landingUrl: string; eventNombre: string }) {
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const channels = [
+    {
+      key: 'instagram',
+      label: 'Instagram',
+      icon: <Instagram size={15} />,
+      color: 'bg-gradient-to-br from-pink-500 to-purple-600',
+      utm: { utm_source: 'instagram', utm_medium: 'story' },
+    },
+    {
+      key: 'facebook',
+      label: 'Facebook',
+      icon: <Facebook size={15} />,
+      color: 'bg-blue-600',
+      utm: { utm_source: 'facebook', utm_medium: 'post' },
+    },
+    {
+      key: 'whatsapp',
+      label: 'WhatsApp',
+      icon: <span className="text-sm">💬</span>,
+      color: 'bg-green-600',
+      utm: { utm_source: 'whatsapp', utm_medium: 'message' },
+    },
+  ];
+
+  const buildUrl = (utm: Record<string, string>) => {
+    const params = new URLSearchParams(utm).toString();
+    return `${landingUrl}?${params}`;
+  };
+
+  const copyLink = (key: string, url: string) => {
+    navigator.clipboard.writeText(url);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2500);
+  };
+
+  const shareWhatsApp = (url: string) => {
+    const text = encodeURIComponent(`¡Inscríbete al ${eventNombre}! 🏃\n${url}`);
+    window.open(`https://wa.me/?text=${text}`, '_blank');
+  };
+
+  const shareNative = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: eventNombre, text: `¡Inscríbete al ${eventNombre}!`, url: landingUrl });
+      } catch { /* cancelled */ }
+    } else {
+      copyLink('native', landingUrl);
+    }
+  };
+
+  return (
+    <div className="card p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <Share2 size={16} className="text-brand-400" />
+        <h2 className="text-sm font-bold text-white">Compartir evento</h2>
+        <span className="text-xs text-gray-500 ml-1">· Cada canal tiene su propio link con seguimiento</span>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {channels.map(ch => {
+          const url = buildUrl(ch.utm);
+          const isCopied = copiedKey === ch.key;
+          return (
+            <div key={ch.key} className="bg-surface-800 rounded-xl border border-white/[0.06] overflow-hidden">
+              <div className={`flex items-center gap-2 px-3 py-2 ${ch.color}`}>
+                <span className="text-white">{ch.icon}</span>
+                <span className="text-white text-xs font-bold">{ch.label}</span>
+              </div>
+              <div className="p-3 space-y-2">
+                <p className="text-[10px] text-gray-500 font-mono break-all leading-relaxed">
+                  ...{new URLSearchParams(ch.utm).toString()}
+                </p>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => copyLink(ch.key, url)}
+                    className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      isCopied ? 'bg-green-500/20 text-green-400' : 'bg-surface-600 text-gray-300 hover:text-white'
+                    }`}>
+                    {isCopied ? <><CheckCircle size={11} /> Copiado</> : <><Copy size={11} /> Copiar</>}
+                  </button>
+                  {ch.key === 'whatsapp' ? (
+                    <button onClick={() => shareWhatsApp(url)}
+                      className="flex items-center justify-center px-2 py-1.5 rounded-lg bg-green-600/20 text-green-400 hover:bg-green-600/30 transition-all">
+                      <ExternalLink size={11} />
+                    </button>
+                  ) : (
+                    <button onClick={() => copyLink(ch.key + '-open', url)}
+                      className="flex items-center justify-center px-2 py-1.5 rounded-lg bg-surface-600 text-gray-400 hover:text-white transition-all">
+                      <ExternalLink size={11} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex gap-2 flex-wrap pt-1 border-t border-white/[0.05]">
+        <button
+          onClick={() => copyLink('base', landingUrl)}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all border ${
+            copiedKey === 'base'
+              ? 'bg-green-500/15 border-green-500/30 text-green-400'
+              : 'bg-surface-600 border-white/[0.08] text-gray-300 hover:text-white'
+          }`}>
+          {copiedKey === 'base' ? <><CheckCircle size={12} /> Copiado</> : <><Copy size={12} /> Link base (sin UTM)</>}
+        </button>
+        <button onClick={shareNative}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-brand-500/15 border border-brand-500/25 text-brand-400 text-xs font-semibold hover:bg-brand-500/25 transition-all">
+          <Share2 size={12} /> Compartir desde el teléfono
+        </button>
+        <a href={landingUrl} target="_blank" rel="noreferrer"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-600 border border-white/[0.08] text-xs text-gray-300 hover:text-white transition-all">
+          <ExternalLink size={12} /> Ver landing
+        </a>
+      </div>
+
+      <p className="text-xs text-gray-600">
+        Cuando alguien se inscriba por un link con UTM, verás el canal en la columna <strong className="text-gray-400">Canal</strong> de la tabla de inscritos.
+      </p>
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function EventLeads() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  // Email composer state
   const [emailSubject, setEmailSubject] = useState('');
   const [emailMensaje, setEmailMensaje] = useState('');
   const [soloConfirmados, setSoloConfirmados] = useState(true);
   const [sendResult, setSendResult] = useState<'idle' | 'ok' | 'error'>('idle');
   const [sentCount, setSentCount] = useState(0);
   const [plantillaOpen, setPlantillaOpen] = useState(false);
-
-  // GPX state
   const [gpxStatus, setGpxStatus] = useState<'idle' | 'uploading' | 'ok' | 'error'>('idle');
-
-  // Copy link
-  const [copied, setCopied] = useState(false);
-
-  const downloadCSV = () => {
-    if (!rows.length) return;
-    const headers = ['Nombre', 'Email', 'Teléfono', 'Ciudad', 'Estado', 'Monto (MXN)', 'Fuente', 'Fecha'];
-    const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const csvRows = rows.map(r => [
-      r.nombre, r.email, r.telefono, r.ciudad, r.estado, r.monto, r.fuente,
-      format(new Date(r.fecha), "d/MM/yyyy HH:mm", { locale: es }),
-    ].map(escape).join(','));
-    const csv = '﻿' + [headers.join(','), ...csvRows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${(event?.nombre ?? 'inscritos').replace(/\s+/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
 
   const { data: eventData, isLoading } = useQuery({
     queryKey: ['event-detail', id],
@@ -83,37 +207,45 @@ export default function EventLeads() {
   const rows: Row[] = [
     ...((detail?.registros ?? []).map((r: {
       id: number;
-      runner: { nombre: string; apellido: string; telefono?: string; ciudad?: string; user?: { email: string } };
+      runner: { nombre: string; apellido: string; telefono?: string; ciudad?: string; fechaNacimiento?: string; user?: { email: string } };
       pagado: boolean; estado: string; createdAt: string;
+      tallaPlayera?: string; fechaNacimiento?: string;
     }) => ({
       key: `app-${r.id}`,
       nombre: `${r.runner.nombre} ${r.runner.apellido}`,
       email: r.runner.user?.email ?? '',
       telefono: r.runner.telefono ?? '',
       ciudad: r.runner.ciudad ?? '',
+      fechaNacimiento: r.fechaNacimiento ?? r.runner.fechaNacimiento,
+      tallaPlayera: r.tallaPlayera,
       estado: r.pagado ? 'pagado' : (r.estado ?? 'inscrito'),
       monto: r.pagado ? (detail?.precio ?? 0) : 0,
-      fuente: 'App' as const,
+      fuente: 'app',
       fecha: r.createdAt,
     }))),
     ...((detail?.leads ?? []).map((l: {
       id: number; nombre: string; apellido: string; email: string;
-      telefono?: string; ciudad?: string; estado: string; monto: number; createdAt: string;
+      telefono?: string; ciudad?: string; fechaNacimiento?: string; tallaPlayera?: string;
+      estado: string; monto: number; createdAt: string;
+      fuente?: string; utmSource?: string; utmMedium?: string;
     }) => ({
       key: `lead-${l.id}`,
       nombre: `${l.nombre} ${l.apellido}`,
       email: l.email,
       telefono: l.telefono ?? '',
       ciudad: l.ciudad ?? '',
+      fechaNacimiento: l.fechaNacimiento,
+      tallaPlayera: l.tallaPlayera,
       estado: l.estado,
       monto: l.monto,
-      fuente: 'Landing' as const,
+      fuente: l.fuente ?? 'web',
+      utmSource: l.utmSource,
+      utmMedium: l.utmMedium,
       fecha: l.createdAt,
       leadId: l.id,
     }))),
   ];
 
-  // Deduplicate by email (App takes priority)
   const seen = new Set<string>();
   const uniqueRows = rows.filter(r => {
     if (!r.email || seen.has(r.email)) return false;
@@ -130,6 +262,37 @@ export default function EventLeads() {
     destinatarios: soloConfirmados
       ? uniqueRows.filter(r => r.estado === 'pagado' || r.estado === 'confirmado').length
       : uniqueRows.length,
+  };
+
+  // Stats por canal
+  const canalStats = uniqueRows.reduce<Record<string, number>>((acc, r) => {
+    const key = r.fuente || 'web';
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  const downloadCSV = () => {
+    if (!rows.length) return;
+    const headers = ['Nombre', 'Email', 'Teléfono', 'Ciudad', 'Fecha Nac.', 'Talla', 'Estado', 'Monto (MXN)', 'Canal', 'UTM Source', 'UTM Medium', 'Fecha inscripción'];
+    const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const csvRows = uniqueRows.map(r => [
+      r.nombre, r.email, r.telefono, r.ciudad,
+      r.fechaNacimiento ? format(new Date(r.fechaNacimiento), 'd/MM/yyyy') : '',
+      r.tallaPlayera ?? '',
+      r.estado, r.monto,
+      r.fuente, r.utmSource ?? '', r.utmMedium ?? '',
+      format(new Date(r.fecha), "d/MM/yyyy HH:mm", { locale: es }),
+    ].map(escape).join(','));
+    const csv = '﻿' + [headers.join(','), ...csvRows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(event?.nombre ?? 'inscritos').replace(/\s+/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const deleteMutation = useMutation({
@@ -161,13 +324,9 @@ export default function EventLeads() {
     const p = PLANTILLAS.find(t => t.id === plantillaId);
     if (!p) return;
     const { asunto, mensaje } = p.generar({
-      nombre: event.nombre,
-      fecha: event.fecha,
-      lugar: event.lugar,
-      ciudad: event.ciudad,
-      estado: event.estado,
-      distanciaKm: event.distanciaKm,
-      precio: event.precio,
+      nombre: event.nombre, fecha: event.fecha, lugar: event.lugar,
+      ciudad: event.ciudad, estado: event.estado,
+      distanciaKm: event.distanciaKm, precio: event.precio,
     });
     setEmailSubject(asunto);
     setEmailMensaje(mensaje);
@@ -200,13 +359,12 @@ export default function EventLeads() {
   return (
     <div className="p-4 lg:p-6 max-w-6xl mx-auto space-y-6">
 
-      {/* Back */}
       <button onClick={() => navigate('/eventos')}
         className="flex items-center gap-2 text-sm text-gray-500 hover:text-white transition-colors">
         <ArrowLeft size={15} /> Volver a eventos
       </button>
 
-      {/* Event header card */}
+      {/* Event header */}
       {event && (
         <div className="card p-4 lg:p-5">
           <h1 className="text-xl lg:text-2xl font-black text-white leading-tight mb-2">{event.nombre}</h1>
@@ -227,17 +385,9 @@ export default function EventLeads() {
             )}
           </div>
           <div className="flex gap-2 flex-wrap">
-            <button onClick={() => { navigator.clipboard.writeText(landingUrl); setCopied(true); setTimeout(() => setCopied(false), 2500); }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-600 border border-white/[0.08] text-xs text-gray-300 hover:text-white transition-all">
-              {copied ? <><CheckCircle size={12} className="text-green-400" /> Copiado</> : <><Copy size={12} /> Copiar link</>}
-            </button>
-            <a href={landingUrl} target="_blank" rel="noreferrer"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-600 border border-white/[0.08] text-xs text-gray-300 hover:text-white transition-all">
-              <ExternalLink size={12} /> Landing
-            </a>
             <button onClick={downloadCSV}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-600 border border-white/[0.08] text-xs text-gray-300 hover:text-white transition-all">
-              <FileSpreadsheet size={12} /> CSV
+              <FileSpreadsheet size={12} /> Exportar CSV
             </button>
           </div>
         </div>
@@ -258,6 +408,27 @@ export default function EventLeads() {
           </div>
         ))}
       </div>
+
+      {/* Canal breakdown */}
+      {Object.keys(canalStats).length > 0 && (
+        <div className="card p-4">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Inscripciones por canal</p>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(canalStats).sort((a, b) => b[1] - a[1]).map(([canal, count]) => {
+              const cfg = fuenteStyle[canal] ?? { label: canal, color: 'bg-gray-500/15 text-gray-400' };
+              return (
+                <div key={canal} className={`flex items-center gap-2 px-3 py-1.5 rounded-xl ${cfg.color} bg-opacity-20`}>
+                  <span className="text-xs font-bold">{cfg.label}</span>
+                  <span className="text-xs font-black">{count}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Share panel */}
+      {event && <SharePanel landingUrl={landingUrl} eventNombre={event.nombre} />}
 
       {/* GPX upload */}
       <div className="card p-4">
@@ -303,10 +474,10 @@ export default function EventLeads() {
           <>
             {/* Desktop table */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="w-full min-w-[700px] text-sm">
+              <table className="w-full text-sm">
                 <thead className="bg-surface-800/60 border-b border-white/[0.05]">
                   <tr>
-                    {['Nombre', 'Email', 'Teléfono', 'Ciudad', 'Estado', 'Monto', 'Fuente', 'Fecha', ''].map(h => (
+                    {['Nombre', 'Email', 'Teléfono', 'Talla', 'Fecha Nac.', 'Estado', 'Monto', 'Canal', 'Fecha', ''].map(h => (
                       <th key={h} className="text-left text-xs font-bold text-gray-500 uppercase tracking-wide px-4 py-3 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -315,9 +486,16 @@ export default function EventLeads() {
                   {uniqueRows.map(row => (
                     <tr key={row.key} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
                       <td className="px-4 py-3 font-medium text-white whitespace-nowrap">{row.nombre}</td>
-                      <td className="px-4 py-3 text-gray-400 text-xs max-w-[160px] truncate">{row.email || '—'}</td>
+                      <td className="px-4 py-3 text-gray-400 text-xs max-w-[140px] truncate">{row.email || '—'}</td>
                       <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{row.telefono || '—'}</td>
-                      <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{row.ciudad || '—'}</td>
+                      <td className="px-4 py-3 text-center">
+                        {row.tallaPlayera
+                          ? <span className="text-xs font-bold bg-surface-600 text-white px-2 py-0.5 rounded-lg">{row.tallaPlayera}</span>
+                          : <span className="text-gray-600 text-xs">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
+                        {row.fechaNacimiento ? format(new Date(row.fechaNacimiento), 'd/MM/yyyy') : '—'}
+                      </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         {row.leadId ? (
                           <select value={row.estado}
@@ -339,11 +517,7 @@ export default function EventLeads() {
                           ? <span className="text-white">${row.monto.toLocaleString('es-MX')}</span>
                           : <span className="text-green-400 text-xs">Gratis</span>}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                          row.fuente === 'App' ? 'bg-brand-500/15 text-brand-400' : 'bg-purple-500/15 text-purple-400'
-                        }`}>{row.fuente}</span>
-                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">{fuenteBadge(row.fuente)}</td>
                       <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
                         {format(new Date(row.fecha), "d MMM yyyy", { locale: es })}
                       </td>
@@ -372,14 +546,17 @@ export default function EventLeads() {
                     </span>
                   </div>
                   <p className="text-xs text-gray-400 truncate">{row.email}</p>
-                  <div className="flex items-center justify-between text-xs text-gray-500">
-                    <span>{row.telefono || '—'} · {row.ciudad || '—'}</span>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                        row.fuente === 'App' ? 'bg-brand-500/15 text-brand-400' : 'bg-purple-500/15 text-purple-400'
-                      }`}>{row.fuente}</span>
-                      <span className="font-bold text-white">{row.monto > 0 ? `$${row.monto.toLocaleString('es-MX')}` : 'Gratis'}</span>
-                    </div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                    {row.tallaPlayera && (
+                      <span className="bg-surface-600 text-white px-2 py-0.5 rounded-lg font-bold">{row.tallaPlayera}</span>
+                    )}
+                    {row.fechaNacimiento && (
+                      <span>{format(new Date(row.fechaNacimiento), 'd/MM/yyyy')}</span>
+                    )}
+                    {fuenteBadge(row.fuente)}
+                    <span className="font-bold text-white ml-auto">
+                      {row.monto > 0 ? `$${row.monto.toLocaleString('es-MX')}` : 'Gratis'}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -395,7 +572,6 @@ export default function EventLeads() {
           <h2 className="text-sm font-bold text-white">Correo masivo a inscritos</h2>
         </div>
 
-        {/* Destinatarios */}
         <div className="flex gap-3">
           {[
             { key: true, label: `Solo pagados y confirmados (${stats.pagados + stats.confirmados})` },
@@ -412,7 +588,6 @@ export default function EventLeads() {
           ))}
         </div>
 
-        {/* Selector de plantilla */}
         <div>
           <div className="flex items-center justify-between mb-2">
             <label className="text-xs font-semibold text-gray-400">Plantilla de mensaje</label>
@@ -423,8 +598,6 @@ export default function EventLeads() {
               </button>
             )}
           </div>
-
-          {/* Dropdown */}
           <div className="relative">
             <button onClick={() => setPlantillaOpen(o => !o)}
               className="w-full flex items-center justify-between gap-2 px-4 py-3 rounded-xl bg-surface-600 border border-white/[0.08] text-sm text-gray-300 hover:text-white hover:border-brand-500/30 transition-all">
@@ -434,7 +607,6 @@ export default function EventLeads() {
               </span>
               <ChevronDown size={14} className={`transition-transform ${plantillaOpen ? 'rotate-180' : ''}`} />
             </button>
-
             {plantillaOpen && (
               <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-surface-700 border border-white/[0.1] rounded-xl shadow-xl overflow-hidden">
                 {PLANTILLAS.map(p => (
@@ -450,18 +622,13 @@ export default function EventLeads() {
               </div>
             )}
           </div>
-          <p className="text-xs text-gray-600 mt-1.5">
-            La plantilla se rellena automáticamente con los datos del evento. Puedes editar el texto antes de enviar.
-          </p>
         </div>
 
-        {/* Subject + Body */}
         <div className="space-y-3">
           <div>
             <label className="block text-xs font-semibold text-gray-400 mb-1.5">Asunto</label>
             <input value={emailSubject} onChange={e => setEmailSubject(e.target.value)}
-              placeholder="Asunto del correo…"
-              className="input w-full text-sm" />
+              placeholder="Asunto del correo…" className="input w-full text-sm" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-400 mb-1.5">Mensaje</label>
@@ -471,16 +638,11 @@ export default function EventLeads() {
           </div>
         </div>
 
-        {/* Send result */}
         {sendResult === 'ok' && (
           <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-green-500/10 border border-green-500/20">
             <CheckCircle size={16} className="text-green-400 flex-shrink-0" />
-            <p className="text-sm text-green-300">
-              ¡Listo! Se enviaron <strong>{sentCount}</strong> correos exitosamente.
-            </p>
-            <button onClick={() => setSendResult('idle')} className="ml-auto text-gray-500 hover:text-white">
-              <X size={14} />
-            </button>
+            <p className="text-sm text-green-300">¡Listo! Se enviaron <strong>{sentCount}</strong> correos exitosamente.</p>
+            <button onClick={() => setSendResult('idle')} className="ml-auto text-gray-500 hover:text-white"><X size={14} /></button>
           </div>
         )}
         {sendResult === 'error' && (
@@ -489,7 +651,6 @@ export default function EventLeads() {
           </div>
         )}
 
-        {/* Send button */}
         <div className="flex items-center gap-3">
           <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-xl bg-surface-700 border border-white/[0.06]">
             <Clock size={13} className="text-brand-400 flex-shrink-0" />

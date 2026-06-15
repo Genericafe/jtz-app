@@ -4,7 +4,7 @@ import { publicApi } from '../services/api';
 import { Event } from '../types';
 import { format, isAfter, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { MapPin, Calendar, Trophy, Users, CheckCircle, Clock, Zap, CreditCard } from 'lucide-react';
+import { MapPin, Calendar, Trophy, Users, CheckCircle, Clock, Zap, CreditCard, Shirt } from 'lucide-react';
 
 const typeGradient: Record<string, string> = {
   carrera:       'from-orange-500 via-red-500 to-rose-700',
@@ -13,6 +13,8 @@ const typeGradient: Record<string, string> = {
   social:        'from-purple-500 via-pink-500 to-rose-600',
 };
 const typeEmoji: Record<string, string> = { carrera: '🏃', trail: '🏔️', entrenamiento: '💪', social: '🎉' };
+
+const TALLAS = ['XS', 'S', 'M', 'L', 'XL', 'XXL'] as const;
 
 function CountdownTimer({ fecha }: { fecha: string }) {
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
@@ -50,7 +52,11 @@ function CountdownTimer({ fecha }: { fecha: string }) {
   );
 }
 
-type FormData = { nombre: string; apellido: string; email: string; telefono: string; ciudad: string };
+type FormData = {
+  nombre: string; apellido: string; email: string;
+  telefono: string; ciudad: string;
+  fechaNacimiento: string; tallaPlayera: string;
+};
 
 export default function EventLanding() {
   const { id } = useParams<{ id: string }>();
@@ -59,8 +65,17 @@ export default function EventLanding() {
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<'form' | 'processing' | 'success' | 'error'>('form');
   const [checkoutLoading, setCheckoutLoading] = useState(false);
-  const [form, setForm] = useState<FormData>({ nombre: '', apellido: '', email: '', telefono: '', ciudad: '' });
+  const [form, setForm] = useState<FormData>({
+    nombre: '', apellido: '', email: '', telefono: '', ciudad: '',
+    fechaNacimiento: '', tallaPlayera: '',
+  });
   const [formError, setFormError] = useState('');
+
+  // Capture UTM / source from URL on mount
+  const utmSource   = searchParams.get('utm_source')   ?? '';
+  const utmMedium   = searchParams.get('utm_medium')   ?? '';
+  const utmCampaign = searchParams.get('utm_campaign') ?? '';
+  const fuente      = utmSource || 'web';
 
   useEffect(() => {
     publicApi.getEvent(Number(id))
@@ -82,19 +97,23 @@ export default function EventLanding() {
     if (searchParams.get('cancelled')) setStep('form');
   }, [searchParams]);
 
+  const trackingData = { fuente, utmSource, utmMedium, utmCampaign };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
     if (!event) return;
 
+    const payload = { ...form, ...trackingData };
+
     try {
       if (event.precio === 0) {
         setCheckoutLoading(true);
-        await publicApi.registerFree(event.id, form);
+        await publicApi.registerFree(event.id, payload);
         setStep('success');
       } else {
         setCheckoutLoading(true);
-        const res = await publicApi.checkout(event.id, form);
+        const res = await publicApi.checkout(event.id, payload);
         window.location.href = res.data.url;
       }
     } catch (err: unknown) {
@@ -167,7 +186,6 @@ export default function EventLanding() {
           <div className="text-6xl mb-4">{emoji}</div>
           <h1 className="text-4xl md:text-5xl font-black text-white mb-4 leading-tight">{event.nombre}</h1>
           {event.descripcion && <p className="text-white/80 text-lg mb-6 max-w-lg mx-auto">{event.descripcion}</p>}
-
           {!isPast && <CountdownTimer fecha={event.fecha} />}
         </div>
       </div>
@@ -221,6 +239,7 @@ export default function EventLanding() {
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              {/* Nombre + Apellido */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-400 mb-1.5">Nombre *</label>
@@ -233,12 +252,16 @@ export default function EventLanding() {
                     required placeholder="García" className="input w-full" />
                 </div>
               </div>
+
+              {/* Email */}
               <div>
                 <label className="block text-xs font-semibold text-gray-400 mb-1.5">Correo electrónico *</label>
                 <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
                   required placeholder="ana@correo.com" className="input w-full" />
                 <p className="text-xs text-gray-500 mt-1">Recibirás los detalles y confirmación aquí</p>
               </div>
+
+              {/* Teléfono + Ciudad */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-400 mb-1.5">Teléfono</label>
@@ -252,11 +275,42 @@ export default function EventLanding() {
                 </div>
               </div>
 
+              {/* Fecha de nacimiento */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5">Fecha de nacimiento *</label>
+                <input type="date" value={form.fechaNacimiento}
+                  onChange={e => setForm({ ...form, fechaNacimiento: e.target.value })}
+                  required max={new Date().toISOString().slice(0, 10)}
+                  className="input w-full" />
+                <p className="text-xs text-gray-500 mt-1">Necesaria para clasificación por categoría</p>
+              </div>
+
+              {/* Talla de playera */}
+              <div>
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 mb-2">
+                  <Shirt size={13} /> Talla de playera *
+                </label>
+                <div className="grid grid-cols-6 gap-2">
+                  {TALLAS.map(t => (
+                    <button key={t} type="button" onClick={() => setForm({ ...form, tallaPlayera: t })}
+                      className={`py-2.5 rounded-xl text-sm font-bold transition-all border ${
+                        form.tallaPlayera === t
+                          ? 'bg-brand-500 text-white border-brand-400 shadow-glow-sm'
+                          : 'bg-surface-600 text-gray-400 border-white/[0.06] hover:text-white hover:border-white/[0.12]'
+                      }`}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 mt-1.5">No se garantiza la talla si el evento se llena</p>
+              </div>
+
               {formError && (
                 <p className="text-red-400 text-sm bg-red-400/10 border border-red-400/20 rounded-xl px-4 py-3">{formError}</p>
               )}
 
-              <button type="submit" disabled={checkoutLoading}
+              <button type="submit"
+                disabled={checkoutLoading || !form.fechaNacimiento || !form.tallaPlayera}
                 className={`w-full py-4 rounded-xl font-black text-white text-base transition-all active:scale-95 disabled:opacity-50 bg-gradient-to-r ${gradient} shadow-lg hover:shadow-xl`}>
                 {checkoutLoading ? 'Un momento...' : event.precio === 0
                   ? '✓ Inscribirme gratis'

@@ -203,14 +203,16 @@ model Event {
 }
 
 model EventRegistration {
-  id       Int    @id @default(autoincrement())
-  eventId  Int
-  event    Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  runnerId Int
-  runner   Runner @relation(fields: [runnerId], references: [id], onDelete: Cascade)
-  estado   String @default("inscrito")
-  pagado   Boolean @default(false)
-  createdAt DateTime @default(now())
+  id              Int       @id @default(autoincrement())
+  eventId         Int
+  event           Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  runnerId        Int
+  runner          Runner    @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  estado          String    @default("inscrito")
+  pagado          Boolean   @default(false)
+  tallaPlayera    String?
+  fechaNacimiento DateTime?
+  createdAt       DateTime  @default(now())
 
   @@unique([eventId, runnerId])
 }
@@ -286,18 +288,24 @@ model OrderItem {
 }
 
 model EventLead {
-  id              Int      @id @default(autoincrement())
+  id              Int       @id @default(autoincrement())
   eventId         Int
-  event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event           Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
   nombre          String
   apellido        String
   email           String
   telefono        String?
   ciudad          String?
-  estado          String   @default("pendiente") // "pendiente" | "pagado" | "confirmado" | "cancelado"
+  fechaNacimiento DateTime?
+  tallaPlayera    String?
+  fuente          String    @default("web") // 'web' | 'instagram' | 'facebook' | 'whatsapp' | 'app' | 'otro'
+  utmSource       String?
+  utmMedium       String?
+  utmCampaign     String?
+  estado          String    @default("pendiente") // "pendiente" | "pagado" | "confirmado" | "cancelado"
   stripeSessionId String?
-  monto           Float    @default(0)
-  createdAt       DateTime @default(now())
+  monto           Float     @default(0)
+  createdAt       DateTime  @default(now())
 
   @@unique([eventId, email])
 }
