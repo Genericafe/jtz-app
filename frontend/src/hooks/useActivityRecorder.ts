@@ -16,6 +16,8 @@ export interface RecorderState {
   fcActual: number | null;
   track: TrackPoint[];
   error: string | null;
+  elevationGainM: number;
+  currentAltitudeM: number | null;
 }
 
 function haversineKm(a: TrackPoint, b: TrackPoint) {
@@ -46,13 +48,15 @@ export function useActivityRecorder() {
     status: 'idle', elapsed: 0, distanceKm: 0,
     paceMinKm: null, currentPaceMinKm: null,
     fcActual: null, track: [], error: null,
+    elevationGainM: 0, currentAltitudeM: null,
   });
 
   // Capacitor returns string IDs, browser returns numbers
-  const watchIdRef    = useRef<string | number | null>(null);
-  const timerRef      = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastPointRef  = useRef<TrackPoint | null>(null);
-  const recentDistRef = useRef<{ time: number; dist: number }[]>([]);
+  const watchIdRef      = useRef<string | number | null>(null);
+  const timerRef        = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastPointRef    = useRef<TrackPoint | null>(null);
+  const lastAltitudeRef = useRef<number | null>(null);
+  const recentDistRef   = useRef<{ time: number; dist: number }[]>([]);
   const isNative      = Capacitor.isNativePlatform();
 
   const clearTimer = () => {
@@ -102,7 +106,24 @@ export function useActivityRecorder() {
         recentDistRef.current.push({ time: Date.now(), dist: addedKm });
       }
       lastPointRef.current = point;
-      return { ...s, distanceKm: s.distanceKm + addedKm, track: [...s.track, point] };
+
+      // Elevation tracking — only count gains > 2 m to filter GPS altitude noise
+      let elevationGainM = s.elevationGainM;
+      if (point.ele != null) {
+        if (lastAltitudeRef.current != null) {
+          const diff = point.ele - lastAltitudeRef.current;
+          if (diff > 2) elevationGainM += diff;
+        }
+        lastAltitudeRef.current = point.ele;
+      }
+
+      return {
+        ...s,
+        distanceKm: s.distanceKm + addedKm,
+        track: [...s.track, point],
+        elevationGainM,
+        currentAltitudeM: point.ele ?? s.currentAltitudeM,
+      };
     });
   };
 
@@ -185,11 +206,13 @@ export function useActivityRecorder() {
 
   const reset = useCallback(() => {
     lastPointRef.current = null;
+    lastAltitudeRef.current = null;
     recentDistRef.current = [];
     setState({
       status: 'idle', elapsed: 0, distanceKm: 0,
       paceMinKm: null, currentPaceMinKm: null,
       fcActual: null, track: [], error: null,
+      elevationGainM: 0, currentAltitudeM: null,
     });
   }, []);
 

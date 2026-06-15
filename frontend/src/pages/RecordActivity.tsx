@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Play, Pause, Square, MapPin, Heart, Clock, ChevronLeft,
-  CheckCircle, Map, Navigation, Zap,
+  CheckCircle, Map, Navigation, Zap, TrendingUp, Mountain,
 } from 'lucide-react';
 import { integrationsApi, routesApi } from '../services/api';
 import { useActivityRecorder, formatPace, formatElapsed } from '../hooks/useActivityRecorder';
@@ -133,6 +133,10 @@ export default function RecordActivity() {
           <StatCard label="Distancia"    value={`${state.distanceKm.toFixed(2)} km`} />
           <StatCard label="Tiempo"       value={formatElapsed(state.elapsed)} />
           <StatCard label="Ritmo promedio" value={`${formatPace(state.paceMinKm)} /km`} />
+          <StatCard label="Desnivel+"    value={state.elevationGainM > 0 ? `+${Math.round(state.elevationGainM)} m` : '-- m'} />
+          {state.currentAltitudeM != null && (
+            <StatCard label="Altitud máx." value={`${Math.round(state.currentAltitudeM)} m`} />
+          )}
           <StatCard label="Puntos GPS"   value={String(state.track.length)} />
         </div>
         <div className="space-y-3 mb-6">
@@ -256,14 +260,20 @@ export default function RecordActivity() {
           )}
 
           {/* Metrics row */}
-          <div className="grid grid-cols-4 gap-0 px-4 py-4">
-            <MetricCell value={formatElapsed(state.elapsed)} label="Tiempo" icon={<Clock size={11} />} />
-            <MetricCell value={`${state.distanceKm.toFixed(2)}`} label="km" icon={<Zap size={11} />} highlight />
+          <div className="grid grid-cols-5 gap-0 px-2 py-4">
+            <MetricCell value={formatElapsed(state.elapsed)} label="Tiempo" icon={<Clock size={10} />} />
+            <MetricCell value={state.distanceKm.toFixed(2)} label="km" icon={<Zap size={10} />} highlight />
             <MetricCell value={formatPace(state.currentPaceMinKm ?? state.paceMinKm)} label="min/km" />
+            <MetricCell
+              value={state.elevationGainM > 0 ? `+${Math.round(state.elevationGainM)}` : (state.currentAltitudeM != null ? `${Math.round(state.currentAltitudeM)}` : '--')}
+              label={state.elevationGainM > 0 ? 'desnivel m' : 'altitud m'}
+              icon={<TrendingUp size={10} />}
+              color="text-emerald-400"
+            />
             <MetricCell
               value={state.fcActual ? String(state.fcActual) : '--'}
               label="bpm"
-              icon={<Heart size={11} />}
+              icon={<Heart size={10} />}
               color={state.fcActual ? 'text-red-400' : undefined}
             />
           </div>
@@ -377,6 +387,14 @@ export default function RecordActivity() {
             { v: formatPace(state.currentPaceMinKm ?? state.paceMinKm), l: 'min/km actual' },
             { v: formatPace(state.paceMinKm), l: 'ritmo promedio' },
             { v: state.fcActual ? String(state.fcActual) : '--', l: 'bpm', icon: <Heart size={11} />, c: state.fcActual ? 'text-red-400' : 'text-gray-600' },
+            {
+              v: state.elevationGainM > 0 ? `+${Math.round(state.elevationGainM)} m` : '--',
+              l: 'desnivel+', icon: <TrendingUp size={11} />, c: 'text-emerald-400',
+            },
+            {
+              v: state.currentAltitudeM != null ? `${Math.round(state.currentAltitudeM)} m` : '--',
+              l: 'altitud', icon: <Mountain size={11} />, c: state.currentAltitudeM != null ? 'text-sky-400' : 'text-gray-600',
+            },
           ].map(({ v, l, icon, c }, i) => (
             <div key={i} className="bg-dark-800 rounded-2xl p-4 text-center border border-dark-700">
               <div className={`text-3xl font-bold ${c ?? 'text-white'}`}>{v}</div>
