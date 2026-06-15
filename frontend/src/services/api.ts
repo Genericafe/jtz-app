@@ -98,6 +98,11 @@ export const announcementsApi = {
   delete: (id: number) => api.delete(`/announcements/${id}`),
 };
 
+export const notificationsApi = {
+  registerToken: (token: string, platform: string) => api.post('/notifications/token', { token, platform }),
+  removeToken:   (token: string) => api.delete('/notifications/token', { data: { token } }),
+};
+
 export const routesApi = {
   list:        (tipo?: string)           => api.get('/routes', { params: tipo ? { tipo } : {} }),
   get:         (id: number)              => api.get(`/routes/${id}`),

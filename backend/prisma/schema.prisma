@@ -18,6 +18,7 @@ model User {
   emailConfig     EmailConfig?
   coachPreference CoachPreference?
   routes          Route[]
+  pushTokens      PushToken[]
 }
 
 model EmailConfig {
@@ -325,6 +326,16 @@ model Route {
   author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model PushToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  platform  String   @default("android") // "android" | "ios" | "web"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Announcement {

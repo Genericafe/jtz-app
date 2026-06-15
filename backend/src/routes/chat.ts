@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware, coachOnly, AuthRequest } from '../middleware/auth';
 import { encrypt, decrypt } from '../services/chatCrypto';
+import { sendToUser } from '../services/pushNotifications';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -203,6 +204,10 @@ router.post('/:runnerId', async (req: AuthRequest, res: Response) => {
         leido: false,
       },
     });
+
+    // Push notification al receptor (fire-and-forget)
+    const senderLabel = myRole === 'coach' ? 'Coach' : `${runnerRecord.nombre} ${runnerRecord.apellido}`;
+    sendToUser(receiverId, `Mensaje de ${senderLabel}`, content.trim(), { type: 'chat' }).catch(() => {});
 
     return res.status(201).json({
       id: newMsg.id,

@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, ReactNode } from 'react';
 import { AuthUser } from '../types';
 import { authApi } from '../services/api';
+import { removePushToken } from '../services/pushService';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -23,9 +24,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('jtz_token', token);
     localStorage.setItem('jtz_user', JSON.stringify(userData));
     setUser(userData);
+    // Push init happens in AppPushInit (needs navigate, not available here)
   };
 
   const logout = () => {
+    removePushToken().catch(() => {});
     localStorage.removeItem('jtz_token');
     localStorage.removeItem('jtz_user');
     setUser(null);

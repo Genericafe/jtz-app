@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware, coachOnly, AuthRequest } from '../middleware/auth';
 import { z } from 'zod';
+import { sendToAllRunners } from '../services/pushNotifications';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -27,6 +28,13 @@ router.post('/', coachOnly, async (req: AuthRequest, res: Response) => {
   if (!parse.success) return res.status(400).json({ error: 'Datos inválidos' });
 
   const ann = await prisma.announcement.create({ data: parse.data });
+
+  sendToAllRunners(
+    parse.data.titulo,
+    parse.data.contenido.slice(0, 120),
+    { type: 'announcement', id: String(ann.id) },
+  ).catch(() => {});
+
   return res.status(201).json(ann);
 });
 

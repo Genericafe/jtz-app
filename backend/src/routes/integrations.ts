@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { z } from 'zod';
+import { sendToUser } from '../services/pushNotifications';
 import {
   getValidStravaToken,
   fetchRecentStravaActivities,
@@ -232,7 +233,17 @@ router.patch('/activities/:id/confirm', async (req: AuthRequest, res: Response) 
     const log = await (prisma as any).activityLog.update({
       where: { id: Number(req.params.id) },
       data: { confirmadoPorCoach: true, confirmedAt: new Date() },
+      include: { runner: { select: { userId: true, nombre: true } } },
     });
+
+    // Notifica al corredor
+    sendToUser(
+      log.runner.userId,
+      '¡Actividad confirmada! ✅',
+      `Tu entrenamiento "${log.nombre ?? 'actividad'}" fue confirmado por el coach`,
+      { type: 'activity', id: String(log.id) },
+    ).catch(() => {});
+
     return res.json(log);
   } catch (err: any) {
     return res.status(500).json({ error: err?.message ?? 'Error al confirmar' });

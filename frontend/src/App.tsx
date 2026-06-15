@@ -1,5 +1,7 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -22,11 +24,26 @@ import Chat from './pages/Chat';
 import MyActivities from './pages/MyActivities';
 import RecordActivity from './pages/RecordActivity';
 import RoutesPage from './pages/Routes';
+import { initPush } from './services/pushService';
+
+// Initializes push notifications once user is logged in (needs navigate hook)
+function AppPushInit() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!user) return;
+    initPush((path) => navigate(path)).catch(() => {});
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return null;
+}
 
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <AppPushInit />
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/registro" element={<Register />} />
@@ -36,7 +53,7 @@ export default function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/corredores" element={<Runners />} />
             <Route path="/corredores/:id" element={<RunnerProfile />} />
-          <Route path="/eventos/:id/inscritos" element={<EventLeads />} />
+            <Route path="/eventos/:id/inscritos" element={<EventLeads />} />
             <Route path="/planes" element={<TrainingPlans />} />
             <Route path="/eventos" element={<Events />} />
             <Route path="/pagos" element={<Payments />} />
