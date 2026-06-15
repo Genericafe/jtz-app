@@ -241,11 +241,11 @@ export default function RecordActivity() {
 
           {/* Idle: type selector */}
           {state.status === 'idle' && (
-            <div className="px-4 pt-4 pb-2">
-              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            <div className="px-4 pt-3 pb-2">
+              <div className="flex flex-wrap gap-2">
                 {TIPOS.map(t => (
                   <button key={t.value} onClick={() => setTipo(t.value)}
-                    className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+                    className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
                       tipo === t.value ? 'bg-brand-500 text-white' : 'bg-dark-700 text-gray-400'
                     }`}>
                     {t.label}

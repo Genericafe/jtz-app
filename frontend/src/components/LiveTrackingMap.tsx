@@ -62,6 +62,19 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
     map.on('dragstart', () => { autoFollowRef.current = false; });
 
+    // Center on real position if no reference route and no current pos yet
+    if (!referenceRoute?.length && !currentPos && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          if (!mapRef.current) return;
+          mapRef.current.setCenter([pos.coords.longitude, pos.coords.latitude]);
+          mapRef.current.setZoom(15);
+        },
+        () => {},
+        { timeout: 8000, maximumAge: 60000 },
+      );
+    }
+
     map.on('load', () => {
       readyRef.current = true;
 

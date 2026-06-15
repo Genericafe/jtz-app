@@ -66,9 +66,9 @@ export default function App() {
             <Route path="/chat" element={<Chat />} />
             <Route path="/chat/:runnerId" element={<Chat />} />
             <Route path="/actividades" element={<MyActivities />} />
-            <Route path="/grabar" element={<RecordActivity />} />
             <Route path="/rutas" element={<RoutesPage />} />
           </Route>
+          <Route path="/grabar" element={<RecordActivity />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
