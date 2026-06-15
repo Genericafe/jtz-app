@@ -58,6 +58,10 @@ type FormData = {
   fechaNacimiento: string; tallaPlayera: string;
 };
 
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const YEAR_NOW = new Date().getFullYear();
+const AÑOS = Array.from({ length: 86 }, (_, i) => YEAR_NOW - 5 - i); // 5 to 90 years old
+
 export default function EventLanding() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
@@ -69,7 +73,19 @@ export default function EventLanding() {
     nombre: '', apellido: '', email: '', telefono: '', ciudad: '',
     fechaNacimiento: '', tallaPlayera: '',
   });
+  const [fnDia, setFnDia] = useState('');
+  const [fnMes, setFnMes] = useState('');
+  const [fnAño, setFnAño] = useState('');
   const [formError, setFormError] = useState('');
+
+  const handleFechaNacimiento = (dia: string, mes: string, año: string) => {
+    if (dia && mes && año) {
+      const iso = `${año}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
+      setForm(f => ({ ...f, fechaNacimiento: iso }));
+    } else {
+      setForm(f => ({ ...f, fechaNacimiento: '' }));
+    }
+  };
 
   // Capture UTM / source from URL on mount
   const utmSource   = searchParams.get('utm_source')   ?? '';
@@ -278,10 +294,32 @@ export default function EventLanding() {
               {/* Fecha de nacimiento */}
               <div>
                 <label className="block text-xs font-semibold text-gray-400 mb-1.5">Fecha de nacimiento *</label>
-                <input type="date" value={form.fechaNacimiento}
-                  onChange={e => setForm({ ...form, fechaNacimiento: e.target.value })}
-                  required max={new Date().toISOString().slice(0, 10)}
-                  className="input w-full" />
+                <div className="grid grid-cols-3 gap-2">
+                  <select value={fnDia}
+                    onChange={e => { setFnDia(e.target.value); handleFechaNacimiento(e.target.value, fnMes, fnAño); }}
+                    className="input text-sm">
+                    <option value="">Día</option>
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+                      <option key={d} value={String(d)}>{d}</option>
+                    ))}
+                  </select>
+                  <select value={fnMes}
+                    onChange={e => { setFnMes(e.target.value); handleFechaNacimiento(fnDia, e.target.value, fnAño); }}
+                    className="input text-sm">
+                    <option value="">Mes</option>
+                    {MESES.map((m, i) => (
+                      <option key={i} value={String(i + 1)}>{m}</option>
+                    ))}
+                  </select>
+                  <select value={fnAño}
+                    onChange={e => { setFnAño(e.target.value); handleFechaNacimiento(fnDia, fnMes, e.target.value); }}
+                    className="input text-sm">
+                    <option value="">Año</option>
+                    {AÑOS.map(y => (
+                      <option key={y} value={String(y)}>{y}</option>
+                    ))}
+                  </select>
+                </div>
                 <p className="text-xs text-gray-500 mt-1">Necesaria para clasificación por categoría</p>
               </div>
 
