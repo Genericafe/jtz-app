@@ -1,8 +1,8 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { integrationsApi } from '../services/api';
-import { Plus, Trash2, Upload, X, FileText, ChevronRight, CheckCircle2, Clock3, Radio, Heart, Navigation } from 'lucide-react';
+import { Plus, Trash2, Upload, X, FileText, ChevronRight, CheckCircle2, Clock3, Radio, Heart, Navigation, Link2, RefreshCw, Unlink } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { parseGpx } from '../utils/gpxParser';
@@ -96,6 +96,7 @@ const tipoEmoji = (t: string) => TIPOS.find(x => x.id === t)?.emoji ?? '💪';
 export default function MyActivities() {
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const fileRef = useRef<HTMLInputElement>(null);
   const [showForm, setShowForm] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
@@ -104,6 +105,78 @@ export default function MyActivities() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [importingHealth, setImportingHealth] = useState(false);
   const isNative = Capacitor.isNativePlatform();
+
+  // Strava
+  const [stravaUrl, setStravaUrl] = useState('');
+  const [stravaMsg, setStravaMsg] = useState('');
+  const [stravaAlert, setStravaAlert] = useState<string | null>(null);
+
+  const { data: stravaStatus, refetch: refetchStrava } = useQuery({
+    queryKey: ['strava-status'],
+    queryFn: () => integrationsApi.stravaStatus(),
+  });
+  const stravaConnected: boolean = stravaStatus?.data?.connected ?? false;
+
+  // Handle ?strava=connected or ?strava=error redirect back from OAuth
+  useEffect(() => {
+    const s = searchParams.get('strava');
+    if (s === 'connected') {
+      setStravaAlert('success');
+      refetchStrava();
+      qc.invalidateQueries({ queryKey: ['my-activities'] });
+    } else if (s === 'error') {
+      setStravaAlert('error');
+    }
+    if (s) {
+      searchParams.delete('strava');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const stravaConnectMutation = useMutation({
+    mutationFn: () => integrationsApi.stravaConnect() as any,
+    onSuccess: (res: any) => {
+      if (res?.data?.url) window.location.href = res.data.url;
+    },
+    onError: (err: any) => {
+      setStravaMsg(err?.response?.data?.error ?? 'Error al conectar Strava');
+    },
+  });
+
+  const stravaSyncMutation = useMutation({
+    mutationFn: () => integrationsApi.stravaSync(),
+    onSuccess: (res: any) => {
+      qc.invalidateQueries({ queryKey: ['my-activities'] });
+      const { imported, skipped } = res.data;
+      setStravaMsg(`✓ ${imported} actividades importadas${skipped ? `, ${skipped} ya existían` : ''}`);
+      setTimeout(() => setStravaMsg(''), 5000);
+    },
+    onError: (err: any) => setStravaMsg(err?.response?.data?.error ?? 'Error al sincronizar'),
+  });
+
+  const stravaDisconnectMutation = useMutation({
+    mutationFn: () => integrationsApi.stravaDisconnect(),
+    onSuccess: () => {
+      refetchStrava();
+      setStravaMsg('Strava desconectado');
+      setTimeout(() => setStravaMsg(''), 3000);
+    },
+  });
+
+  const stravaImportUrlMutation = useMutation({
+    mutationFn: () => integrationsApi.stravaImportUrl(stravaUrl.trim()),
+    onSuccess: (res: any) => {
+      qc.invalidateQueries({ queryKey: ['my-activities'] });
+      const msg = res.data.alreadyExists ? '✓ Esta actividad ya estaba importada' : '✓ Actividad importada correctamente';
+      setStravaMsg(msg);
+      setStravaUrl('');
+      setTimeout(() => setStravaMsg(''), 5000);
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.error ?? 'Error al importar';
+      setStravaMsg(`⚠ ${msg}`);
+    },
+  });
 
   const [form, setForm] = useState({
     nombre: '', tipo: 'correr',
@@ -255,6 +328,108 @@ export default function MyActivities() {
             <Plus size={14} /> Manual
           </button>
         </div>
+      </div>
+
+      {/* Strava OAuth alert */}
+      {stravaAlert === 'success' && (
+        <div className="card p-4 flex items-center gap-3 bg-green-500/10 border-green-500/30">
+          <CheckCircle2 size={18} className="text-green-400 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-green-400">¡Strava conectado!</p>
+            <p className="text-xs text-gray-400">Tus actividades recientes se importaron automáticamente.</p>
+          </div>
+          <button onClick={() => setStravaAlert(null)} className="ml-auto text-gray-600 hover:text-white"><X size={14} /></button>
+        </div>
+      )}
+      {stravaAlert === 'error' && (
+        <div className="card p-4 flex items-center gap-3 bg-red-500/10 border-red-500/30">
+          <X size={18} className="text-red-400 flex-shrink-0" />
+          <p className="text-sm text-red-400">No se pudo conectar Strava. Intenta de nuevo.</p>
+          <button onClick={() => setStravaAlert(null)} className="ml-auto text-gray-600 hover:text-white"><X size={14} /></button>
+        </div>
+      )}
+
+      {/* Strava integration card */}
+      <div className="card p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🟠</span>
+            <div>
+              <h2 className="text-sm font-bold text-white">Strava</h2>
+              <p className="text-xs text-gray-500">
+                {stravaConnected ? 'Cuenta conectada' : 'Conecta tu cuenta para importar actividades'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {stravaConnected ? (
+              <>
+                <button
+                  onClick={() => stravaSyncMutation.mutate()}
+                  disabled={stravaSyncMutation.isPending}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-brand-500/20 border border-brand-500/30 text-brand-400 hover:bg-brand-500/30 transition-all disabled:opacity-50"
+                >
+                  <RefreshCw size={12} className={stravaSyncMutation.isPending ? 'animate-spin' : ''} />
+                  {stravaSyncMutation.isPending ? 'Sincronizando...' : 'Sincronizar'}
+                </button>
+                <button
+                  onClick={() => stravaDisconnectMutation.mutate()}
+                  className="p-1.5 text-gray-600 hover:text-red-400 transition-colors"
+                  title="Desconectar Strava"
+                >
+                  <Unlink size={13} />
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => stravaConnectMutation.mutate()}
+                disabled={stravaConnectMutation.isPending}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-[#FC4C02] hover:bg-[#e03d00] text-white transition-colors disabled:opacity-50"
+              >
+                {stravaConnectMutation.isPending ? 'Conectando...' : 'Conectar Strava'}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Import from URL */}
+        {stravaConnected && (
+          <div className="space-y-2 pt-1 border-t border-white/[0.06]">
+            <p className="text-xs font-semibold text-gray-400">Importar actividad por enlace</p>
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <Link2 size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                <input
+                  value={stravaUrl}
+                  onChange={e => setStravaUrl(e.target.value)}
+                  placeholder="https://strava.app.link/... o strava.com/activities/..."
+                  className="w-full pl-8 pr-3 py-2 text-xs bg-dark-700 border border-dark-600 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:border-brand-500"
+                />
+              </div>
+              <button
+                onClick={() => stravaImportUrlMutation.mutate()}
+                disabled={!stravaUrl.trim() || stravaImportUrlMutation.isPending}
+                className="px-3 py-2 rounded-xl text-xs font-semibold bg-[#FC4C02] hover:bg-[#e03d00] text-white transition-colors disabled:opacity-40 whitespace-nowrap"
+              >
+                {stravaImportUrlMutation.isPending ? 'Importando...' : 'Importar'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {stravaMsg && (
+          <p className={`text-xs px-3 py-2 rounded-xl ${
+            stravaMsg.startsWith('✓')
+              ? 'bg-green-500/10 text-green-400'
+              : 'bg-yellow-500/10 text-yellow-400'
+          }`}>{stravaMsg}</p>
+        )}
+
+        {!stravaConnected && (
+          <p className="text-xs text-gray-600">
+            Conecta Strava para sincronizar automáticamente tus actividades e importar cualquier actividad pegando su enlace.
+          </p>
+        )}
       </div>
 
       {/* GPX upload card */}

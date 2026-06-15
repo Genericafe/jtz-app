@@ -58,6 +58,12 @@ model Runner {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
+  // Strava integration
+  stravaAthleteId    Int?      @unique
+  stravaAccessToken  String?
+  stravaRefreshToken String?
+  stravaTokenExpiry  DateTime?
+
   memberships        Membership[]
   payments           Payment[]
   trainingPlans      TrainingPlanAssignment[]
@@ -73,7 +79,8 @@ model ActivityLog {
   runner        Runner       @relation(fields: [runnerId], references: [id], onDelete: Cascade)
   diaId         Int?
   dia           TrainingDay? @relation(fields: [diaId], references: [id])
-  fuente        String       @default("manual") // "manual" | "gpx"
+  fuente           String       @default("manual") // "manual" | "gpx" | "strava" | "app"
+  stravaActivityId Int?        @unique
   nombre        String?
   tipo          String       @default("correr")  // "correr" | "trail" | "ciclismo" | "natacion" | "otro"
   fecha         DateTime     @default(now())

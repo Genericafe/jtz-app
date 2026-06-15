@@ -2,9 +2,63 @@ import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { z } from 'zod';
+import {
+  getValidStravaToken,
+  fetchRecentStravaActivities,
+  importStravaActivityById,
+  resolveStravaActivityId,
+} from '../services/strava';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+// Public route — Strava redirects here after OAuth (no JWT available)
+router.get('/strava/callback', async (req: AuthRequest, res: Response) => {
+  const { code, state, error } = req.query as Record<string, string>;
+  const frontendUrl = (process.env.FRONTEND_URL ?? 'https://jtz-app.vercel.app').split(',')[0].trim();
+
+  if (error || !code) {
+    return res.redirect(`${frontendUrl}/actividades?strava=error`);
+  }
+
+  const clientId     = process.env.STRAVA_CLIENT_ID;
+  const clientSecret = process.env.STRAVA_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    return res.redirect(`${frontendUrl}/actividades?strava=error`);
+  }
+
+  try {
+    const tokenRes = await fetch('https://www.strava.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id:     clientId,
+        client_secret: clientSecret,
+        code,
+        grant_type:    'authorization_code',
+      }),
+    });
+    if (!tokenRes.ok) return res.redirect(`${frontendUrl}/actividades?strava=error`);
+
+    const data: any = await tokenRes.json();
+    const userId = Number(state);
+    if (!userId) return res.redirect(`${frontendUrl}/actividades?strava=error`);
+
+    await (prisma as any).runner.update({
+      where: { userId },
+      data: {
+        stravaAthleteId:    data.athlete?.id,
+        stravaAccessToken:  data.access_token,
+        stravaRefreshToken: data.refresh_token,
+        stravaTokenExpiry:  new Date(data.expires_at * 1000),
+      },
+    });
+
+    return res.redirect(`${frontendUrl}/actividades?strava=connected`);
+  } catch {
+    return res.redirect(`${frontendUrl}/actividades?strava=error`);
+  }
+});
 
 router.use(authMiddleware);
 
@@ -211,6 +265,113 @@ router.delete('/activities/:id', async (req: AuthRequest, res: Response) => {
     });
   } catch { /* ignore if table doesn't exist */ }
   return res.json({ ok: true });
+});
+
+// ── Strava OAuth ──────────────────────────────────────────────────────────────
+
+// GET /integrations/strava/status
+router.get('/strava/status', async (req: AuthRequest, res: Response) => {
+  const runner = await (prisma as any).runner.findUnique({ where: { userId: req.userId! } });
+  if (!runner || !runner.stravaAthleteId) return res.json({ connected: false });
+  return res.json({
+    connected: true,
+    athleteId: runner.stravaAthleteId,
+  });
+});
+
+// GET /integrations/strava/connect — returns the Strava OAuth URL (frontend does the redirect)
+router.get('/strava/connect', (req: AuthRequest, res: Response) => {
+  const clientId    = process.env.STRAVA_CLIENT_ID;
+  const redirectUri = process.env.STRAVA_REDIRECT_URI;
+  if (!clientId || !redirectUri) {
+    return res.status(503).json({ error: 'Strava no configurado en este servidor. Contacta al administrador.' });
+  }
+  const state = req.userId!.toString();
+  const url = `https://www.strava.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&approval_prompt=auto&scope=activity:read_all&state=${state}`;
+  return res.json({ url });
+});
+
+// POST /integrations/strava/disconnect
+router.post('/strava/disconnect', async (req: AuthRequest, res: Response) => {
+  await (prisma as any).runner.update({
+    where: { userId: req.userId! },
+    data: {
+      stravaAthleteId:   null,
+      stravaAccessToken:  null,
+      stravaRefreshToken: null,
+      stravaTokenExpiry:  null,
+    },
+  });
+  return res.json({ ok: true });
+});
+
+// POST /integrations/strava/sync — import last 30 activities
+router.post('/strava/sync', async (req: AuthRequest, res: Response) => {
+  const runner = await (prisma as any).runner.findUnique({ where: { userId: req.userId! } });
+  if (!runner) return res.status(404).json({ error: 'Perfil no encontrado' });
+
+  const token = await getValidStravaToken(runner, prisma);
+  if (!token) return res.status(401).json({ error: 'Conecta tu cuenta de Strava primero' });
+
+  try {
+    const activities = await fetchRecentStravaActivities(token);
+    let imported = 0;
+    let skipped  = 0;
+
+    for (const a of activities) {
+      // Skip if already imported
+      const existing = await (prisma as any).activityLog.findFirst({
+        where: { stravaActivityId: a.id },
+      });
+      if (existing) { skipped++; continue; }
+
+      await importStravaActivityById(token, a.id, runner.id, prisma);
+      imported++;
+    }
+
+    return res.json({ ok: true, imported, skipped });
+  } catch (err: any) {
+    console.error('[strava sync]', err?.message ?? err);
+    return res.status(500).json({ error: err?.message ?? 'Error al sincronizar' });
+  }
+});
+
+// POST /integrations/strava/import-url — import specific activity from Strava URL/link
+router.post('/strava/import-url', async (req: AuthRequest, res: Response) => {
+  const { url } = req.body;
+  if (!url || typeof url !== 'string') {
+    return res.status(400).json({ error: 'URL requerida' });
+  }
+
+  const runner = await (prisma as any).runner.findUnique({ where: { userId: req.userId! } });
+  if (!runner) return res.status(404).json({ error: 'Perfil no encontrado' });
+
+  const token = await getValidStravaToken(runner, prisma);
+  if (!token) {
+    return res.status(401).json({ error: 'Conecta tu cuenta de Strava primero' });
+  }
+
+  const activityId = await resolveStravaActivityId(url);
+  if (!activityId) {
+    return res.status(400).json({ error: 'No se pudo identificar la actividad desde el enlace' });
+  }
+
+  // Skip if already imported
+  const existing = await (prisma as any).activityLog.findFirst({
+    where: { stravaActivityId: activityId },
+  });
+  if (existing) return res.json({ ok: true, log: existing, alreadyExists: true });
+
+  try {
+    const log = await importStravaActivityById(token, activityId, runner.id, prisma);
+    return res.status(201).json({ ok: true, log });
+  } catch (err: any) {
+    const msg = err?.message ?? '';
+    if (msg.includes('403') || msg.includes('401')) {
+      return res.status(403).json({ error: 'Esta actividad no pertenece a tu cuenta de Strava' });
+    }
+    return res.status(500).json({ error: msg || 'Error al importar' });
+  }
 });
 
 export default router;

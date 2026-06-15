@@ -138,6 +138,7 @@ export const integrationsApi = {
   stravaConnect:      ()             => api.get('/integrations/strava/connect'),
   stravaDisconnect:   ()             => api.post('/integrations/strava/disconnect'),
   stravaSync:         ()             => api.post('/integrations/strava/sync'),
+  stravaImportUrl:    (url: string)  => api.post('/integrations/strava/import-url', { url }),
   getActivities:      ()             => api.get('/integrations/activities'),
   getActivity:        (id: number)   => api.get(`/integrations/activities/${id}`),
   getDayActivities:   (diaId: number) => api.get(`/integrations/activities/day/${diaId}`),
