@@ -17,6 +17,7 @@ model User {
   runner          Runner?
   emailConfig     EmailConfig?
   coachPreference CoachPreference?
+  routes          Route[]
 }
 
 model EmailConfig {
@@ -308,6 +309,22 @@ model EventLead {
   createdAt       DateTime  @default(now())
 
   @@unique([eventId, email])
+}
+
+model Route {
+  id          Int      @id @default(autoincrement())
+  nombre      String
+  descripcion String?
+  tipo        String   @default("correr") // correr | trail | ciclismo | natacion | otro
+  distanciaKm Float?
+  gpxContent  String?  @db.Text
+  gpxNombre   String?
+  isPublic    Boolean  @default(false)
+  isClubRoute Boolean  @default(false)
+  authorId    Int
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Announcement {

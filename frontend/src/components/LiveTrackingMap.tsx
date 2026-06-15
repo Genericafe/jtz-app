@@ -1,6 +1,6 @@
 import { useEffect, useRef, memo } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
 
 export interface MapPoint { lat: number; lng: number; accuracy?: number }
 
@@ -11,107 +11,167 @@ interface Props {
   className?: string;
 }
 
+const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY ?? '';
+const STYLE_URL = `https://api.maptiler.com/maps/streets-v2-dark/style.json?key=${MAPTILER_KEY}`;
+
+const lineFeature = (points: MapPoint[]) => ({
+  type: 'Feature' as const,
+  geometry: { type: 'LineString' as const, coordinates: points.map(p => [p.lng, p.lat]) },
+  properties: {},
+});
+
+const emptyLine = () => ({
+  type: 'Feature' as const,
+  geometry: { type: 'LineString' as const, coordinates: [] as number[][] },
+  properties: {},
+});
+
+const pointFeature = (p: MapPoint) => ({
+  type: 'Feature' as const,
+  geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] },
+  properties: {},
+});
+
 const LiveTrackingMap = memo(function LiveTrackingMap({
   track, referenceRoute, currentPos, className = '',
 }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const trackLayerRef = useRef<L.Polyline | null>(null);
-  const posMarkerRef = useRef<L.CircleMarker | null>(null);
-  const accCircleRef = useRef<L.Circle | null>(null);
+  const containerRef  = useRef<HTMLDivElement>(null);
+  const mapRef        = useRef<maplibregl.Map | null>(null);
   const autoFollowRef = useRef(true);
+  const readyRef      = useRef(false);
 
-  // Init once
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    const startCenter: L.LatLngTuple =
+    const startCenter: [number, number] =
       referenceRoute && referenceRoute.length > 0
-        ? [referenceRoute[0].lat, referenceRoute[0].lng]
+        ? [referenceRoute[0].lng, referenceRoute[0].lat]
         : currentPos
-          ? [currentPos.lat, currentPos.lng]
-          : [19.43, -99.13];
+          ? [currentPos.lng, currentPos.lat]
+          : [-99.133, 19.432];
 
-    const map = L.map(containerRef.current, {
+    const map = new maplibregl.Map({
+      container: containerRef.current,
+      style: STYLE_URL,
       center: startCenter,
-      zoom: 16,
-      zoomControl: true,
+      zoom: 15,
       attributionControl: false,
     });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-    }).addTo(map);
-
-    // Reference route — blue dashed
-    if (referenceRoute && referenceRoute.length >= 2) {
-      const refPoly = L.polyline(
-        referenceRoute.map(p => [p.lat, p.lng] as L.LatLngTuple),
-        { color: '#60a5fa', weight: 4, opacity: 0.65, dashArray: '10 8' },
-      ).addTo(map);
-
-      // Start / end markers on reference route
-      L.circleMarker([referenceRoute[0].lat, referenceRoute[0].lng],
-        { radius: 7, color: '#fff', weight: 2, fillColor: '#22c55e', fillOpacity: 1 },
-      ).addTo(map).bindTooltip('Inicio de ruta', { permanent: false });
-
-      const last = referenceRoute[referenceRoute.length - 1];
-      L.circleMarker([last.lat, last.lng],
-        { radius: 7, color: '#fff', weight: 2, fillColor: '#ef4444', fillOpacity: 1 },
-      ).addTo(map).bindTooltip('Fin de ruta', { permanent: false });
-
-      map.fitBounds(refPoly.getBounds(), { padding: [48, 48] });
-    }
-
-    // Live track — green
-    trackLayerRef.current = L.polyline([], {
-      color: '#22c55e', weight: 4, opacity: 0.9,
-    }).addTo(map);
-
-    // Current position marker
-    posMarkerRef.current = L.circleMarker(startCenter, {
-      radius: 9, color: '#fff', weight: 3,
-      fillColor: '#3b82f6', fillOpacity: 1,
-      interactive: false,
-    }).addTo(map);
-
-    // Accuracy circle
-    accCircleRef.current = L.circle(startCenter, {
-      radius: 15, color: '#3b82f6', weight: 1,
-      fillColor: '#3b82f6', fillOpacity: 0.08,
-      interactive: false,
-    }).addTo(map);
-
-    // Stop auto-follow when user drags the map
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
     map.on('dragstart', () => { autoFollowRef.current = false; });
 
+    map.on('load', () => {
+      readyRef.current = true;
+
+      // Reference route
+      map.addSource('ref-route', {
+        type: 'geojson',
+        data: (referenceRoute && referenceRoute.length >= 2 ? lineFeature(referenceRoute) : emptyLine()) as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      });
+      map.addLayer({
+        id: 'ref-route-casing',
+        type: 'line',
+        source: 'ref-route',
+        paint: { 'line-color': '#1e3a5f', 'line-width': 8, 'line-opacity': 0.6 },
+      });
+      map.addLayer({
+        id: 'ref-route-line',
+        type: 'line',
+        source: 'ref-route',
+        paint: { 'line-color': '#60a5fa', 'line-width': 4, 'line-opacity': 0.85, 'line-dasharray': [2, 2] },
+      });
+
+      if (referenceRoute && referenceRoute.length >= 2) {
+        new maplibregl.Marker({ color: '#22c55e' })
+          .setLngLat([referenceRoute[0].lng, referenceRoute[0].lat]).addTo(map);
+        const last = referenceRoute[referenceRoute.length - 1];
+        new maplibregl.Marker({ color: '#ef4444' })
+          .setLngLat([last.lng, last.lat]).addTo(map);
+
+        const bounds = referenceRoute.reduce(
+          (b, p) => b.extend([p.lng, p.lat] as [number, number]),
+          new maplibregl.LngLatBounds(
+            [referenceRoute[0].lng, referenceRoute[0].lat],
+            [referenceRoute[0].lng, referenceRoute[0].lat],
+          ),
+        );
+        map.fitBounds(bounds, { padding: 60, maxZoom: 17 });
+      }
+
+      // Live track
+      map.addSource('live-track', {
+        type: 'geojson',
+        data: (track.length >= 2 ? lineFeature(track) : emptyLine()) as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      });
+      map.addLayer({
+        id: 'live-track-casing',
+        type: 'line',
+        source: 'live-track',
+        paint: { 'line-color': '#052e16', 'line-width': 8, 'line-opacity': 0.5 },
+      });
+      map.addLayer({
+        id: 'live-track-line',
+        type: 'line',
+        source: 'live-track',
+        paint: { 'line-color': '#22c55e', 'line-width': 4, 'line-opacity': 0.95 },
+      });
+
+      // Current position dot
+      const initPos = currentPos ?? (track.length > 0 ? track[track.length - 1] : null);
+      map.addSource('current-pos', {
+        type: 'geojson',
+        data: (initPos ? pointFeature(initPos) : {
+          type: 'Feature', geometry: { type: 'Point', coordinates: startCenter }, properties: {},
+        }) as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      });
+      map.addLayer({
+        id: 'pos-glow',
+        type: 'circle',
+        source: 'current-pos',
+        paint: { 'circle-radius': 18, 'circle-color': '#3b82f6', 'circle-opacity': 0.15 },
+      });
+      map.addLayer({
+        id: 'pos-dot',
+        type: 'circle',
+        source: 'current-pos',
+        paint: {
+          'circle-radius': 9,
+          'circle-color': '#3b82f6',
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 3,
+        },
+      });
+    });
+
     mapRef.current = map;
-    return () => { map.remove(); mapRef.current = null; };
+    return () => {
+      readyRef.current = false;
+      map.remove();
+      mapRef.current = null;
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Update live track
   useEffect(() => {
-    if (!trackLayerRef.current || track.length < 2) return;
-    trackLayerRef.current.setLatLngs(track.map(p => [p.lat, p.lng] as L.LatLngTuple));
+    if (!readyRef.current || !mapRef.current || track.length < 2) return;
+    (mapRef.current.getSource('live-track') as maplibregl.GeoJSONSource | undefined)
+      ?.setData(lineFeature(track) as any); // eslint-disable-line @typescript-eslint/no-explicit-any
   }, [track]);
 
   // Update current position
   useEffect(() => {
-    if (!currentPos || !mapRef.current) return;
-    const ll = L.latLng(currentPos.lat, currentPos.lng);
-    posMarkerRef.current?.setLatLng(ll);
-    accCircleRef.current?.setLatLng(ll).setRadius(currentPos.accuracy ?? 15);
+    if (!currentPos || !mapRef.current || !readyRef.current) return;
+    (mapRef.current.getSource('current-pos') as maplibregl.GeoJSONSource | undefined)
+      ?.setData(pointFeature(currentPos) as any); // eslint-disable-line @typescript-eslint/no-explicit-any
     if (autoFollowRef.current) {
-      mapRef.current.panTo(ll, { animate: true, duration: 0.8 });
+      mapRef.current.panTo([currentPos.lng, currentPos.lat], { duration: 800 });
     }
   }, [currentPos]);
 
   return (
-    <div
-      ref={containerRef}
-      className={className}
-      style={{ width: '100%', height: '100%' }}
-    />
+    <div ref={containerRef} className={className} style={{ width: '100%', height: '100%' }} />
   );
 });
 

@@ -21,6 +21,7 @@ import PaymentSuccess from './pages/PaymentSuccess';
 import Chat from './pages/Chat';
 import MyActivities from './pages/MyActivities';
 import RecordActivity from './pages/RecordActivity';
+import RoutesPage from './pages/Routes';
 
 export default function App() {
   return (
@@ -49,6 +50,7 @@ export default function App() {
             <Route path="/chat/:runnerId" element={<Chat />} />
             <Route path="/actividades" element={<MyActivities />} />
             <Route path="/grabar" element={<RecordActivity />} />
+            <Route path="/rutas" element={<RoutesPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

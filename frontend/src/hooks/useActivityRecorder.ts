@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
+import { Geolocation } from '@capacitor/geolocation';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 
 export interface TrackPoint {
@@ -47,22 +48,27 @@ export function useActivityRecorder() {
     fcActual: null, track: [], error: null,
   });
 
-  // Browser watchPosition returns a number, not a string
-  const watchIdRef  = useRef<number | null>(null);
-  const timerRef    = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastPointRef = useRef<TrackPoint | null>(null);
+  // Capacitor returns string IDs, browser returns numbers
+  const watchIdRef    = useRef<string | number | null>(null);
+  const timerRef      = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastPointRef  = useRef<TrackPoint | null>(null);
   const recentDistRef = useRef<{ time: number; dist: number }[]>([]);
+  const isNative      = Capacitor.isNativePlatform();
 
   const clearTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
   };
 
-  // Synchronous — browser API
-  const clearWatch = () => {
-    if (watchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
-    }
+  const clearWatch = async () => {
+    if (watchIdRef.current === null) return;
+    try {
+      if (isNative) {
+        await Geolocation.clearWatch({ id: watchIdRef.current as string });
+      } else {
+        navigator.geolocation.clearWatch(watchIdRef.current as number);
+      }
+    } catch { /* ignore */ }
+    watchIdRef.current = null;
   };
 
   const startTimer = () => {
@@ -85,66 +91,95 @@ export function useActivityRecorder() {
     }, 1000);
   };
 
-  const startGpsWatch = () => {
-    if (!navigator.geolocation) {
-      setState(s => ({ ...s, error: 'GPS no disponible en este dispositivo' }));
-      return;
+  // Shared point processor for both native and web callbacks
+  const processPoint = (point: TrackPoint) => {
+    setState(s => {
+      if (s.status === 'paused') return s;
+      let addedKm = 0;
+      if (lastPointRef.current) {
+        addedKm = haversineKm(lastPointRef.current, point);
+        if (addedKm < 0.0005) return s; // filter noise < 0.5 m
+        recentDistRef.current.push({ time: Date.now(), dist: addedKm });
+      }
+      lastPointRef.current = point;
+      return { ...s, distanceKm: s.distanceKm + addedKm, track: [...s.track, point] };
+    });
+  };
+
+  const startGpsWatch = async () => {
+    if (isNative) {
+      // ── Native Capacitor GPS (Android / iOS) ──────────────────────────────
+      try {
+        const perms = await Geolocation.requestPermissions();
+        if (perms.location !== 'granted') {
+          setState(s => ({ ...s, error: 'Permiso de ubicación denegado. Actívalo en Configuración del dispositivo.' }));
+          return;
+        }
+        const id = await Geolocation.watchPosition(
+          { enableHighAccuracy: true, timeout: 10000 },
+          (position, err) => {
+            if (err || !position) {
+              if (err) setState(s => ({ ...s, error: `GPS: ${err.message}` }));
+              return;
+            }
+            processPoint({
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+              ele: position.coords.altitude ?? undefined,
+              time: new Date().toISOString(),
+              accuracy: position.coords.accuracy ?? undefined,
+            });
+          },
+        );
+        watchIdRef.current = id;
+      } catch (err: unknown) {
+        setState(s => ({ ...s, error: (err as Error).message ?? 'Error al iniciar GPS' }));
+      }
+    } else {
+      // ── Web fallback (browser) ────────────────────────────────────────────
+      if (!navigator.geolocation) {
+        setState(s => ({ ...s, error: 'GPS no disponible en este navegador' }));
+        return;
+      }
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        (pos) => {
+          processPoint({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            ele: pos.coords.altitude ?? undefined,
+            time: new Date(pos.timestamp).toISOString(),
+            accuracy: pos.coords.accuracy ?? undefined,
+          });
+        },
+        (err) => setState(s => ({ ...s, error: err.message })),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+      );
     }
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        const point: TrackPoint = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          ele: pos.coords.altitude ?? undefined,
-          time: new Date(pos.timestamp).toISOString(),
-          accuracy: pos.coords.accuracy ?? undefined,
-        };
-        setState(s => {
-          if (s.status === 'paused') return s;
-          let addedKm = 0;
-          if (lastPointRef.current) {
-            addedKm = haversineKm(lastPointRef.current, point);
-            if (addedKm < 0.0005) return s; // filter noise < 0.5 m
-            recentDistRef.current.push({ time: Date.now(), dist: addedKm });
-          }
-          lastPointRef.current = point;
-          return { ...s, distanceKm: s.distanceKm + addedKm, track: [...s.track, point] };
-        });
-      },
-      (err) => {
-        setState(s => ({ ...s, error: err.message }));
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
-    );
   };
 
   const start = useCallback(async () => {
-    if (!navigator.geolocation) {
-      setState(s => ({ ...s, error: 'GPS no disponible en este dispositivo' }));
-      return;
-    }
     setState(s => ({ ...s, status: 'running', error: null }));
     startTimer();
-    startGpsWatch();
+    await startGpsWatch();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pause = useCallback(async () => {
     clearTimer();
-    clearWatch();
-    if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Medium });
+    await clearWatch();
+    if (isNative) Haptics.impact({ style: ImpactStyle.Medium });
     setState(s => ({ ...s, status: 'paused' }));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const resume = useCallback(async () => {
     setState(s => ({ ...s, status: 'running' }));
     startTimer();
-    startGpsWatch();
+    await startGpsWatch();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const finish = useCallback(async () => {
     clearTimer();
-    clearWatch();
-    if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Heavy });
+    await clearWatch();
+    if (isNative) Haptics.impact({ style: ImpactStyle.Heavy });
     setState(s => ({ ...s, status: 'finished' }));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -163,7 +198,10 @@ export function useActivityRecorder() {
     [state.track],
   );
 
-  useEffect(() => () => { clearTimer(); clearWatch(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => {
+    clearTimer();
+    clearWatch();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { state, start, pause, resume, finish, reset, getGpx };
 }

@@ -98,6 +98,15 @@ export const announcementsApi = {
   delete: (id: number) => api.delete(`/announcements/${id}`),
 };
 
+export const routesApi = {
+  list:        (tipo?: string)           => api.get('/routes', { params: tipo ? { tipo } : {} }),
+  get:         (id: number)              => api.get(`/routes/${id}`),
+  create:      (data: object)            => api.post('/routes', data),
+  update:      (id: number, data: object)=> api.put(`/routes/${id}`, data),
+  delete:      (id: number)              => api.delete(`/routes/${id}`),
+  toggleClub:  (id: number)              => api.post(`/routes/${id}/club`, {}),
+};
+
 export const publicApi = {
   getEvent: (id: number) => api.get(`/public/events/${id}`),
   registerFree: (id: number, data: object) => api.post(`/public/events/${id}/register`, data),

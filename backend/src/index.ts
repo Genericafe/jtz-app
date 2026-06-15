@@ -22,6 +22,7 @@ import settingsRoutes from './routes/settings';
 import aiRoutes from './routes/ai';
 import chatRoutes from './routes/chat';
 import integrationsRoutes from './routes/integrations';
+import routeRoutes from './routes/routes';
 
 dotenv.config();
 
@@ -72,6 +73,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/integrations', integrationsRoutes);
+app.use('/api/routes', routeRoutes);
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', app: 'JTZ API' }));
 

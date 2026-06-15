@@ -5,7 +5,7 @@ import {
   Play, Pause, Square, MapPin, Heart, Clock, ChevronLeft,
   CheckCircle, Map, Navigation, Zap,
 } from 'lucide-react';
-import { integrationsApi } from '../services/api';
+import { integrationsApi, routesApi } from '../services/api';
 import { useActivityRecorder, formatPace, formatElapsed } from '../hooks/useActivityRecorder';
 import { parseGpx } from '../utils/gpxParser';
 import type { MapPoint } from '../components/LiveTrackingMap';
@@ -30,7 +30,8 @@ function haversineM(a: { lat: number; lng: number }, b: { lat: number; lng: numb
 export default function RecordActivity() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const routeId = searchParams.get('routeId') ? Number(searchParams.get('routeId')) : null;
+  const routeId      = searchParams.get('routeId')      ? Number(searchParams.get('routeId'))      : null;
+  const savedRouteId = searchParams.get('savedRouteId') ? Number(searchParams.get('savedRouteId')) : null;
 
   const qc = useQueryClient();
   const { state, start, pause, resume, finish, reset, getGpx } = useActivityRecorder();
@@ -45,12 +46,22 @@ export default function RecordActivity() {
     enabled: !!routeId,
   });
 
+  const { data: savedRouteData } = useQuery({
+    queryKey: ['saved-route', savedRouteId],
+    queryFn: () => routesApi.get(savedRouteId!),
+    enabled: !!savedRouteId,
+  });
+
   const referenceRoute = useMemo<MapPoint[]>(() => {
-    const gpx = refActivityData?.data?.gpxContent;
+    const gpx = refActivityData?.data?.gpxContent ?? savedRouteData?.data?.gpxContent;
     if (!gpx) return [];
     try { return parseGpx(gpx).trackPoints.map(p => ({ lat: p.lat, lng: p.lng })); }
     catch { return []; }
-  }, [refActivityData]);
+  }, [refActivityData, savedRouteData]);
+
+  const activeRouteKmLabel = savedRouteData?.data?.distanciaKm
+    ? `${savedRouteData.data.distanciaKm.toFixed(1)} km`
+    : null;
 
   const trackMapPoints = useMemo<MapPoint[]>(
     () => state.track.map(p => ({ lat: p.lat, lng: p.lng, accuracy: p.accuracy })),
@@ -173,10 +184,12 @@ export default function RecordActivity() {
             )}
           </div>
           <div className="flex items-center gap-2">
-            {routeId && referenceRoute.length > 0 && (
+            {(routeId || savedRouteId) && referenceRoute.length > 0 && (
               <div className="bg-dark-900/60 backdrop-blur-sm px-3 py-1.5 rounded-xl flex items-center gap-1.5">
                 <Navigation size={12} className="text-blue-400" />
-                <span className="text-xs text-blue-300">{totalRouteKm.toFixed(1)} km</span>
+                <span className="text-xs text-blue-300">
+                  {activeRouteKmLabel ?? `${totalRouteKm.toFixed(1)} km`}
+                </span>
               </div>
             )}
             <button onClick={() => setShowMap(false)}
@@ -210,7 +223,7 @@ export default function RecordActivity() {
         <div className="bg-dark-900/95 backdrop-blur-md border-t border-white/10 flex-shrink-0">
 
           {/* Navigation status */}
-          {routeId && isActive && navInfo && (
+          {(routeId || savedRouteId) && isActive && navInfo && (
             <div className={`flex items-center justify-between px-5 py-2 border-b border-white/[0.06] ${
               onRoute ? 'bg-green-500/10' : 'bg-red-500/10'
             }`}>
@@ -338,7 +351,7 @@ export default function RecordActivity() {
       )}
 
       {/* Navigation status */}
-      {routeId && isActive && navInfo && (
+      {(routeId || savedRouteId) && isActive && navInfo && (
         <div className={`mx-4 mb-3 px-4 py-2.5 rounded-xl border flex items-center justify-between ${
           onRoute ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20'
         }`}>
