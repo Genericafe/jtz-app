@@ -113,8 +113,8 @@ router.post('/preview', coachOnly, async (req: AuthRequest, res: Response) => {
   const schema = z.object({
     nivel:             z.enum(['principiante', 'intermedio', 'avanzado', 'elite']),
     objetivo:          z.string(),
-    duracionSemanas:   z.number().int().min(4).max(28),
-    sesionesSemanales: z.number().int().min(3).max(7),
+    duracionSemanas:   z.number().int().min(1).max(28),
+    sesionesSemanales: z.number().int().min(1).max(7),
     kmBaseActual:      z.number().optional(),
     modalidades:       modalidadesSchema,
   });
@@ -135,8 +135,8 @@ router.post('/generate', coachOnly, async (req: AuthRequest, res: Response) => {
   const schema = z.object({
     nivel:             z.enum(['principiante', 'intermedio', 'avanzado', 'elite']),
     objetivo:          z.string(),
-    duracionSemanas:   z.number().int().min(4).max(28),
-    sesionesSemanales: z.number().int().min(3).max(7),
+    duracionSemanas:   z.number().int().min(1).max(28),
+    sesionesSemanales: z.number().int().min(1).max(7),
     kmBaseActual:      z.number().optional(),
     modalidades:       modalidadesSchema,
   });

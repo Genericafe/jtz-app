@@ -7,7 +7,7 @@ import {
   ArrowLeft, Calendar, Target, Dumbbell,
   ChevronDown, ChevronRight, Edit2, Check, X,
   Zap, TrendingUp, Shield, Bike, Waves, Trash2, BookmarkPlus, BookmarkCheck,
-  GripVertical, Users, Upload, CheckCircle2, Clock3, AlertCircle,
+  GripVertical, Users, Upload, CheckCircle2, Clock3, AlertCircle, ExternalLink,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -18,6 +18,7 @@ interface TrainingDay {
   id: number; diaSemana: string; tipo: string;
   distanciaKm?: number; duracionMin?: number;
   intensidad: string; descripcion: string;
+  videoUrl?: string;
 }
 interface TrainingWeek {
   id: number; numeroSemana: number; descripcion?: string; dias: TrainingDay[];
@@ -402,6 +403,7 @@ function DayCard({ day, isCoach, planId, onUpdate, myActivity, onActivityChange,
     duracionMin:  day.duracionMin ?? '',
     intensidad:   day.intensidad,
     descripcion:  day.descripcion,
+    videoUrl:     day.videoUrl ?? '',
   });
   const qc = useQueryClient();
 
@@ -527,6 +529,15 @@ function DayCard({ day, isCoach, planId, onUpdate, myActivity, onActivityChange,
                   onChange={e => setEditForm({ ...editForm, descripcion: e.target.value })}
                   rows={4} className="input w-full text-sm resize-none" />
               </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">
+                  Video de referencia <span className="text-gray-600">(YouTube, Vimeo, etc. — opcional)</span>
+                </label>
+                <input type="url" value={editForm.videoUrl}
+                  onChange={e => setEditForm({ ...editForm, videoUrl: e.target.value })}
+                  placeholder="https://youtube.com/watch?v=..."
+                  className="input w-full text-sm" />
+              </div>
               <div className="flex gap-2">
                 <button onClick={() => setEditing(false)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/[0.08] text-xs text-gray-400 hover:text-white transition-colors">
                   <X size={12} /> Cancelar
@@ -538,6 +549,7 @@ function DayCard({ day, isCoach, planId, onUpdate, myActivity, onActivityChange,
                   duracionMin:  editForm.duracionMin  ? Number(editForm.duracionMin)  : null,
                   intensidad:  editForm.intensidad,
                   descripcion: editForm.descripcion,
+                  videoUrl:    editForm.videoUrl || null,
                 })} disabled={updateMutation.isPending}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-500 text-xs text-white font-semibold transition-colors disabled:opacity-50">
                   <Check size={12} /> {updateMutation.isPending ? 'Guardando...' : 'Guardar'}
@@ -545,7 +557,16 @@ function DayCard({ day, isCoach, planId, onUpdate, myActivity, onActivityChange,
               </div>
             </div>
           ) : (
-            <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{day.descripcion}</p>
+            <div className="space-y-3">
+              <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{day.descripcion}</p>
+              {day.videoUrl && (
+                <a href={day.videoUrl} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-semibold hover:bg-red-500/20 transition-colors">
+                  <ExternalLink size={13} />
+                  Ver video de referencia
+                </a>
+              )}
+            </div>
           )}
 
           {/* Sección de actividad del corredor (solo en días de entrenamiento) */}

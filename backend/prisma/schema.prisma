@@ -162,6 +162,7 @@ model TrainingDay {
   duracionMin Int?
   descripcion String?
   intensidad  String?
+  videoUrl    String?
 
   activityLogs ActivityLog[]
 }

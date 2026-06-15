@@ -69,6 +69,8 @@ export default function PlanBuilder() {
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [nivel, setNivel] = useState('');
   const [duracion, setDuracion] = useState(12);
+  const [duracionUnidad, setDuracionUnidad] = useState<'semanas' | 'dias'>('semanas');
+  const [duracionDias, setDuracionDias] = useState(3);
   const [sesiones, setSesiones] = useState(5);
   const [kmBase, setKmBase] = useState('');
   const [modalidades, setModalidades] = useState<Modalidades>({ ciclismo: false, natacion: false, fuerza: true, funcional: false });
@@ -125,8 +127,8 @@ export default function PlanBuilder() {
   const config = {
     nivel,
     objetivo: efectiveGoal,
-    duracionSemanas: duracion,
-    sesionesSemanales: sesiones,
+    duracionSemanas: duracionUnidad === 'dias' ? 1 : duracion,
+    sesionesSemanales: duracionUnidad === 'dias' ? duracionDias : sesiones,
     kmBaseActual: kmBase ? Number(kmBase) : undefined,
     modalidades,
   };
@@ -269,39 +271,71 @@ export default function PlanBuilder() {
               <label className="flex items-center gap-2 text-sm font-bold text-white mb-3">
                 <Clock size={15} className="text-brand-400" /> Duración del plan
               </label>
-              <div className="flex items-center gap-3">
-                <input type="range" min={4} max={28} step={2} value={duracion}
-                  onChange={e => setDuracion(Number(e.target.value))}
-                  className="flex-1 accent-brand-500" />
-                <span className="text-xl font-black text-brand-400 w-16 text-right">{duracion} sem</span>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                {duracion < 8 ? 'Corto — ideal para mantenimiento o objetivo próximo' :
-                 duracion < 14 ? 'Medio — tiempo adecuado para objetivo específico' :
-                 duracion < 20 ? 'Largo — preparación completa con buenas adaptaciones' :
-                 'Muy largo — programas de élite o distancias extremas'}
-              </p>
-            </div>
-
-            <div className="card p-5">
-              <label className="flex items-center gap-2 text-sm font-bold text-white mb-3">
-                <Dumbbell size={15} className="text-brand-400" /> Sesiones por semana
-              </label>
-              <div className="grid grid-cols-5 gap-2">
-                {[3, 4, 5, 6, 7].map(n => (
-                  <button key={n} onClick={() => setSesiones(n)}
-                    className={`py-3 rounded-xl font-black text-sm transition-all ${sesiones === n ? 'bg-brand-500 text-white shadow-glow-sm' : 'bg-surface-600 text-gray-400 hover:text-white'}`}>
-                    {n}
+              {/* Semanas / Días toggle */}
+              <div className="flex gap-1 p-1 bg-surface-800 rounded-xl mb-4 w-fit">
+                {(['semanas', 'dias'] as const).map(u => (
+                  <button key={u} onClick={() => setDuracionUnidad(u)}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${duracionUnidad === u ? 'bg-brand-500 text-white' : 'text-gray-400 hover:text-white'}`}>
+                    {u === 'semanas' ? 'Semanas' : 'Días'}
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-gray-500 mt-2">
-                {sesiones <= 3 ? 'Mínimo recomendado — necesita días de recuperación' :
-                 sesiones <= 4 ? 'Estándar — equilibrio trabajo/recuperación' :
-                 sesiones <= 5 ? 'Intermedio-Avanzado — alta eficiencia' :
-                 'Avanzado — requiere buena base y recuperación activa'}
-              </p>
+              {duracionUnidad === 'semanas' ? (
+                <>
+                  <div className="flex items-center gap-3">
+                    <input type="range" min={1} max={28} step={1} value={duracion}
+                      onChange={e => setDuracion(Number(e.target.value))}
+                      className="flex-1 accent-brand-500" />
+                    <span className="text-xl font-black text-brand-400 w-20 text-right">{duracion} sem</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    {duracion === 1 ? 'Una semana — plan puntual de entrenamiento' :
+                     duracion < 8 ? 'Corto — ideal para mantenimiento o objetivo próximo' :
+                     duracion < 14 ? 'Medio — tiempo adecuado para objetivo específico' :
+                     duracion < 20 ? 'Largo — preparación completa con buenas adaptaciones' :
+                     'Muy largo — programas de élite o distancias extremas'}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="grid grid-cols-6 gap-2">
+                    {[1, 2, 3, 4, 5, 6].map(d => (
+                      <button key={d} onClick={() => setDuracionDias(d)}
+                        className={`py-3 rounded-xl font-black text-sm transition-all ${duracionDias === d ? 'bg-brand-500 text-white shadow-glow-sm' : 'bg-surface-600 text-gray-400 hover:text-white'}`}>
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    {duracionDias === 1 ? 'Un día — entrenamiento único o plan express' :
+                     duracionDias <= 3 ? `${duracionDias} días — microciclo corto` :
+                     `${duracionDias} días — semana especial de entrenamiento`}
+                  </p>
+                </>
+              )}
             </div>
+
+            {duracionUnidad === 'semanas' && (
+              <div className="card p-5">
+                <label className="flex items-center gap-2 text-sm font-bold text-white mb-3">
+                  <Dumbbell size={15} className="text-brand-400" /> Sesiones por semana
+                </label>
+                <div className="grid grid-cols-5 gap-2">
+                  {[3, 4, 5, 6, 7].map(n => (
+                    <button key={n} onClick={() => setSesiones(n)}
+                      className={`py-3 rounded-xl font-black text-sm transition-all ${sesiones === n ? 'bg-brand-500 text-white shadow-glow-sm' : 'bg-surface-600 text-gray-400 hover:text-white'}`}>
+                      {n}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  {sesiones <= 3 ? 'Mínimo recomendado — necesita días de recuperación' :
+                   sesiones <= 4 ? 'Estándar — equilibrio trabajo/recuperación' :
+                   sesiones <= 5 ? 'Intermedio-Avanzado — alta eficiencia' :
+                   'Avanzado — requiere buena base y recuperación activa'}
+                </p>
+              </div>
+            )}
 
             <div className="card p-5 sm:col-span-2">
               <label className="flex items-center gap-2 text-sm font-bold text-white mb-3">
