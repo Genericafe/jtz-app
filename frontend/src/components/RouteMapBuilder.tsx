@@ -41,73 +41,126 @@ function makeMarkerEl(label: string, color: string) {
   return el;
 }
 
-type GeoFeature = {
-  id: string;
-  text?: string;
-  place_name?: string;
-  center: [number, number];
-  context?: Array<{ id: string; text: string }>;
-  properties?: { address?: string };
-};
+// ── Geocoding helpers ───────────────────────────────────────────────────────
 
-function parseFeature(f: GeoFeature): Suggestion {
-  const label = (f.text ?? f.place_name?.split(',')[0] ?? '').trim();
-
-  // Build a meaningful sublabel from context (neighbourhood → place/city → region)
-  const ctx = f.context ?? [];
-  const neighbourhood = ctx.find(c => /^neighbourhood|^locality/.test(c.id))?.text;
-  const city          = ctx.find(c => /^place|^municipality/.test(c.id))?.text;
-  const region        = ctx.find(c => /^region/.test(c.id))?.text;
-
-  // Also try extracting an address from place_name parts
-  const pparts = (f.place_name ?? '').split(',');
-  // Drop first (name) and last (country); keep middle parts as address
-  const addressParts = pparts.slice(1, pparts.length > 2 ? -1 : undefined).map(s => s.trim()).filter(Boolean);
-  const address = addressParts.join(', ');
-
-  const sublabel =
-    address ||
-    [neighbourhood, city || region].filter(Boolean).join(', ') ||
-    undefined;
-
-  return { id: f.id, label, sublabel, center: f.center };
+function geoDistKm(a: [number, number], b: [number, number]): number {
+  const dx = (a[0] - b[0]) * Math.cos(a[1] * Math.PI / 180) * 111.32;
+  const dy = (a[1] - b[1]) * 111.32;
+  return Math.sqrt(dx * dx + dy * dy);
 }
 
-async function geocode(query: string, proximity: [number, number] | null): Promise<Suggestion[]> {
-  if (query.trim().length < 2) return [];
-  const base: Record<string, string> = {
-    key: MAPTILER_KEY, language: 'es', limit: '6',
+// MapTiler – strong on POIs / place names
+type MTFeature = {
+  id: string; text?: string; place_name?: string;
+  center: [number, number];
+  context?: Array<{ id: string; text: string }>;
+};
+
+async function geocodeMaptiler(query: string, proximity: [number, number] | null): Promise<Suggestion[]> {
+  const params: Record<string, string> = {
+    key: MAPTILER_KEY, language: 'es', limit: '5',
     types: 'poi,address,road,place,neighbourhood,locality',
   };
   if (proximity) {
     const [lng, lat] = proximity;
-    base.proximity = `${lng},${lat}`;
-    // ~5 km tight bbox so nearby results come first
-    const d = 0.05;
-    base.bbox = `${lng - d},${lat - d},${lng + d},${lat + d}`;
+    params.proximity = `${lng},${lat}`;
+    params.bbox = `${lng - 0.05},${lat - 0.05},${lng + 0.05},${lat + 0.05}`;
   } else {
-    base.bbox = '-118.6,14.5,-86.7,32.7';
+    params.bbox = '-118.6,14.5,-86.7,32.7';
   }
+  const tryFetch = async (p: Record<string, string>): Promise<MTFeature[]> => {
+    const res  = await fetch(`https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?${new URLSearchParams(p)}`);
+    const data = await res.json();
+    return data.features ?? [];
+  };
   try {
-    const fetchWith = async (params: Record<string, string>) => {
-      const res  = await fetch(`https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?${new URLSearchParams(params)}`);
-      const data = await res.json();
-      return (data.features ?? []) as GeoFeature[];
-    };
-
-    let features = await fetchWith(base);
-
-    // If tight bbox yields nothing, expand to ~30 km then full-country fallback
-    if (features.length === 0 && proximity) {
+    let feats = await tryFetch(params);
+    if (feats.length === 0 && proximity) {
       const [lng, lat] = proximity;
-      features = await fetchWith({ ...base, bbox: `${lng - 0.3},${lat - 0.3},${lng + 0.3},${lat + 0.3}` });
+      feats = await tryFetch({ ...params, bbox: `${lng - 0.3},${lat - 0.3},${lng + 0.3},${lat + 0.3}` });
     }
-    if (features.length === 0) {
-      features = await fetchWith({ ...base, bbox: '-118.6,14.5,-86.7,32.7' });
-    }
+    if (feats.length === 0) feats = await tryFetch({ ...params, bbox: '-118.6,14.5,-86.7,32.7' });
 
-    return features.map(parseFeature);
+    return feats.map(f => {
+      const label = (f.text ?? f.place_name?.split(',')[0] ?? '').trim();
+      const ctx   = f.context ?? [];
+      const nbhd  = ctx.find(c => /^neighbourhood|^locality/.test(c.id))?.text;
+      const city  = ctx.find(c => /^place|^municipality/.test(c.id))?.text;
+      const rgn   = ctx.find(c => /^region/.test(c.id))?.text;
+      const pparts = (f.place_name ?? '').split(',');
+      const addr   = pparts.slice(1, pparts.length > 2 ? -1 : undefined).map(s => s.trim()).filter(Boolean).join(', ');
+      return {
+        id: `mt-${f.id}`,
+        label,
+        sublabel: addr || [nbhd, city || rgn].filter(Boolean).join(', ') || undefined,
+        center: f.center,
+      };
+    });
   } catch { return []; }
+}
+
+// Photon (OSM/Komoot) – strong on addresses with house numbers
+type PhotonFeature = {
+  geometry: { coordinates: [number, number] };
+  properties: {
+    osm_id?: number; name?: string; street?: string; housenumber?: string;
+    city?: string; county?: string; state?: string; country?: string;
+    type?: string;
+  };
+};
+
+async function geocodePhoton(query: string, proximity: [number, number] | null): Promise<Suggestion[]> {
+  const params: Record<string, string> = { q: query, limit: '5', lang: 'es' };
+  if (proximity) { params.lat = String(proximity[1]); params.lon = String(proximity[0]); }
+  try {
+    const res  = await fetch(`https://photon.komoot.io/api/?${new URLSearchParams(params)}`);
+    const data = await res.json();
+    const feats: PhotonFeature[] = data.features ?? [];
+    return feats
+      .filter(f => {
+        if (!proximity) return true;
+        return geoDistKm(f.geometry.coordinates, proximity) < 50;
+      })
+      .map(f => {
+        const p = f.properties;
+        const hasNum = !!p.housenumber;
+        const streetLabel = hasNum
+          ? `${p.name ?? p.street ?? ''} ${p.housenumber}`.trim()
+          : (p.name ?? p.street ?? '').trim();
+        const label    = streetLabel || p.city || query;
+        const cityPart = p.city ?? p.county;
+        const sublabel = [cityPart, p.state].filter(Boolean).join(', ') || undefined;
+        return {
+          id: `ph-${p.osm_id ?? Math.random()}`,
+          label,
+          sublabel,
+          center: f.geometry.coordinates,
+        };
+      })
+      .filter(s => s.label.length > 0);
+  } catch { return []; }
+}
+
+// Merged geocoder: run both in parallel, deduplicate by coordinate proximity
+async function geocode(query: string, proximity: [number, number] | null): Promise<Suggestion[]> {
+  if (query.trim().length < 2) return [];
+  const [mt, ph] = await Promise.all([
+    geocodeMaptiler(query, proximity),
+    geocodePhoton(query, proximity),
+  ]);
+  const seen = new Set<string>();
+  const merged: Suggestion[] = [];
+  const add = (s: Suggestion) => {
+    const key = `${Math.round(s.center[0] * 1000)},${Math.round(s.center[1] * 1000)}`;
+    if (!seen.has(key)) { seen.add(key); merged.push(s); }
+  };
+  // Address results with house numbers first
+  ph.filter(s => /\d/.test(s.label)).forEach(add);
+  // Then MapTiler POI/place results
+  mt.forEach(add);
+  // Then remaining Photon (unnamed roads, etc.)
+  ph.filter(s => !/\d/.test(s.label)).forEach(add);
+  return merged.slice(0, 6);
 }
 
 async function reverseGeocode(center: [number, number]): Promise<string> {
