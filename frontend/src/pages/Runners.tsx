@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, Phone, MapPin, X, UserCheck, Check, Trash2, EyeOff, RefreshCw } from 'lucide-react';
-import { runnersApi } from '../services/api';
+import { Search, Plus, Phone, MapPin, X, UserCheck, Check, Trash2, EyeOff, RefreshCw, Users } from 'lucide-react';
+import { runnersApi, groupsApi } from '../services/api';
 import { Runner } from '../types';
 import { useAuth } from '../context/AuthContext';
+import GroupsManager, { type RunnerGroup } from '../components/GroupsManager';
 
 const nivelConfig: Record<string, { badge: string; ring: string; gradient: string }> = {
   principiante: { badge: 'bg-green-500/15 text-green-400',   ring: 'ring-green-500/30',  gradient: 'from-green-500 to-emerald-600' },
@@ -112,9 +113,20 @@ export default function Runners() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkPending, setBulkPending] = useState(false);
+  const [showGroups, setShowGroups] = useState(false);
+  const [groupFilter, setGroupFilter] = useState<number | null>(null);
 
   const { data, isLoading } = useQuery({ queryKey: ['runners'], queryFn: () => runnersApi.list() });
   const runners: Runner[] = data?.data ?? [];
+
+  const { data: groupsData } = useQuery({ queryKey: ['groups'], queryFn: () => groupsApi.list(), enabled: isCoach });
+  const groups: RunnerGroup[] = groupsData?.data ?? [];
+  // runnerId -> set of groupIds it belongs to
+  const runnerGroups = new Map<number, Set<number>>();
+  groups.forEach(g => g.members?.forEach(m => {
+    const s = runnerGroups.get(m.runner.id) ?? new Set<number>();
+    s.add(g.id); runnerGroups.set(m.runner.id, s);
+  }));
 
   const createMutation = useMutation({
     mutationFn: (d: object) => runnersApi.create(d),
@@ -134,7 +146,8 @@ export default function Runners() {
     if (levelFilter === 'deshabilitados') return !r.activo && matchesSearch;
     if (!r.activo) return false;
     const matchesLevel = levelFilter === 'todos' || r.nivel === levelFilter;
-    return matchesSearch && matchesLevel;
+    const matchesGroup = groupFilter == null || runnerGroups.get(r.id)?.has(groupFilter);
+    return matchesSearch && matchesLevel && matchesGroup;
   });
 
   const countByLevel = (nivel: string) => activeRunners.filter(r => r.nivel === nivel).length;
@@ -220,6 +233,12 @@ export default function Runners() {
               </>
             )}
             <button
+              onClick={() => setShowGroups(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:bg-surface-600 transition-all"
+            >
+              <Users size={15} /> Grupos
+            </button>
+            <button
               onClick={() => selectionMode ? exitSelection() : setSelectionMode(true)}
               className={`px-3 py-2 rounded-xl text-sm font-medium transition-all ${
                 selectionMode
@@ -255,6 +274,30 @@ export default function Runners() {
           </button>
         )}
       </div>
+
+      {/* Group filter chips */}
+      {isCoach && groups.length > 0 && (
+        <div className="flex gap-2 mb-5 flex-wrap items-center">
+          <span className="text-xs text-gray-500 font-semibold uppercase tracking-wide flex items-center gap-1">
+            <Users size={12} /> Grupos:
+          </span>
+          {groups.map(g => (
+            <button key={g.id} onClick={() => setGroupFilter(groupFilter === g.id ? null : g.id)}
+              className={`text-sm px-3 py-1 rounded-full font-medium transition-all flex items-center gap-1.5 border ${
+                groupFilter === g.id ? 'text-white border-transparent' : 'text-gray-400 border-white/[0.08] hover:text-white'
+              }`}
+              style={groupFilter === g.id ? { background: g.color } : { background: 'transparent' }}>
+              <span className="w-2 h-2 rounded-full" style={{ background: groupFilter === g.id ? '#fff' : g.color }} />
+              {g.nombre} ({g._count?.members ?? g.members.length})
+            </button>
+          ))}
+          {groupFilter != null && (
+            <button onClick={() => setGroupFilter(null)} className="text-xs text-gray-500 hover:text-white underline">
+              limpiar
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Search */}
       <div className="relative mb-4">
@@ -352,6 +395,8 @@ export default function Runners() {
           </div>
         </div>
       )}
+
+      {showGroups && <GroupsManager runners={runners} onClose={() => setShowGroups(false)} />}
     </div>
   );
 }

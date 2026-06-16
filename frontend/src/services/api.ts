@@ -112,6 +112,16 @@ export const routesApi = {
   toggleClub:  (id: number)              => api.post(`/routes/${id}/club`, {}),
 };
 
+export const groupsApi = {
+  list:        ()                                  => api.get('/groups'),
+  create:      (data: object)                      => api.post('/groups', data),
+  update:      (id: number, data: object)          => api.put(`/groups/${id}`, data),
+  delete:      (id: number)                        => api.delete(`/groups/${id}`),
+  setMembers:  (id: number, runnerIds: number[])   => api.put(`/groups/${id}/members`, { runnerIds }),
+  assignPlan:  (id: number, planId: number, fechaInicio: string) =>
+    api.post(`/groups/${id}/assign-plan`, { planId, fechaInicio }),
+};
+
 export const publicApi = {
   getEvent: (id: number) => api.get(`/public/events/${id}`),
   registerFree: (id: number, data: object) => api.post(`/public/events/${id}/register`, data),

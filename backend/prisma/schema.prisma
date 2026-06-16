@@ -73,6 +73,29 @@ model Runner {
   orders             Order[]
   communicationLogs  CommunicationLog[]
   activityLogs       ActivityLog[]
+  groupMemberships   RunnerGroupMember[]
+}
+
+model RunnerGroup {
+  id          Int      @id @default(autoincrement())
+  nombre      String
+  descripcion String?
+  color       String   @default("#22c55e")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members RunnerGroupMember[]
+}
+
+model RunnerGroupMember {
+  id        Int         @id @default(autoincrement())
+  groupId   Int
+  group     RunnerGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  runnerId  Int
+  runner    Runner      @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+
+  @@unique([groupId, runnerId])
 }
 
 model ActivityLog {
