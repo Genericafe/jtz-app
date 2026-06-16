@@ -53,7 +53,81 @@ function fmtDist(km: number): string {
   return km < 1 ? `${Math.round(km * 1000)}m` : `${km.toFixed(1)}km`;
 }
 
-// ── MapTiler — good for POIs / business names ───────────────────────────────
+// Safe escape for Overpass QL regex strings
+const escOv = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+// ── Overpass API — radius search in OSM, best for local POIs + addresses ───
+type OvElement = {
+  id: number; type: string;
+  lat?: number; lon?: number;
+  center?: { lat: number; lon: number };
+  tags?: Record<string, string>;
+};
+
+async function geocodeOverpass(query: string, proximity: [number, number]): Promise<Suggestion[]> {
+  const [lng, lat] = proximity;
+  const R  = 3000; // 3 km radius
+
+  // Detect "street name + number" or "number + street name"
+  const endNum   = query.match(/^(.+?)\s+(\d+)\s*$/);
+  const startNum = query.match(/^(\d+)\s+(.+)\s*$/);
+
+  let ql: string;
+  if (endNum || startNum) {
+    const street = endNum ? endNum[1] : startNum![2];
+    const hnum   = endNum ? endNum[2] : startNum![1];
+    const sEsc   = escOv(street);
+    ql = `[out:json][timeout:8];
+(
+  node(around:${R},${lat},${lng})["addr:street"~"${sEsc}",i]["addr:housenumber"="${hnum}"];
+  way(around:${R},${lat},${lng})["addr:street"~"${sEsc}",i]["addr:housenumber"="${hnum}"];
+  way(around:${R},${lat},${lng})[highway][name~"${sEsc}",i];
+  node(around:${R},${lat},${lng})[name~"${sEsc}",i];
+);
+out center 8;`;
+  } else {
+    const qEsc = escOv(query);
+    ql = `[out:json][timeout:8];
+(
+  node(around:${R},${lat},${lng})[name~"${qEsc}",i];
+  way(around:${R},${lat},${lng})[name~"${qEsc}",i];
+);
+out center 8;`;
+  }
+
+  try {
+    const res  = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      body: `data=${encodeURIComponent(ql)}`,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    });
+    const data = await res.json();
+    const els: OvElement[] = data.elements ?? [];
+
+    const results: Suggestion[] = [];
+    for (const el of els) {
+      const elLat = el.lat ?? el.center?.lat;
+      const elLng = el.lon ?? el.center?.lon;
+      if (!elLat || !elLng) continue;
+      const tags    = el.tags ?? {};
+      const addrStr = tags['addr:street'];
+      const addrNum = tags['addr:housenumber'];
+      const name    = tags.name ?? tags['name:es'];
+      const label   = addrStr && addrNum ? `${addrStr} ${addrNum}` : (name ?? '');
+      if (!label) continue;
+      const suburb   = tags['addr:suburb'] ?? tags['addr:neighbourhood'] ?? tags['addr:colonia'];
+      const city     = tags['addr:city'];
+      const typeTag  = tags.amenity ?? tags.shop ?? tags.leisure ?? tags.tourism;
+      const sublabel: string | undefined = suburb && city
+        ? `${suburb}, ${city}`
+        : city ?? (typeTag ? typeTag.replace(/_/g, ' ') : undefined);
+      results.push({ id: `ov-${el.id}`, label, sublabel, center: [elLng, elLat] });
+    }
+    return results;
+  } catch { return []; }
+}
+
+// ── MapTiler — global POI / city / place names ──────────────────────────────
 type MTFeature = {
   id: string; text?: string; place_name?: string;
   center: [number, number];
@@ -69,7 +143,6 @@ async function geocodeMaptiler(query: string, proximity: [number, number] | null
   if (proximity) {
     const [lng, lat] = proximity;
     params.proximity = `${lng},${lat}`;
-    // Wider bbox for address queries so the geocoder can interpolate the block
     const d = hasNum ? 0.2 : 0.05;
     params.bbox = `${lng - d},${lat - d},${lng + d},${lat + d}`;
   } else {
@@ -90,140 +163,42 @@ async function geocodeMaptiler(query: string, proximity: [number, number] | null
     return feats.map(f => {
       const label = (f.text ?? f.place_name?.split(',')[0] ?? '').trim();
       const ctx   = f.context ?? [];
-      const nbhd  = ctx.find(c => /^neighbourhood|^locality/.test(c.id))?.text;
-      const city  = ctx.find(c => /^place|^municipality/.test(c.id))?.text;
+      // Skip purely numeric locality/neighbourhood entries — those are postal codes
+      const nbhd  = ctx.find(c => /^neighbourhood|^locality/.test(c.id) && !/^\d+$/.test(c.text))?.text;
+      const city  = ctx.find(c => /^place|^municipality/.test(c.id) && !/^\d+$/.test(c.text))?.text;
       const rgn   = ctx.find(c => /^region/.test(c.id))?.text;
-      const pparts = (f.place_name ?? '').split(',');
-      const addr   = pparts.slice(1, pparts.length > 2 ? -1 : undefined).map(s => s.trim()).filter(Boolean).join(', ');
       return {
         id: `mt-${f.id}`, label,
-        sublabel: addr || [nbhd, city || rgn].filter(Boolean).join(', ') || undefined,
+        sublabel: [nbhd, city || rgn].filter(Boolean).join(', ') || undefined,
         center: f.center,
       };
     });
   } catch { return []; }
 }
 
-// ── Nominatim — structured house-number search via OSM ─────────────────────
-type NominatimResult = {
-  place_id: number; display_name: string; lat: string; lon: string;
-  address?: {
-    house_number?: string; road?: string; pedestrian?: string;
-    neighbourhood?: string; suburb?: string;
-    city?: string; town?: string; village?: string; state?: string;
-  };
-};
-
-async function geocodeNominatim(query: string, proximity: [number, number] | null): Promise<Suggestion[]> {
-  // Detect "street name + number" or "number + street name"
-  const endNum   = query.match(/^(.+?)\s+(\d+)\s*$/);  // "calle tercera 1620"
-  const startNum = query.match(/^(\d+)\s+(.+)\s*$/);   // "1620 calle tercera"
-  if (!endNum && !startNum) return [];                  // only run for address+number queries
-
-  const num    = endNum ? endNum[2] : startNum![1];
-  const street = endNum ? endNum[1] : startNum![2];
-
-  const params: Record<string, string> = {
-    format: 'jsonv2', addressdetails: '1', 'accept-language': 'es',
-    limit: '5', countrycodes: 'mx',
-    street: `${num} ${street}`,  // Nominatim prefers "number streetname"
-  };
-  if (proximity) {
-    const [lng, lat] = proximity;
-    // viewbox: left,top,right,bottom (west,north,east,south)
-    params.viewbox = `${lng - 0.3},${lat + 0.3},${lng + 0.3},${lat - 0.3}`;
-    params.bounded = '0';
-  }
-  try {
-    const res  = await fetch(
-      `https://nominatim.openstreetmap.org/search?${new URLSearchParams(params)}`,
-      { headers: { 'User-Agent': 'JTZ-RunningClub/1.0' } },
-    );
-    const data: NominatimResult[] = await res.json();
-    return data
-      .filter(f => !proximity || geoDistKm([parseFloat(f.lon), parseFloat(f.lat)], proximity) < 50)
-      .map(f => {
-        const addr  = f.address ?? {};
-        const hnum  = addr.house_number;
-        const road  = addr.road ?? addr.pedestrian;
-        const label = hnum && road ? `${road} ${hnum}` : (road ?? f.display_name.split(',')[0].trim());
-        const sub   = [
-          addr.neighbourhood ?? addr.suburb,
-          addr.city ?? addr.town ?? addr.village,
-        ].filter(Boolean).join(', ');
-        return {
-          id: `nm-${f.place_id}`, label,
-          sublabel: sub || undefined,
-          center: [parseFloat(f.lon), parseFloat(f.lat)] as [number, number],
-        };
-      });
-  } catch { return []; }
-}
-
-// ── Photon — OSM-based, good location bias ──────────────────────────────────
-type PhotonFeature = {
-  geometry: { coordinates: [number, number] };
-  properties: {
-    osm_id?: number; name?: string; street?: string; housenumber?: string;
-    city?: string; county?: string; state?: string;
-  };
-};
-
-async function geocodePhoton(query: string, proximity: [number, number] | null): Promise<Suggestion[]> {
-  const params: Record<string, string> = { q: query, limit: '5', lang: 'es' };
-  if (proximity) {
-    params.lat = String(proximity[1]); params.lon = String(proximity[0]);
-    // Tight bbox ~10km so only local results
-    const d = 0.1;
-    params.bbox = `${proximity[0] - d},${proximity[1] - d},${proximity[0] + d},${proximity[1] + d}`;
-  }
-  try {
-    const res  = await fetch(`https://photon.komoot.io/api/?${new URLSearchParams(params)}`);
-    const data = await res.json();
-    const feats: PhotonFeature[] = data.features ?? [];
-    return feats
-      .filter(f => !proximity || geoDistKm(f.geometry.coordinates, proximity) < 50)
-      .map(f => {
-        const p = f.properties;
-        const label = p.housenumber
-          ? `${p.name ?? p.street ?? ''} ${p.housenumber}`.trim()
-          : (p.name ?? p.street ?? '').trim();
-        const sublabel = [p.city ?? p.county, p.state].filter(Boolean).join(', ') || undefined;
-        return {
-          id: `ph-${p.osm_id ?? Math.random()}`,
-          label: label || (p.city ?? query),
-          sublabel,
-          center: f.geometry.coordinates,
-        };
-      })
-      .filter(s => s.label.length > 0);
-  } catch { return []; }
-}
-
-// ── Merged: run all three in parallel, dedup by coords, sort by distance ────
+// ── Merged: Overpass (local) first, then MapTiler (global), sort by dist ────
 async function geocode(query: string, proximity: [number, number] | null): Promise<Suggestion[]> {
   if (query.trim().length < 2) return [];
-  const [mt, nm, ph] = await Promise.all([
+
+  const [ov, mt] = await Promise.all([
+    proximity ? geocodeOverpass(query, proximity) : Promise.resolve([] as Suggestion[]),
     geocodeMaptiler(query, proximity),
-    geocodeNominatim(query, proximity),
-    geocodePhoton(query, proximity),
   ]);
+
   const seen   = new Set<string>();
   const merged: Suggestion[] = [];
   const add = (s: Suggestion) => {
     const key = `${Math.round(s.center[0] * 1000)},${Math.round(s.center[1] * 1000)}`;
     if (!seen.has(key)) { seen.add(key); merged.push(s); }
   };
-  // Nominatim + Photon address results (with house numbers) go first
-  [...nm, ...ph].filter(s => /\d/.test(s.label)).forEach(add);
-  // MapTiler POI / place results
+  // Overpass local results first (already within 3 km radius)
+  ov.forEach(add);
+  // Then global MapTiler results
   mt.forEach(add);
-  // Remaining street-only results
-  [...nm, ...ph].filter(s => !/\d/.test(s.label)).forEach(add);
 
   // Annotate with distance and sort nearest-first
   return merged
-    .slice(0, 7)
+    .slice(0, 8)
     .map(s => ({ ...s, dist: proximity ? geoDistKm(s.center, proximity) : undefined }))
     .sort((a, b) => (a.dist ?? 999) - (b.dist ?? 999))
     .slice(0, 6);
