@@ -488,7 +488,7 @@ export default function Communication() {
             </div>
             <div className="flex gap-3 mt-5">
               <button onClick={() => setShowForm(false)} className="flex-1 py-2.5 rounded-xl border border-white/[0.08] text-sm text-gray-400 hover:text-white transition-colors">Cancelar</button>
-              <button onClick={() => createMutation.mutate(form)} disabled={createMutation.isPending}
+              <button onClick={() => createMutation.mutate(form)} disabled={createMutation.isPending || !form.titulo.trim() || !form.contenido.trim()}
                 className="flex-1 btn-primary py-2.5 text-sm">
                 {createMutation.isPending ? 'Publicando...' : '🚀 Publicar'}
               </button>
@@ -532,7 +532,7 @@ export default function Communication() {
             </div>
             <div className="flex gap-3 mt-5">
               <button onClick={() => setEditAnn(null)} className="flex-1 py-2.5 rounded-xl border border-white/[0.08] text-sm text-gray-400 hover:text-white transition-colors">Cancelar</button>
-              <button onClick={() => updateMutation.mutate({ id: editAnn.id, data: editForm })} disabled={updateMutation.isPending}
+              <button onClick={() => updateMutation.mutate({ id: editAnn.id, data: editForm })} disabled={updateMutation.isPending || !editForm.titulo?.trim() || !editForm.contenido?.trim()}
                 className="flex-1 btn-primary py-2.5 text-sm">
                 {updateMutation.isPending ? 'Guardando...' : '✓ Guardar cambios'}
               </button>
