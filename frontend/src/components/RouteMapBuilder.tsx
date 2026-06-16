@@ -18,8 +18,9 @@ interface Props {
 
 type BuildStep = 'idle' | 'routing' | 'done' | 'error';
 
-const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY ?? '';
-const STYLE_URL    = `https://api.maptiler.com/maps/streets-v2-dark/style.json?key=${MAPTILER_KEY}`;
+const MAPTILER_KEY  = import.meta.env.VITE_MAPTILER_KEY  ?? '';
+const GEOAPIFY_KEY  = import.meta.env.VITE_GEOAPIFY_KEY  ?? '';
+const STYLE_URL     = `https://api.maptiler.com/maps/streets-v2-dark/style.json?key=${MAPTILER_KEY}`;
 
 interface Suggestion { id: string; label: string; sublabel?: string; center: [number, number]; isCurrent?: boolean; dist?: number }
 interface Endpoint   { label: string; center: [number, number] | null }
@@ -176,11 +177,44 @@ async function geocodeMaptiler(query: string, proximity: [number, number] | null
   } catch { return []; }
 }
 
-// ── Merged: Overpass (local) first, then MapTiler (global), sort by dist ────
+// ── Geoapify — INEGI-sourced Mexican address data, house-number precision ───
+async function geocodeGeoapify(query: string, proximity: [number, number] | null): Promise<Suggestion[]> {
+  if (!GEOAPIFY_KEY) return [];
+  const params: Record<string, string> = {
+    text: query, apiKey: GEOAPIFY_KEY, lang: 'es', limit: '6',
+    type: 'amenity,building,street,suburb,district,city',
+  };
+  if (proximity) {
+    const [lng, lat] = proximity;
+    params.filter = `circle:${lng},${lat},5000`;
+    params.bias   = `proximity:${lng},${lat}`;
+  } else {
+    params.filter = 'countrycode:mx';
+  }
+  try {
+    const res  = await fetch(`https://api.geoapify.com/v1/geocode/autocomplete?${new URLSearchParams(params)}`);
+    const data = await res.json();
+    return (data.features ?? []).map((f: { geometry: { coordinates: [number, number] }; properties: Record<string, string> }) => {
+      const p = f.properties;
+      const label = (p.housenumber && p.street)
+        ? `${p.street} ${p.housenumber}`
+        : (p.name ?? p.street ?? p.formatted?.split(',')[0] ?? query);
+      const sublabel = [p.suburb ?? p.district, p.city].filter(Boolean).join(', ') || undefined;
+      return {
+        id: `ga-${p.place_id ?? Math.random()}`,
+        label, sublabel,
+        center: [f.geometry.coordinates[0], f.geometry.coordinates[1]] as [number, number],
+      };
+    });
+  } catch { return []; }
+}
+
+// ── Merged: Geoapify (INEGI data) → Overpass (local OSM) → MapTiler ─────────
 async function geocode(query: string, proximity: [number, number] | null): Promise<Suggestion[]> {
   if (query.trim().length < 2) return [];
 
-  const [ov, mt] = await Promise.all([
+  const [ga, ov, mt] = await Promise.all([
+    geocodeGeoapify(query, proximity),
     proximity ? geocodeOverpass(query, proximity) : Promise.resolve([] as Suggestion[]),
     geocodeMaptiler(query, proximity),
   ]);
@@ -191,10 +225,9 @@ async function geocode(query: string, proximity: [number, number] | null): Promi
     const key = `${Math.round(s.center[0] * 1000)},${Math.round(s.center[1] * 1000)}`;
     if (!seen.has(key)) { seen.add(key); merged.push(s); }
   };
-  // Overpass local results first (already within 3 km radius)
-  ov.forEach(add);
-  // Then global MapTiler results
-  mt.forEach(add);
+  ga.forEach(add);   // Geoapify first — INEGI Mexican addresses
+  ov.forEach(add);   // Overpass — local OSM POIs
+  mt.forEach(add);   // MapTiler — global fallback
 
   // Annotate with distance and sort nearest-first
   return merged
