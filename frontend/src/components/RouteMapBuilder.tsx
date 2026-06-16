@@ -43,10 +43,29 @@ function makeMarkerEl(label: string, color: string) {
 
 async function geocode(query: string, proximity: [number, number] | null): Promise<Suggestion[]> {
   if (query.trim().length < 2) return [];
-  const prox = proximity ? `&proximity=${proximity[0]},${proximity[1]}` : '';
+
+  const params: Record<string, string> = {
+    key:      MAPTILER_KEY,
+    language: 'es',
+    limit:    '7',
+    // Include addresses AND points of interest (parks, businesses, landmarks)
+    types:    'poi,address,road,place,neighbourhood,locality',
+  };
+
+  if (proximity) {
+    const [lng, lat] = proximity;
+    params.proximity = `${lng},${lat}`;
+    // Restrict to ~90 km radius around the user so results stay local
+    const d = 0.8;
+    params.bbox = `${lng - d},${lat - d},${lng + d},${lat + d}`;
+  } else {
+    // Fallback: restrict to Mexico until GPS is available
+    params.bbox = '-118.6,14.5,-86.7,32.7';
+  }
+
   try {
-    const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?key=${MAPTILER_KEY}&language=es&limit=6${prox}`;
-    const res  = await fetch(url);
+    const qs  = new URLSearchParams(params).toString();
+    const res = await fetch(`https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?${qs}`);
     const data = await res.json();
     return (data.features ?? []).map((f: Record<string, unknown>) => ({
       id:     f.id as string,
