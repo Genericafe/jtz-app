@@ -43,6 +43,29 @@ router.get('/events/:id', async (req: Request, res: Response) => {
   return res.json(event);
 });
 
+// ── Event image — public, real URL for <img> and Open Graph previews ──────────
+router.get('/events/:id/image', async (req: Request, res: Response) => {
+  const event = await prisma.event.findUnique({
+    where: { id: Number(req.params.id) },
+    select: { imagen: true },
+  });
+  const raw = event?.imagen;
+  if (!raw) return res.status(404).end();
+
+  // Stored as a data URL ("data:image/jpeg;base64,...") or bare base64.
+  const m = raw.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/s);
+  const mime = m ? m[1] : 'image/jpeg';
+  const b64  = m ? m[2] : raw;
+  try {
+    const buf = Buffer.from(b64, 'base64');
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.end(buf);
+  } catch {
+    return res.status(404).end();
+  }
+});
+
 const leadSchema = z.object({
   nombre:          z.string().min(1),
   apellido:        z.string().min(1),

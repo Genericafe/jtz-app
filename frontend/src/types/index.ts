@@ -59,6 +59,8 @@ export interface Event {
   cupoMaximo?: number;
   precio: number;
   gpxNombre?: string | null;
+  imagen?: string | null;
+  hasImagen?: boolean;
   activo: boolean;
   _count?: { registros: number };
 }

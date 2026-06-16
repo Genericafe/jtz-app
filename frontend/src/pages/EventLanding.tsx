@@ -194,6 +194,10 @@ export default function EventLanding() {
     <div className="min-h-screen bg-surface-900">
       {/* Hero */}
       <div className={`relative bg-gradient-to-br ${gradient} overflow-hidden`}>
+        {event.imagen && (
+          <img src={event.imagen} alt={event.nombre}
+            className="absolute inset-0 w-full h-full object-cover opacity-40" />
+        )}
         <div className="absolute inset-0 bg-black/30" />
         <div className="relative z-10 max-w-2xl mx-auto px-6 py-16 text-center">
           <div className="inline-flex items-center gap-2 bg-black/30 backdrop-blur rounded-full px-4 py-1.5 mb-6 text-white/80 text-sm font-medium">

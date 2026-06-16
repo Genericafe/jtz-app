@@ -9,6 +9,67 @@ import { format, isAfter, formatDistanceToNow } from 'date-fns';
 import { generarTextoEvento } from '../utils/formatearTexto';
 import { es } from 'date-fns/locale';
 
+// Compress an uploaded image client-side to a small JPEG data URL so it fits
+// comfortably in the DB and loads fast as an Open Graph preview image.
+async function compressImage(file: File, maxW = 1200, quality = 0.82): Promise<string> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result as string);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = reject;
+    i.src = dataUrl;
+  });
+  const scale = Math.min(1, maxW / img.width);
+  const w = Math.round(img.width * scale);
+  const h = Math.round(img.height * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return dataUrl;
+  ctx.drawImage(img, 0, 0, w, h);
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
+function EventImageUpload({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const handle = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    try { onChange(await compressImage(file)); } finally { setBusy(false); e.target.value = ''; }
+  };
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-400 mb-1.5">
+        Imagen / flyer del evento <span className="text-gray-600">(opcional · recomendado para compartir)</span>
+      </label>
+      {value ? (
+        <div className="relative rounded-xl overflow-hidden border border-white/[0.08] group">
+          <img src={value} alt="Flyer del evento" className="w-full h-40 object-cover" />
+          <button type="button" onClick={() => onChange('')}
+            className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 text-white/90 hover:bg-black/80 transition-colors">
+            <X size={14} />
+          </button>
+        </div>
+      ) : (
+        <label className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed border-white/[0.12] rounded-xl py-6 cursor-pointer hover:border-brand-500/40 hover:bg-brand-500/5 transition-all ${busy ? 'opacity-60' : ''}`}>
+          {busy
+            ? <div className="w-6 h-6 border-2 border-brand-400 border-t-transparent rounded-full animate-spin" />
+            : <Upload size={20} className="text-brand-400" />}
+          <span className="text-xs text-gray-400">{busy ? 'Procesando…' : 'Sube una imagen (se optimiza sola)'}</span>
+          <input type="file" accept="image/*" className="hidden" onChange={handle} disabled={busy} />
+        </label>
+      )}
+      <p className="text-[11px] text-gray-500 mt-1">Aparecerá en la página pública y en la vista previa al compartir el link.</p>
+    </div>
+  );
+}
+
 interface NominatimResult {
   display_name: string;
   address: {
@@ -1030,11 +1091,12 @@ export default function Events() {
   const [form, setForm] = useState({
     nombre: '', tipo: 'carrera', descripcion: '', fecha: '', lugar: '',
     ciudad: '', estado: '', distanciaKm: '', cupoMaximo: '', precio: '0',
+    imagen: '',
     notificarCorredores: false,
   });
   const [editForm, setEditForm] = useState({
     nombre: '', tipo: 'carrera', descripcion: '', fecha: '', lugar: '',
-    ciudad: '', estado: '', distanciaKm: '', cupoMaximo: '', precio: '0',
+    ciudad: '', estado: '', distanciaKm: '', cupoMaximo: '', precio: '0', imagen: '',
   });
   const [improvingText, setImprovingText] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -1059,7 +1121,7 @@ export default function Events() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['events'] });
       setShowForm(false);
-      setForm({ nombre: '', tipo: 'carrera', descripcion: '', fecha: '', lugar: '', ciudad: '', estado: '', distanciaKm: '', cupoMaximo: '', precio: '0', notificarCorredores: false });
+      setForm({ nombre: '', tipo: 'carrera', descripcion: '', fecha: '', lugar: '', ciudad: '', estado: '', distanciaKm: '', cupoMaximo: '', precio: '0', imagen: '', notificarCorredores: false });
     },
   });
 
@@ -1105,6 +1167,9 @@ export default function Events() {
       distanciaKm: ev.distanciaKm?.toString() ?? '',
       cupoMaximo:  ev.cupoMaximo?.toString() ?? '',
       precio:      ev.precio.toString(),
+      // Show the existing image (served via the public endpoint). Only a newly
+      // uploaded data: URL is sent back on save.
+      imagen: ev.hasImagen ? `${import.meta.env.VITE_API_URL ?? '/api'}/public/events/${ev.id}/image?t=${Date.now()}` : '',
     });
     setEditEvent(ev);
   };
@@ -1330,6 +1395,9 @@ export default function Events() {
                 />
               </div>
 
+              {/* Event image / flyer */}
+              <EventImageUpload value={form.imagen} onChange={v => setForm({ ...form, imagen: v })} />
+
               {/* Notify runners checkbox */}
               <label className="flex items-center gap-3 p-3 rounded-xl bg-surface-600 border border-white/[0.06] cursor-pointer hover:border-brand-500/30 transition-all">
                 <input type="checkbox" checked={form.notificarCorredores}
@@ -1449,6 +1517,9 @@ export default function Events() {
                   rows={3} spellCheck lang="es-MX" className="input w-full text-sm resize-none" />
               </div>
 
+              {/* Event image / flyer */}
+              <EventImageUpload value={editForm.imagen} onChange={v => setEditForm({ ...editForm, imagen: v })} />
+
               {/* GPX upload */}
               <GpxUpload eventId={editEvent.id} currentGpxNombre={editEvent.gpxNombre} />
             </div>
@@ -1458,15 +1529,20 @@ export default function Events() {
                 Cancelar
               </button>
               <button
-                onClick={() => updateMutation.mutate({
-                  id: editEvent.id,
-                  data: {
-                    ...editForm,
-                    distanciaKm: editForm.distanciaKm ? Number(editForm.distanciaKm) : undefined,
-                    cupoMaximo:  editForm.cupoMaximo  ? Number(editForm.cupoMaximo)  : undefined,
-                    precio:      Number(editForm.precio),
-                  },
-                })}
+                onClick={() => {
+                  const { imagen, ...rest } = editForm;
+                  updateMutation.mutate({
+                    id: editEvent.id,
+                    data: {
+                      ...rest,
+                      distanciaKm: editForm.distanciaKm ? Number(editForm.distanciaKm) : undefined,
+                      cupoMaximo:  editForm.cupoMaximo  ? Number(editForm.cupoMaximo)  : undefined,
+                      precio:      Number(editForm.precio),
+                      // New upload → data: URL. Cleared → ''. Untouched → http URL (skip).
+                      ...(imagen.startsWith('data:') ? { imagen } : imagen === '' ? { imagen: '' } : {}),
+                    },
+                  });
+                }}
                 disabled={updateMutation.isPending}
                 className="flex-1 btn-primary py-2.5 text-sm font-semibold">
                 {updateMutation.isPending ? 'Guardando...' : 'Guardar cambios'}

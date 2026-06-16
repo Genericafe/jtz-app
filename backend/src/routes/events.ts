@@ -23,10 +23,16 @@ router.get('/', async (_req: AuthRequest, res: Response) => {
     }),
   ]);
   const paidLeadMap = new Map(paidLeadCounts.map(r => [r.eventId, r._count.id]));
-  return res.json(events.map(e => ({
-    ...e,
-    _count: { registros: e._count.registros + (paidLeadMap.get(e.id) ?? 0) },
-  })));
+  return res.json(events.map(e => {
+    // Don't ship the (potentially large) base64 image in the list payload —
+    // just a flag. The full image is served via /public/events/:id/image.
+    const { imagen, ...rest } = e as typeof e & { imagen?: string | null };
+    return {
+      ...rest,
+      hasImagen: !!imagen,
+      _count: { registros: e._count.registros + (paidLeadMap.get(e.id) ?? 0) },
+    };
+  }));
 });
 
 router.get('/:id', async (req: AuthRequest, res: Response) => {
@@ -66,6 +72,7 @@ router.post('/', coachOnly, async (req: AuthRequest, res: Response) => {
     distanciaKm:         z.number().optional(),
     cupoMaximo:          z.number().int().optional(),
     precio:              z.number().default(0),
+    imagen:              z.string().optional(),
     notificarCorredores: z.boolean().optional().default(false),
   });
 
