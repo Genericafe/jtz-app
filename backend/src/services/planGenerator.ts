@@ -159,7 +159,7 @@ function rodajeFacil(km: number, extra = ''): DiaGenerado {
   return {
     diaSemana: '', tipo: 'rodaje_facil', distanciaKm: r(km),
     intensidad: 'suave', zona: 'Zona 1-2 (60-70% FCM)',
-    descripcion: `Rodaje fácil ${km}km a ritmo conversacional. ${extra}Debes poder hablar sin dificultad. Activa el sistema aeróbico sin generar fatiga acumulada.`,
+    descripcion: `Trote fácil ${km}km a ritmo conversacional. ${extra}Debes poder hablar sin dificultad. Activa el sistema aeróbico sin generar fatiga acumulada.`,
   };
 }
 
@@ -167,7 +167,7 @@ function rodajeLargo(km: number, extra = ''): DiaGenerado {
   return {
     diaSemana: '', tipo: 'rodaje_largo', distanciaKm: r(km),
     intensidad: 'suave-moderado', zona: 'Zona 1-2 (65-75% FCM)',
-    descripcion: `Rodaje largo ${km}km. ${extra}Los últimos 20-30% a ritmo objetivo de carrera. Fundamental para adaptaciones cardiovasculares y musculares de larga distancia.`,
+    descripcion: `Trote largo ${km}km. ${extra}Los últimos 20-30% a ritmo objetivo de carrera. Fundamental para adaptaciones cardiovasculares y musculares de larga distancia.`,
   };
 }
 
@@ -279,7 +279,7 @@ function substituirConRodaje(km: number, intensidad: 'facil' | 'moderado' = 'fac
     return {
       diaSemana: '', tipo: 'rodaje_moderado', distanciaKm: r(km),
       intensidad: 'moderado', zona: 'Zona 2-3 (70-78% FCM)',
-      descripcion: `Rodaje moderado ${km}km. Ritmo cómodo pero constante. Desarrolla eficiencia aeróbica y economía de carrera.`,
+      descripcion: `Trote moderado ${km}km. Ritmo cómodo pero constante. Desarrolla eficiencia aeróbica y economía de carrera.`,
     };
   }
   return rodajeFacil(km);
@@ -582,7 +582,7 @@ function principiosByGoal(objetivo: Objetivo, nivel: Nivel, mod: Modalidades): s
   ];
 
   if (['5K', '10K', '21K', '42K'].includes(objetivo)) {
-    base.push('Rodaje largo = 30-35% del volumen semanal (World Athletics guideline)');
+    base.push('Trote largo = 30-35% del volumen semanal (World Athletics guideline)');
     base.push('Trabajo de umbral anaeróbico: clave para mejorar ritmo de carrera sostenido');
     if (objetivo === '42K') base.push('Carrera de maratón: nunca aumentar volumen y velocidad al mismo tiempo (Lydiard Method)');
   }
@@ -613,7 +613,7 @@ function filosofiaByGoal(objetivo: Objetivo): string {
   const map: Partial<Record<Objetivo, string>> = {
     '5K':   'Plan basado en la metodología de Jack Daniels (VDOT) y directrices IAAF para carreras de corta distancia. Énfasis en velocidad y VO₂máx.',
     '10K':  'Combinación de base aeróbica (Lydiard) y velocidad específica. Basado en estándares USATF para 10K.',
-    '21K':  'Metodología Hansons Half Marathon: alta frecuencia de rodajes fáciles + trabajo específico de umbral. World Athletics certified.',
+    '21K':  'Metodología Hansons Half Marathon: alta frecuencia de trotes fáciles + trabajo específico de umbral. World Athletics certified.',
     '42K':  'Plan basado en Pfitzinger & Douglas (Advanced Marathoning) y protocolos IAAF. Énfasis en volumen progresivo y especificidad.',
     trail_21K:  'Directrices ITRA (International Trail Running Association). Entrenamiento vertical y técnico con progresión de desnivel.',
     ultratrail: 'Protocolos UTMB / ITRA. Volumen por tiempo (no solo km), nutrición en movimiento, manejo del sueño en distancias extremas.',

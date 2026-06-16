@@ -40,10 +40,15 @@ function diaOffset(diaSemana: string): number | null {
   return m ? Number(m[1]) - 1 : null;
 }
 
+// "Rodaje" is cycling vocabulary; for running we use "trote". Sanitize at
+// display time so existing plans (text already stored) also read correctly.
+const fixRunTerms = (s?: string) =>
+  (s ?? '').replace(/Rodaje/g, 'Trote').replace(/rodaje/g, 'trote');
+
 const tipoLabel: Record<string, string> = {
-  rodaje_facil:       'Carrera Fácil',
-  rodaje_largo:       'Carrera Larga',
-  rodaje_moderado:    'Carrera Moderada',
+  rodaje_facil:       'Trote Fácil',
+  rodaje_largo:       'Trote Largo',
+  rodaje_moderado:    'Trote Moderado',
   tempo:              'Tempo / Umbral',
   intervalos:         'Intervalos',
   fuerza:             'Fuerza / Pesas',
@@ -570,7 +575,7 @@ function DayCard({ day, dayDate, isCoach, planId, onUpdate, myActivity, onActivi
             </div>
           ) : (
             <div className="space-y-3">
-              <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{day.descripcion}</p>
+              <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{fixRunTerms(day.descripcion)}</p>
               {day.videoUrl && (
                 <a href={day.videoUrl} target="_blank" rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-semibold hover:bg-red-500/20 transition-colors">
@@ -802,7 +807,7 @@ export default function PlanDetail() {
                 <ChevronDown size={13} className="group-open:rotate-180 transition-transform" />
                 Filosofía y principios del plan
               </summary>
-              <p className="text-sm text-gray-400 leading-relaxed mt-3 whitespace-pre-line">{plan.descripcion}</p>
+              <p className="text-sm text-gray-400 leading-relaxed mt-3 whitespace-pre-line">{fixRunTerms(plan.descripcion)}</p>
             </details>
           </div>
         )}
@@ -855,7 +860,7 @@ export default function PlanDetail() {
               <div className="flex items-center justify-between mb-3">
                 <div>
                   {!isSingleWeek && <h2 className="text-lg font-black text-white">Semana {week.numeroSemana}</h2>}
-                  <p className="text-sm text-gray-400">{week.descripcion}</p>
+                  <p className="text-sm text-gray-400">{fixRunTerms(week.descripcion)}</p>
                 </div>
                 <div className="flex gap-3 text-center">
                   <div className="bg-surface-700 rounded-xl px-3 py-2 border border-white/[0.06]">

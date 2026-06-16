@@ -371,7 +371,7 @@ export default function PlanBuilder() {
                   <p className="text-sm font-semibold text-white">Carrera / Running</p>
                   <span className="text-xs px-1.5 py-0.5 rounded bg-brand-500/20 text-brand-400">Siempre activo</span>
                 </div>
-                <p className="text-xs text-gray-500 mt-0.5">Rodaje fácil, largo, tempo, intervalos — base del plan</p>
+                <p className="text-xs text-gray-500 mt-0.5">Trote fácil, largo, tempo, intervalos — base del plan</p>
               </div>
             </div>
 

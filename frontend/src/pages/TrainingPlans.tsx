@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { ClipboardList, Target, Clock, Users, X, Zap, ChevronRight, Trash2, BookmarkPlus, BookmarkCheck, Check } from 'lucide-react';
-import { plansApi, runnersApi } from '../services/api';
+import { plansApi, runnersApi, groupsApi } from '../services/api';
 import { TrainingPlan, Runner } from '../types';
 import { useAuth } from '../context/AuthContext';
+import type { RunnerGroup } from '../components/GroupsManager';
 
 const nivelColors: Record<string, string> = {
   principiante: 'bg-green-500/15 text-green-400',
@@ -18,17 +19,35 @@ export default function TrainingPlans() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [assignPlan, setAssignPlan] = useState<TrainingPlan | null>(null);
-  const [assignForm, setAssignForm] = useState({ runnerId: '', fechaInicio: '' });
+  const [assignTarget, setAssignTarget] = useState<'runner' | 'group'>('runner');
+  const [assignForm, setAssignForm] = useState({ runnerId: '', groupId: '', fechaInicio: '' });
+  const [assignMsg, setAssignMsg] = useState('');
 
   const { data: plansData } = useQuery({ queryKey: ['plans'], queryFn: () => plansApi.list() });
   const { data: runnersData } = useQuery({ queryKey: ['runners'], queryFn: () => runnersApi.list(), enabled: isCoach });
+  const { data: groupsData } = useQuery({ queryKey: ['groups'], queryFn: () => groupsApi.list(), enabled: isCoach });
 
   const plans: TrainingPlan[] = plansData?.data ?? [];
   const runners: Runner[] = runnersData?.data ?? [];
+  const groups: RunnerGroup[] = groupsData?.data ?? [];
+
+  const closeAssign = () => { setAssignPlan(null); setAssignForm({ runnerId: '', groupId: '', fechaInicio: '' }); setAssignTarget('runner'); setAssignMsg(''); };
 
   const assignMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: object }) => plansApi.assign(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['plans'] }); setAssignPlan(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['plans'] }); closeAssign(); },
+  });
+
+  const groupAssignMutation = useMutation({
+    mutationFn: ({ groupId, planId, fechaInicio }: { groupId: number; planId: number; fechaInicio: string }) =>
+      groupsApi.assignPlan(groupId, planId, fechaInicio),
+    onSuccess: (res: { data: { assigned: number } }) => {
+      qc.invalidateQueries({ queryKey: ['plans'] });
+      setAssignMsg(`✓ Plan asignado a ${res.data.assigned} corredor(es) del grupo`);
+      setTimeout(closeAssign, 1500);
+    },
+    onError: (err: { response?: { data?: { error?: string } } }) =>
+      setAssignMsg(`⚠ ${err?.response?.data?.error ?? 'Error al asignar al grupo'}`),
   });
 
   const deleteMutation = useMutation({
@@ -219,27 +238,61 @@ export default function TrainingPlans() {
           <div className="bg-dark-800 border border-dark-600 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-semibold text-white">Asignar plan</h2>
-              <button onClick={() => setAssignPlan(null)} className="text-gray-400 hover:text-white transition-colors">
+              <button onClick={closeAssign} className="text-gray-400 hover:text-white transition-colors">
                 <X size={20} />
               </button>
             </div>
             <p className="text-sm text-gray-400 mb-4">
               Plan: <span className="text-white font-medium">{assignPlan.nombre}</span>
             </p>
+
+            {/* Runner vs Group toggle */}
+            <div className="flex gap-1 p-1 bg-dark-700 rounded-xl mb-4">
+              {([['runner', 'Corredor'], ['group', 'Grupo']] as const).map(([t, label]) => (
+                <button key={t} onClick={() => setAssignTarget(t)}
+                  className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${assignTarget === t ? 'bg-brand-500 text-white' : 'text-gray-400 hover:text-white'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
             <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-300 mb-1.5">Corredor</label>
-                <select
-                  value={assignForm.runnerId}
-                  onChange={(e) => setAssignForm({ ...assignForm, runnerId: e.target.value })}
-                  className="w-full bg-dark-700 border border-dark-500 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500"
-                >
-                  <option value="">Seleccionar corredor...</option>
-                  {runners.filter(r => r.activo).map((r) => (
-                    <option key={r.id} value={r.id}>{r.nombre} {r.apellido}</option>
-                  ))}
-                </select>
-              </div>
+              {assignTarget === 'runner' ? (
+                <div>
+                  <label className="block text-xs font-medium text-gray-300 mb-1.5">Corredor</label>
+                  <select
+                    value={assignForm.runnerId}
+                    onChange={(e) => setAssignForm({ ...assignForm, runnerId: e.target.value })}
+                    className="w-full bg-dark-700 border border-dark-500 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500"
+                  >
+                    <option value="">Seleccionar corredor...</option>
+                    {runners.filter(r => r.activo).map((r) => (
+                      <option key={r.id} value={r.id}>{r.nombre} {r.apellido}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-medium text-gray-300 mb-1.5">Grupo</label>
+                  {groups.length === 0 ? (
+                    <p className="text-xs text-gray-500 bg-dark-700 rounded-lg px-3 py-2.5">
+                      Aún no tienes grupos. Créalos en Corredores → Grupos.
+                    </p>
+                  ) : (
+                    <select
+                      value={assignForm.groupId}
+                      onChange={(e) => setAssignForm({ ...assignForm, groupId: e.target.value })}
+                      className="w-full bg-dark-700 border border-dark-500 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500"
+                    >
+                      <option value="">Seleccionar grupo...</option>
+                      {groups.map((g) => (
+                        <option key={g.id} value={g.id}>{g.nombre} ({g._count?.members ?? g.members.length})</option>
+                      ))}
+                    </select>
+                  )}
+                  <p className="text-[11px] text-gray-500 mt-1.5">Se asignará a todos los corredores actuales del grupo.</p>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-medium text-gray-300 mb-1.5">Fecha de inicio</label>
                 <input
@@ -249,24 +302,39 @@ export default function TrainingPlans() {
                   className="w-full bg-dark-700 border border-dark-500 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500"
                 />
               </div>
+              {assignMsg && (
+                <p className={`text-xs ${assignMsg.startsWith('✓') ? 'text-green-400' : 'text-yellow-400'}`}>{assignMsg}</p>
+              )}
             </div>
             <div className="flex gap-3 mt-5">
               <button
-                onClick={() => setAssignPlan(null)}
+                onClick={closeAssign}
                 className="flex-1 px-4 py-2.5 rounded-lg border border-dark-500 text-sm text-gray-300 hover:text-white hover:border-dark-400 transition-colors"
               >
                 Cancelar
               </button>
-              <button
-                onClick={() => assignMutation.mutate({
-                  id: assignPlan.id,
-                  data: { runnerId: Number(assignForm.runnerId), fechaInicio: assignForm.fechaInicio },
-                })}
-                disabled={assignMutation.isPending || !assignForm.runnerId || !assignForm.fechaInicio}
-                className="flex-1 px-4 py-2.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-sm font-semibold text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {assignMutation.isPending ? 'Asignando...' : 'Asignar'}
-              </button>
+              {assignTarget === 'runner' ? (
+                <button
+                  onClick={() => assignMutation.mutate({
+                    id: assignPlan.id,
+                    data: { runnerId: Number(assignForm.runnerId), fechaInicio: assignForm.fechaInicio },
+                  })}
+                  disabled={assignMutation.isPending || !assignForm.runnerId || !assignForm.fechaInicio}
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-sm font-semibold text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {assignMutation.isPending ? 'Asignando...' : 'Asignar'}
+                </button>
+              ) : (
+                <button
+                  onClick={() => groupAssignMutation.mutate({
+                    groupId: Number(assignForm.groupId), planId: assignPlan.id, fechaInicio: assignForm.fechaInicio,
+                  })}
+                  disabled={groupAssignMutation.isPending || !assignForm.groupId || !assignForm.fechaInicio}
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-sm font-semibold text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {groupAssignMutation.isPending ? 'Asignando...' : 'Asignar al grupo'}
+                </button>
+              )}
             </div>
           </div>
         </div>
