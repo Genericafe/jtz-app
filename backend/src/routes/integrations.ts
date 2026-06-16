@@ -61,6 +61,70 @@ router.get('/strava/callback', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ── Strava Webhook (public) ───────────────────────────────────────────────────
+// Strava calls these without a JWT, so they must sit before authMiddleware.
+
+const STRAVA_WEBHOOK_VERIFY_TOKEN =
+  process.env.STRAVA_WEBHOOK_VERIFY_TOKEN ?? 'jtz-strava-webhook-2026';
+
+// GET — subscription validation handshake (Strava sends hub.challenge once)
+router.get('/strava/webhook', (req, res) => {
+  const mode      = req.query['hub.mode'];
+  const token     = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+  if (mode === 'subscribe' && token === STRAVA_WEBHOOK_VERIFY_TOKEN) {
+    return res.json({ 'hub.challenge': challenge });
+  }
+  return res.sendStatus(403);
+});
+
+// POST — event notifications (new activities, updates, deauthorizations)
+router.post('/strava/webhook', async (req, res) => {
+  // Strava requires a 200 within 2 s, so ack first and process asynchronously.
+  res.sendStatus(200);
+
+  const event = req.body ?? {};
+  const athleteId = event.owner_id;
+  const actId     = event.object_id;
+
+  try {
+    // Athlete revoked access → disconnect them locally
+    if (event.object_type === 'athlete' && event.updates?.authorized === 'false') {
+      await (prisma as any).runner.updateMany({
+        where: { stravaAthleteId: athleteId },
+        data:  { stravaAthleteId: null, stravaAccessToken: null, stravaRefreshToken: null, stravaTokenExpiry: null },
+      });
+      return;
+    }
+
+    // Only auto-import brand-new activities
+    if (event.object_type !== 'activity' || event.aspect_type !== 'create') return;
+
+    const runner = await (prisma as any).runner.findUnique({ where: { stravaAthleteId: athleteId } });
+    if (!runner) return;
+
+    // Skip if already imported (manual sync may have beaten the webhook)
+    const existing = await (prisma as any).activityLog.findFirst({ where: { stravaActivityId: actId } });
+    if (existing) return;
+
+    const token = await getValidStravaToken(runner, prisma);
+    if (!token) return;
+
+    const log = await importStravaActivityById(token, actId, runner.id, prisma);
+
+    if (runner.userId) {
+      await sendToUser(
+        runner.userId,
+        '✅ Actividad sincronizada',
+        `${log.nombre ?? 'Tu actividad'} se importó automáticamente desde Strava`,
+        { type: 'activity', activityId: String(log.id) },
+      );
+    }
+  } catch (err: any) {
+    console.error('[strava webhook]', err?.message ?? err);
+  }
+});
+
 router.use(authMiddleware);
 
 // GET /integrations/activities
@@ -382,6 +446,84 @@ router.post('/strava/import-url', async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ error: 'Esta actividad no pertenece a tu cuenta de Strava' });
     }
     return res.status(500).json({ error: msg || 'Error al importar' });
+  }
+});
+
+// ── Strava webhook subscription management (coach-only, one-time setup) ────────
+
+function stravaCallbackUrl(): string {
+  const base = (process.env.API_PUBLIC_URL ?? process.env.STRAVA_REDIRECT_URI ?? '')
+    .replace(/\/integrations\/strava\/callback.*$/, '')
+    .replace(/\/$/, '');
+  return `${base}/integrations/strava/webhook`;
+}
+
+// GET — view the current subscription (or null)
+router.get('/strava/webhook/status', async (req: AuthRequest, res: Response) => {
+  const user = await prisma.user.findUnique({ where: { id: req.userId! } });
+  if (!user || user.role !== 'coach') return res.status(403).json({ error: 'Solo el entrenador' });
+
+  const clientId     = process.env.STRAVA_CLIENT_ID;
+  const clientSecret = process.env.STRAVA_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return res.status(503).json({ error: 'Strava no configurado' });
+
+  try {
+    const params = new URLSearchParams({ client_id: clientId, client_secret: clientSecret });
+    const r = await fetch(`https://www.strava.com/api/v3/push_subscriptions?${params}`);
+    const data: any = await r.json();
+    const sub = Array.isArray(data) ? data[0] : null;
+    return res.json({ active: !!sub, subscription: sub ?? null, callbackUrl: stravaCallbackUrl() });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message ?? 'Error' });
+  }
+});
+
+// POST — register the webhook subscription with Strava
+router.post('/strava/webhook/subscribe', async (req: AuthRequest, res: Response) => {
+  const user = await prisma.user.findUnique({ where: { id: req.userId! } });
+  if (!user || user.role !== 'coach') return res.status(403).json({ error: 'Solo el entrenador' });
+
+  const clientId     = process.env.STRAVA_CLIENT_ID;
+  const clientSecret = process.env.STRAVA_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return res.status(503).json({ error: 'Strava no configurado' });
+
+  try {
+    const body = new URLSearchParams({
+      client_id:     clientId,
+      client_secret: clientSecret,
+      callback_url:  stravaCallbackUrl(),
+      verify_token:  STRAVA_WEBHOOK_VERIFY_TOKEN,
+    });
+    const r = await fetch('https://www.strava.com/api/v3/push_subscriptions', { method: 'POST', body });
+    const data: any = await r.json();
+    if (!r.ok) {
+      return res.status(400).json({ error: data?.errors?.[0]?.resource ? JSON.stringify(data.errors) : (data?.message ?? 'Error al suscribir'), detail: data });
+    }
+    return res.status(201).json({ ok: true, subscription: data });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message ?? 'Error' });
+  }
+});
+
+// DELETE — remove the webhook subscription
+router.delete('/strava/webhook/subscribe/:id', async (req: AuthRequest, res: Response) => {
+  const user = await prisma.user.findUnique({ where: { id: req.userId! } });
+  if (!user || user.role !== 'coach') return res.status(403).json({ error: 'Solo el entrenador' });
+
+  const clientId     = process.env.STRAVA_CLIENT_ID;
+  const clientSecret = process.env.STRAVA_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return res.status(503).json({ error: 'Strava no configurado' });
+
+  try {
+    const params = new URLSearchParams({ client_id: clientId, client_secret: clientSecret });
+    const r = await fetch(`https://www.strava.com/api/v3/push_subscriptions/${req.params.id}?${params}`, { method: 'DELETE' });
+    if (!r.ok && r.status !== 204) {
+      const data: any = await r.json().catch(() => ({}));
+      return res.status(400).json({ error: data?.message ?? 'Error al eliminar' });
+    }
+    return res.json({ ok: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message ?? 'Error' });
   }
 });
 

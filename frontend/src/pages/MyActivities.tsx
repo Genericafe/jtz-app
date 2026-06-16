@@ -9,6 +9,8 @@ import { parseGpx } from '../utils/gpxParser';
 import ActivityStatsView, { ActivityLog } from '../components/ActivityStatsView';
 import { Capacitor } from '@capacitor/core';
 import { importFromHealth } from '../hooks/useHealthSync';
+import { useAuth } from '../context/AuthContext';
+import { Zap } from 'lucide-react';
 
 const TIPOS = [
   { id: 'correr',   label: 'Correr',   emoji: '🏃' },
@@ -105,6 +107,7 @@ export default function MyActivities() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [importingHealth, setImportingHealth] = useState(false);
   const isNative = Capacitor.isNativePlatform();
+  const { isCoach } = useAuth();
 
   // Strava
   const [stravaUrl, setStravaUrl] = useState('');
@@ -116,6 +119,21 @@ export default function MyActivities() {
     queryFn: () => integrationsApi.stravaStatus(),
   });
   const stravaConnected: boolean = stravaStatus?.data?.connected ?? false;
+
+  // Webhook auto-sync (coach-only, global setting)
+  const { data: webhookData, refetch: refetchWebhook } = useQuery({
+    queryKey: ['strava-webhook'],
+    queryFn: () => integrationsApi.stravaWebhookStatus(),
+    enabled: isCoach,
+    retry: false,
+  });
+  const webhookActive: boolean = webhookData?.data?.active ?? false;
+
+  const webhookSubMutation = useMutation({
+    mutationFn: () => integrationsApi.stravaWebhookSubscribe(),
+    onSuccess: () => { refetchWebhook(); setStravaMsg('✓ Sincronización automática activada para todo el club'); setTimeout(() => setStravaMsg(''), 5000); },
+    onError: (err: any) => setStravaMsg(`⚠ ${err?.response?.data?.error ?? 'No se pudo activar'}`),
+  });
 
   // Handle ?strava=connected or ?strava=error redirect back from OAuth
   useEffect(() => {
@@ -414,6 +432,36 @@ export default function MyActivities() {
                 {stravaImportUrlMutation.isPending ? 'Importando...' : 'Importar'}
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Coach: auto-sync webhook (global, one-time) */}
+        {isCoach && (
+          <div className="flex items-center justify-between gap-3 pt-1 border-t border-white/[0.06]">
+            <div className="flex items-center gap-2">
+              <Zap size={14} className={webhookActive ? 'text-green-400' : 'text-gray-500'} />
+              <div>
+                <p className="text-xs font-semibold text-white">Sincronización automática</p>
+                <p className="text-[11px] text-gray-500">
+                  {webhookActive
+                    ? 'Activa · las actividades del club entran solas'
+                    : 'Las actividades aparecen en cuanto el corredor termina, sin sincronizar a mano'}
+                </p>
+              </div>
+            </div>
+            {webhookActive ? (
+              <span className="flex items-center gap-1 text-[11px] text-green-400 font-medium px-2 py-1 rounded-lg bg-green-500/10">
+                <CheckCircle2 size={11} /> Activa
+              </span>
+            ) : (
+              <button
+                onClick={() => webhookSubMutation.mutate()}
+                disabled={webhookSubMutation.isPending}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-brand-500/20 border border-brand-500/30 text-brand-400 hover:bg-brand-500/30 transition-all disabled:opacity-50 whitespace-nowrap"
+              >
+                {webhookSubMutation.isPending ? 'Activando…' : 'Activar'}
+              </button>
+            )}
           </div>
         )}
 
