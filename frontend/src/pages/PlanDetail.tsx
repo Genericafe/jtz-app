@@ -31,6 +31,13 @@ interface Plan {
   duracionSemanas: number; nivel: string; objetivo?: string;
   semanas: TrainingWeek[];
   asignaciones?: { runner: AssignedRunner }[];
+  fechaInicio?: string; // runner's assignment start date (for exact day dates)
+}
+
+// "Día 1", "Día 3"… → its 0-based offset. Returns null for weekday labels.
+function diaOffset(diaSemana: string): number | null {
+  const m = diaSemana.match(/^D[íi]a\s*(\d+)/i);
+  return m ? Number(m[1]) - 1 : null;
 }
 
 const tipoLabel: Record<string, string> = {
@@ -383,8 +390,8 @@ function CoachDayActivities({ diaId, expanded }: { diaId: number; expanded: bool
 // ──────────────────────────────────────────────────────────────────────────────
 // DayCard principal
 // ──────────────────────────────────────────────────────────────────────────────
-function DayCard({ day, isCoach, planId, onUpdate, myActivity, onActivityChange, onDragStart, onDragOver, onDrop, isDragOver, isDragging }: {
-  day: TrainingDay; isCoach: boolean; planId: number;
+function DayCard({ day, dayDate, isCoach, planId, onUpdate, myActivity, onActivityChange, onDragStart, onDragOver, onDrop, isDragOver, isDragging }: {
+  day: TrainingDay; dayDate?: Date | null; isCoach: boolean; planId: number;
   onUpdate: () => void;
   myActivity?: ActivityLog | null;
   onActivityChange?: () => void;
@@ -441,7 +448,12 @@ function DayCard({ day, isCoach, planId, onUpdate, myActivity, onActivityChange,
         {isCoach && (
           <GripVertical size={14} className="text-gray-600 cursor-grab active:cursor-grabbing flex-shrink-0 -ml-1" />
         )}
-        <span className="text-xs font-bold text-gray-500 w-8 flex-shrink-0">{diasLabel[day.diaSemana] ?? (/^Día\s*\d+$/i.test(day.diaSemana) ? day.diaSemana.replace(/\s+/g, '').replace('Día', 'D') : day.diaSemana.slice(0,3).toUpperCase())}</span>
+        <span className="flex flex-col items-center w-10 flex-shrink-0 leading-tight">
+          <span className="text-xs font-bold text-gray-500">{diasLabel[day.diaSemana] ?? (/^Día\s*\d+$/i.test(day.diaSemana) ? day.diaSemana.replace(/\s+/g, '').replace('Día', 'D') : day.diaSemana.slice(0,3).toUpperCase())}</span>
+          {dayDate && (
+            <span className="text-[10px] text-brand-400 font-semibold whitespace-nowrap">{format(dayDate, 'd MMM', { locale: es })}</span>
+          )}
+        </span>
         <span className={`flex items-center justify-center w-7 h-7 rounded-lg flex-shrink-0 ${cfg.bg}`}>
           <span className={cfg.color}>{cfg.icon}</span>
         </span>
@@ -683,6 +695,18 @@ export default function PlanDetail() {
   const sesiones = week?.dias.filter(d => d.tipo !== 'descanso' && d.tipo !== 'recuperacion_activa').length ?? 0;
   const weekKm = week?.dias.reduce((s, d) => s + (d.distanciaKm ?? 0), 0) ?? 0;
 
+  // A single-week plan (incl. day-based plans) doesn't need a week navigator.
+  const isSingleWeek = plan.semanas.length <= 1;
+  const startDate = plan.fechaInicio ? new Date(plan.fechaInicio) : null;
+  const dateForDay = (diaSemana: string): Date | null => {
+    if (!startDate) return null;
+    const off = diaOffset(diaSemana);
+    if (off == null) return null;
+    const d = new Date(startDate);
+    d.setDate(d.getDate() + off);
+    return d;
+  };
+
   return (
     <div className="p-4 lg:p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-5">
@@ -784,8 +808,9 @@ export default function PlanDetail() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-5">
-        {/* Week selector */}
+      <div className={`grid grid-cols-1 gap-5 ${isSingleWeek ? '' : 'xl:grid-cols-4'}`}>
+        {/* Week selector — hidden for single-week plans (redundant) */}
+        {!isSingleWeek && (
         <div className="xl:col-span-1">
           <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Semanas</h2>
           <div className="space-y-1 max-h-[600px] overflow-y-auto pr-1">
@@ -821,14 +846,15 @@ export default function PlanDetail() {
             })}
           </div>
         </div>
+        )}
 
         {/* Week detail */}
-        <div className="xl:col-span-3">
+        <div className={isSingleWeek ? '' : 'xl:col-span-3'}>
           {week ? (
             <>
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <h2 className="text-lg font-black text-white">Semana {week.numeroSemana}</h2>
+                  {!isSingleWeek && <h2 className="text-lg font-black text-white">Semana {week.numeroSemana}</h2>}
                   <p className="text-sm text-gray-400">{week.descripcion}</p>
                 </div>
                 <div className="flex gap-3 text-center">
@@ -851,6 +877,7 @@ export default function PlanDetail() {
                   <DayCard
                     key={day.id}
                     day={day}
+                    dayDate={dateForDay(day.diaSemana)}
                     isCoach={isCoach}
                     planId={plan.id}
                     onUpdate={() => qc.invalidateQueries({ queryKey: ['plan', plan.id] })}

@@ -78,7 +78,8 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
         include: { semanas: { include: { dias: true }, orderBy: { numeroSemana: 'asc' } } },
       });
       if (!plan) return res.status(404).json({ error: 'Plan no encontrado' });
-      return res.json(plan);
+      // Surface the runner's start date so the UI can show exact dates per day.
+      return res.json({ ...plan, fechaInicio: assignment.fechaInicio });
     }
 
     // Coach: plan completo con todos los corredores asignados
