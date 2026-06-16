@@ -181,15 +181,15 @@ async function geocodeMaptiler(query: string, proximity: [number, number] | null
 async function geocodeGeoapify(query: string, proximity: [number, number] | null): Promise<Suggestion[]> {
   if (!GEOAPIFY_KEY) return [];
   const params: Record<string, string> = {
-    text: query, apiKey: GEOAPIFY_KEY, lang: 'es', limit: '6',
-    type: 'amenity,building,street,suburb,district,city',
+    text: query, apiKey: GEOAPIFY_KEY, lang: 'es', limit: '8',
+    // Hard filter to Mexico (avoids foreign matches) but NO radius circle —
+    // a soft proximity bias ranks nearby first while still allowing a correct
+    // address a bit farther away (e.g. Punta Banda) to appear.
+    filter: 'countrycode:mx',
   };
   if (proximity) {
     const [lng, lat] = proximity;
-    params.filter = `circle:${lng},${lat},5000`;
-    params.bias   = `proximity:${lng},${lat}`;
-  } else {
-    params.filter = 'countrycode:mx';
+    params.bias = `proximity:${lng},${lat}`;
   }
   try {
     const res  = await fetch(`https://api.geoapify.com/v1/geocode/autocomplete?${new URLSearchParams(params)}`);
@@ -229,10 +229,12 @@ async function geocode(query: string, proximity: [number, number] | null): Promi
   ov.forEach(add);   // Overpass — local OSM POIs
   mt.forEach(add);   // MapTiler — global fallback
 
-  // Annotate with distance and sort nearest-first
+  // Annotate with distance, drop far-away fuzzy garbage, sort nearest-first.
+  // 60 km covers a whole metro area; anything beyond is almost always a bad
+  // match (e.g. MapTiler returning "Punta San José" 40 km away for a street).
   return merged
-    .slice(0, 8)
     .map(s => ({ ...s, dist: proximity ? geoDistKm(s.center, proximity) : undefined }))
+    .filter(s => s.dist == null || s.dist <= 60)
     .sort((a, b) => (a.dist ?? 999) - (b.dist ?? 999))
     .slice(0, 6);
 }
