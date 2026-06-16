@@ -21,7 +21,7 @@ type BuildStep = 'idle' | 'routing' | 'done' | 'error';
 const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY ?? '';
 const STYLE_URL    = `https://api.maptiler.com/maps/streets-v2-dark/style.json?key=${MAPTILER_KEY}`;
 
-interface Suggestion { id: string; label: string; sublabel?: string; center: [number, number]; isCurrent?: boolean }
+interface Suggestion { id: string; label: string; sublabel?: string; center: [number, number]; isCurrent?: boolean; dist?: number }
 interface Endpoint   { label: string; center: [number, number] | null }
 
 function coordsToGpx(coords: [number, number][], name: string): string {
@@ -49,7 +49,11 @@ function geoDistKm(a: [number, number], b: [number, number]): number {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-// MapTiler – strong on POIs / place names
+function fmtDist(km: number): string {
+  return km < 1 ? `${Math.round(km * 1000)}m` : `${km.toFixed(1)}km`;
+}
+
+// ── MapTiler — good for POIs / business names ───────────────────────────────
 type MTFeature = {
   id: string; text?: string; place_name?: string;
   center: [number, number];
@@ -57,6 +61,7 @@ type MTFeature = {
 };
 
 async function geocodeMaptiler(query: string, proximity: [number, number] | null): Promise<Suggestion[]> {
+  const hasNum = /\d/.test(query);
   const params: Record<string, string> = {
     key: MAPTILER_KEY, language: 'es', limit: '5',
     types: 'poi,address,road,place,neighbourhood,locality',
@@ -64,7 +69,9 @@ async function geocodeMaptiler(query: string, proximity: [number, number] | null
   if (proximity) {
     const [lng, lat] = proximity;
     params.proximity = `${lng},${lat}`;
-    params.bbox = `${lng - 0.05},${lat - 0.05},${lng + 0.05},${lat + 0.05}`;
+    // Wider bbox for address queries so the geocoder can interpolate the block
+    const d = hasNum ? 0.2 : 0.05;
+    params.bbox = `${lng - d},${lat - d},${lng + d},${lat + d}`;
   } else {
     params.bbox = '-118.6,14.5,-86.7,32.7';
   }
@@ -77,10 +84,9 @@ async function geocodeMaptiler(query: string, proximity: [number, number] | null
     let feats = await tryFetch(params);
     if (feats.length === 0 && proximity) {
       const [lng, lat] = proximity;
-      feats = await tryFetch({ ...params, bbox: `${lng - 0.3},${lat - 0.3},${lng + 0.3},${lat + 0.3}` });
+      feats = await tryFetch({ ...params, bbox: `${lng - 0.5},${lat - 0.5},${lng + 0.5},${lat + 0.5}` });
     }
     if (feats.length === 0) feats = await tryFetch({ ...params, bbox: '-118.6,14.5,-86.7,32.7' });
-
     return feats.map(f => {
       const label = (f.text ?? f.place_name?.split(',')[0] ?? '').trim();
       const ctx   = f.context ?? [];
@@ -90,8 +96,7 @@ async function geocodeMaptiler(query: string, proximity: [number, number] | null
       const pparts = (f.place_name ?? '').split(',');
       const addr   = pparts.slice(1, pparts.length > 2 ? -1 : undefined).map(s => s.trim()).filter(Boolean).join(', ');
       return {
-        id: `mt-${f.id}`,
-        label,
+        id: `mt-${f.id}`, label,
         sublabel: addr || [nbhd, city || rgn].filter(Boolean).join(', ') || undefined,
         center: f.center,
       };
@@ -99,40 +104,94 @@ async function geocodeMaptiler(query: string, proximity: [number, number] | null
   } catch { return []; }
 }
 
-// Photon (OSM/Komoot) – strong on addresses with house numbers
+// ── Nominatim — structured house-number search via OSM ─────────────────────
+type NominatimResult = {
+  place_id: number; display_name: string; lat: string; lon: string;
+  address?: {
+    house_number?: string; road?: string; pedestrian?: string;
+    neighbourhood?: string; suburb?: string;
+    city?: string; town?: string; village?: string; state?: string;
+  };
+};
+
+async function geocodeNominatim(query: string, proximity: [number, number] | null): Promise<Suggestion[]> {
+  // Detect "street name + number" or "number + street name"
+  const endNum   = query.match(/^(.+?)\s+(\d+)\s*$/);  // "calle tercera 1620"
+  const startNum = query.match(/^(\d+)\s+(.+)\s*$/);   // "1620 calle tercera"
+  if (!endNum && !startNum) return [];                  // only run for address+number queries
+
+  const num    = endNum ? endNum[2] : startNum![1];
+  const street = endNum ? endNum[1] : startNum![2];
+
+  const params: Record<string, string> = {
+    format: 'jsonv2', addressdetails: '1', 'accept-language': 'es',
+    limit: '5', countrycodes: 'mx',
+    street: `${num} ${street}`,  // Nominatim prefers "number streetname"
+  };
+  if (proximity) {
+    const [lng, lat] = proximity;
+    // viewbox: left,top,right,bottom (west,north,east,south)
+    params.viewbox = `${lng - 0.3},${lat + 0.3},${lng + 0.3},${lat - 0.3}`;
+    params.bounded = '0';
+  }
+  try {
+    const res  = await fetch(
+      `https://nominatim.openstreetmap.org/search?${new URLSearchParams(params)}`,
+      { headers: { 'User-Agent': 'JTZ-RunningClub/1.0' } },
+    );
+    const data: NominatimResult[] = await res.json();
+    return data
+      .filter(f => !proximity || geoDistKm([parseFloat(f.lon), parseFloat(f.lat)], proximity) < 50)
+      .map(f => {
+        const addr  = f.address ?? {};
+        const hnum  = addr.house_number;
+        const road  = addr.road ?? addr.pedestrian;
+        const label = hnum && road ? `${road} ${hnum}` : (road ?? f.display_name.split(',')[0].trim());
+        const sub   = [
+          addr.neighbourhood ?? addr.suburb,
+          addr.city ?? addr.town ?? addr.village,
+        ].filter(Boolean).join(', ');
+        return {
+          id: `nm-${f.place_id}`, label,
+          sublabel: sub || undefined,
+          center: [parseFloat(f.lon), parseFloat(f.lat)] as [number, number],
+        };
+      });
+  } catch { return []; }
+}
+
+// ── Photon — OSM-based, good location bias ──────────────────────────────────
 type PhotonFeature = {
   geometry: { coordinates: [number, number] };
   properties: {
     osm_id?: number; name?: string; street?: string; housenumber?: string;
-    city?: string; county?: string; state?: string; country?: string;
-    type?: string;
+    city?: string; county?: string; state?: string;
   };
 };
 
 async function geocodePhoton(query: string, proximity: [number, number] | null): Promise<Suggestion[]> {
   const params: Record<string, string> = { q: query, limit: '5', lang: 'es' };
-  if (proximity) { params.lat = String(proximity[1]); params.lon = String(proximity[0]); }
+  if (proximity) {
+    params.lat = String(proximity[1]); params.lon = String(proximity[0]);
+    // Tight bbox ~10km so only local results
+    const d = 0.1;
+    params.bbox = `${proximity[0] - d},${proximity[1] - d},${proximity[0] + d},${proximity[1] + d}`;
+  }
   try {
     const res  = await fetch(`https://photon.komoot.io/api/?${new URLSearchParams(params)}`);
     const data = await res.json();
     const feats: PhotonFeature[] = data.features ?? [];
     return feats
-      .filter(f => {
-        if (!proximity) return true;
-        return geoDistKm(f.geometry.coordinates, proximity) < 50;
-      })
+      .filter(f => !proximity || geoDistKm(f.geometry.coordinates, proximity) < 50)
       .map(f => {
         const p = f.properties;
-        const hasNum = !!p.housenumber;
-        const streetLabel = hasNum
+        const label = p.housenumber
           ? `${p.name ?? p.street ?? ''} ${p.housenumber}`.trim()
           : (p.name ?? p.street ?? '').trim();
-        const label    = streetLabel || p.city || query;
-        const cityPart = p.city ?? p.county;
-        const sublabel = [cityPart, p.state].filter(Boolean).join(', ') || undefined;
+        const sublabel = [p.city ?? p.county, p.state].filter(Boolean).join(', ') || undefined;
         return {
           id: `ph-${p.osm_id ?? Math.random()}`,
-          label,
+          label: label || (p.city ?? query),
           sublabel,
           center: f.geometry.coordinates,
         };
@@ -141,26 +200,33 @@ async function geocodePhoton(query: string, proximity: [number, number] | null):
   } catch { return []; }
 }
 
-// Merged geocoder: run both in parallel, deduplicate by coordinate proximity
+// ── Merged: run all three in parallel, dedup by coords, sort by distance ────
 async function geocode(query: string, proximity: [number, number] | null): Promise<Suggestion[]> {
   if (query.trim().length < 2) return [];
-  const [mt, ph] = await Promise.all([
+  const [mt, nm, ph] = await Promise.all([
     geocodeMaptiler(query, proximity),
+    geocodeNominatim(query, proximity),
     geocodePhoton(query, proximity),
   ]);
-  const seen = new Set<string>();
+  const seen   = new Set<string>();
   const merged: Suggestion[] = [];
   const add = (s: Suggestion) => {
     const key = `${Math.round(s.center[0] * 1000)},${Math.round(s.center[1] * 1000)}`;
     if (!seen.has(key)) { seen.add(key); merged.push(s); }
   };
-  // Address results with house numbers first
-  ph.filter(s => /\d/.test(s.label)).forEach(add);
-  // Then MapTiler POI/place results
+  // Nominatim + Photon address results (with house numbers) go first
+  [...nm, ...ph].filter(s => /\d/.test(s.label)).forEach(add);
+  // MapTiler POI / place results
   mt.forEach(add);
-  // Then remaining Photon (unnamed roads, etc.)
-  ph.filter(s => !/\d/.test(s.label)).forEach(add);
-  return merged.slice(0, 6);
+  // Remaining street-only results
+  [...nm, ...ph].filter(s => !/\d/.test(s.label)).forEach(add);
+
+  // Annotate with distance and sort nearest-first
+  return merged
+    .slice(0, 7)
+    .map(s => ({ ...s, dist: proximity ? geoDistKm(s.center, proximity) : undefined }))
+    .sort((a, b) => (a.dist ?? 999) - (b.dist ?? 999))
+    .slice(0, 6);
 }
 
 async function reverseGeocode(center: [number, number]): Promise<string> {
@@ -243,10 +309,13 @@ function SearchInput({
               <div className="w-7 h-7 rounded-full bg-dark-700 flex items-center justify-center flex-shrink-0">
                 <MapPin size={12} className="text-gray-400" />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="text-sm text-white truncate">{s.label}</div>
                 {s.sublabel && <div className="text-[11px] text-gray-500 truncate">{s.sublabel}</div>}
               </div>
+              {s.dist != null && (
+                <div className="text-[11px] text-gray-500 flex-shrink-0 ml-1">{fmtDist(s.dist)}</div>
+              )}
             </button>
           ))}
 
