@@ -64,8 +64,10 @@ router.get('/strava/callback', async (req: AuthRequest, res: Response) => {
 // ── Strava Webhook (public) ───────────────────────────────────────────────────
 // Strava calls these without a JWT, so they must sit before authMiddleware.
 
+// `||` (not `??`) so an env var left blank in Railway still falls back to the
+// default — Strava rejects an empty verify_token.
 const STRAVA_WEBHOOK_VERIFY_TOKEN =
-  process.env.STRAVA_WEBHOOK_VERIFY_TOKEN ?? 'jtz-strava-webhook-2026';
+  process.env.STRAVA_WEBHOOK_VERIFY_TOKEN || 'jtz-strava-webhook-2026';
 
 // GET — subscription validation handshake (Strava sends hub.challenge once)
 router.get('/strava/webhook', (req, res) => {
