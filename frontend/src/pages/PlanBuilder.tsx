@@ -124,13 +124,15 @@ export default function PlanBuilder() {
 
   const efectiveGoal = goal || customGoal;
 
+  const esDias = duracionUnidad === 'dias';
   const config = {
     nivel,
     objetivo: efectiveGoal,
-    duracionSemanas: duracionUnidad === 'dias' ? 1 : duracion,
-    sesionesSemanales: duracionUnidad === 'dias' ? duracionDias : sesiones,
+    duracionSemanas: esDias ? 1 : duracion,
+    sesionesSemanales: esDias ? duracionDias : sesiones,
     kmBaseActual: kmBase ? Number(kmBase) : undefined,
     modalidades,
+    modoDias: esDias,
   };
 
   const tipoColor: Record<string, string> = {
@@ -429,7 +431,9 @@ export default function PlanBuilder() {
           <div className="card p-6 mb-5">
             <h2 className="text-xl font-black text-white mb-1">{preview.nombre}</h2>
             <div className="flex gap-3 mb-4 flex-wrap">
-              <span className="badge bg-brand-500/15 text-brand-400">{preview.duracionSemanas} semanas</span>
+              <span className="badge bg-brand-500/15 text-brand-400">
+                {esDias ? `${duracionDias} día${duracionDias !== 1 ? 's' : ''}` : `${preview.duracionSemanas} semanas`}
+              </span>
               <span className="badge bg-blue-500/15 text-blue-400">Pico: {preview.volumenPicoKm} km/sem</span>
               {/* Active modalities summary */}
               {[

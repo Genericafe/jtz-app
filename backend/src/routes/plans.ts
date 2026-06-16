@@ -117,6 +117,7 @@ router.post('/preview', coachOnly, async (req: AuthRequest, res: Response) => {
     sesionesSemanales: z.number().int().min(1).max(7),
     kmBaseActual:      z.number().optional(),
     modalidades:       modalidadesSchema,
+    modoDias:          z.boolean().optional(),
   });
   const parse = schema.safeParse(req.body);
   if (!parse.success) return res.status(400).json({ error: 'Datos inválidos', details: parse.error.errors });
@@ -139,6 +140,7 @@ router.post('/generate', coachOnly, async (req: AuthRequest, res: Response) => {
     sesionesSemanales: z.number().int().min(1).max(7),
     kmBaseActual:      z.number().optional(),
     modalidades:       modalidadesSchema,
+    modoDias:          z.boolean().optional(),
   });
   const parse = schema.safeParse(req.body);
   if (!parse.success) return res.status(400).json({ error: 'Datos inválidos' });

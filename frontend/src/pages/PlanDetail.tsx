@@ -441,7 +441,7 @@ function DayCard({ day, isCoach, planId, onUpdate, myActivity, onActivityChange,
         {isCoach && (
           <GripVertical size={14} className="text-gray-600 cursor-grab active:cursor-grabbing flex-shrink-0 -ml-1" />
         )}
-        <span className="text-xs font-bold text-gray-500 w-8 flex-shrink-0">{diasLabel[day.diaSemana] ?? day.diaSemana.slice(0,3).toUpperCase()}</span>
+        <span className="text-xs font-bold text-gray-500 w-8 flex-shrink-0">{diasLabel[day.diaSemana] ?? (/^Día\s*\d+$/i.test(day.diaSemana) ? day.diaSemana.replace(/\s+/g, '').replace('Día', 'D') : day.diaSemana.slice(0,3).toUpperCase())}</span>
         <span className={`flex items-center justify-center w-7 h-7 rounded-lg flex-shrink-0 ${cfg.bg}`}>
           <span className={cfg.color}>{cfg.icon}</span>
         </span>

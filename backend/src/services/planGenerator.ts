@@ -45,6 +45,9 @@ export interface PlanConfig {
   kmBaseActual?: number;
   nombreCorredor?: string;
   modalidades?: Partial<Modalidades>;
+  // When true, produce a short plan of `sesionesSemanales` training DAYS
+  // (labelled "Día 1..N") instead of a multi-week structure.
+  modoDias?: boolean;
 }
 
 export interface DiaGenerado {
@@ -524,6 +527,34 @@ export function generatePlan(config: PlanConfig): PlanGenerado {
     mod.fuerza    && '🏋️ Fuerza / Pesas',
     mod.funcional && '⚡ Funcional / CrossFit',
   ].filter(Boolean).join(', ');
+
+  // ── Days mode: collapse the single week into N labelled training days ───────
+  if (config.modoDias) {
+    const dayCount = Math.max(1, Math.min(sesionesSemanales, 6));
+    const week = semanas[0];
+    if (week) {
+      const trainingDays = week.dias.filter(d => d.tipo !== 'descanso');
+      const chosen = (trainingDays.length ? trainingDays : week.dias)
+        .slice(0, dayCount)
+        .map((d, i) => ({ ...d, diaSemana: `Día ${i + 1}` }));
+      week.dias = chosen;
+      week.descripcion = `Plan corto de ${chosen.length} día${chosen.length !== 1 ? 's' : ''} de entrenamiento.`;
+      week.volumenKm = r(chosen.reduce((s, d) => s + (d.distanciaKm ?? 0), 0));
+    }
+    const nDays = week?.dias.length ?? dayCount;
+    return {
+      nombre: `Plan express ${customLabel ?? OBJETIVO_LABELS[objetivo]} — ${nDays} día${nDays !== 1 ? 's' : ''}`,
+      descripcion: `Plan corto de ${nDays} día${nDays !== 1 ? 's' : ''} para ${customLabel ?? OBJETIVO_LABELS[objetivo]}. Modalidades: ${modalidadesLabel}. Ideal para una semana especial o un objetivo puntual.`,
+      filosofia: filosofiaByGoal(objetivo),
+      nivel,
+      objetivo: customLabel ?? OBJETIVO_LABELS[objetivo],
+      duracionSemanas: 1,
+      sesionesSemanales,
+      volumenPicoKm: peakKm,
+      principios,
+      semanas,
+    };
+  }
 
   return {
     nombre: `Plan ${customLabel ?? OBJETIVO_LABELS[objetivo]} — ${capitalize(nivel)} (${duracionSemanas} sem)`,
