@@ -311,14 +311,15 @@ function SearchInput({
 
 // ── Main component ──────────────────────────────────────────────────────────
 export default function RouteMapBuilder({ tipoActividad, onConfirm, onCancel }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef       = useRef<maplibregl.Map | null>(null);
-  const markerA      = useRef<maplibregl.Marker | null>(null);
-  const markerB      = useRef<maplibregl.Marker | null>(null);
-  const proximityRef = useRef<[number, number] | null>(null);
-  const clickModeRef = useRef<'A' | 'B' | null>(null);
+  const containerRef   = useRef<HTMLDivElement>(null);
+  const mapRef         = useRef<maplibregl.Map | null>(null);
+  const markerA        = useRef<maplibregl.Marker | null>(null);
+  const markerB        = useRef<maplibregl.Marker | null>(null);
+  const proximityRef   = useRef<[number, number] | null>(null);
+  const pinDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [clickMode, setClickMode]   = useState<'A' | 'B' | null>(null);
+  const [pinMode, setPinMode]       = useState<'A' | 'B' | null>(null);
+  const [pinAddress, setPinAddress] = useState('');
   const [endpointA, setEndpointA]   = useState<Endpoint>({ label: '', center: null });
   const [endpointB, setEndpointB]   = useState<Endpoint>({ label: '', center: null });
   const [sugA, setSugA]             = useState<Suggestion[]>([]);
@@ -355,7 +356,7 @@ export default function RouteMapBuilder({ tipoActividad, onConfirm, onCancel }: 
     markerA.current?.remove();
     markerA.current = new maplibregl.Marker({ element: makeMarkerEl('A', '#22c55e') })
       .setLngLat(center).addTo(mapRef.current!);
-    mapRef.current?.flyTo({ center, zoom: 15, duration: 700 });
+    mapRef.current?.flyTo({ center, zoom: 16, duration: 700 });
   }, []);
 
   const placeB = useCallback((center: [number, number], label: string) => {
@@ -364,13 +365,12 @@ export default function RouteMapBuilder({ tipoActividad, onConfirm, onCancel }: 
     markerB.current?.remove();
     markerB.current = new maplibregl.Marker({ element: makeMarkerEl('B', '#ef4444') })
       .setLngLat(center).addTo(mapRef.current!);
-    mapRef.current?.flyTo({ center, zoom: 15, duration: 700 });
+    mapRef.current?.flyTo({ center, zoom: 16, duration: 700 });
   }, []);
 
   const handleSelectA = useCallback(async (s: Suggestion) => {
-    if (s.id === '__map__') { clickModeRef.current = 'A'; setClickMode('A'); return; }
+    if (s.id === '__map__') { setPinMode('A'); setPinAddress(''); return; }
     if (s.isCurrent) {
-      // Request GPS on-demand — works even if proximityRef not yet set
       setEndpointA(p => ({ ...p, label: 'Obteniendo ubicación…' }));
       navigator.geolocation?.getCurrentPosition(
         async pos => {
@@ -388,9 +388,39 @@ export default function RouteMapBuilder({ tipoActividad, onConfirm, onCancel }: 
   }, [placeA]);
 
   const handleSelectB = useCallback((s: Suggestion) => {
-    if (s.id === '__map__') { clickModeRef.current = 'B'; setClickMode('B'); return; }
+    if (s.id === '__map__') { setPinMode('B'); setPinAddress(''); return; }
     placeB(s.center, s.label);
   }, [placeB]);
+
+  // ── Confirm pin at map center ─────────────────────────────────────────────
+  const confirmPin = useCallback(async () => {
+    if (!mapRef.current || !pinMode) return;
+    const c    = mapRef.current.getCenter();
+    const coord: [number, number] = [c.lng, c.lat];
+    const label = pinAddress || await reverseGeocode(coord);
+    if (pinMode === 'A') placeA(coord, label);
+    else                 placeB(coord, label);
+    setPinMode(null);
+  }, [pinMode, pinAddress, placeA, placeB]);
+
+  // ── Live reverse-geocode map center while in pin mode ─────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (!pinMode) return;
+    const onMove = () => {
+      if (pinDebounceRef.current) clearTimeout(pinDebounceRef.current);
+      pinDebounceRef.current = setTimeout(async () => {
+        const c = map.getCenter();
+        const label = await reverseGeocode([c.lng, c.lat]);
+        setPinAddress(label);
+      }, 400);
+    };
+    map.on('move', onMove);
+    // Seed immediately
+    onMove();
+    return () => { map.off('move', onMove); };
+  }, [pinMode]);
 
   const calcRoute = useCallback(async (a: [number, number], b: [number, number]) => {
     setStep('routing');
@@ -426,7 +456,7 @@ export default function RouteMapBuilder({ tipoActividad, onConfirm, onCancel }: 
     setEndpointA({ label: '', center: null }); setEndpointB({ label: '', center: null });
     setSugA([]); setSugB([]);
     setStep('idle'); setResult(null); setDistKm(null);
-    clickModeRef.current = null; setClickMode(null);
+    setPinMode(null);
     (mapRef.current?.getSource('route') as maplibregl.GeoJSONSource | undefined)
       ?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} } as any);
   }, []);
@@ -435,13 +465,13 @@ export default function RouteMapBuilder({ tipoActividad, onConfirm, onCancel }: 
     if (!containerRef.current || mapRef.current) return;
     const map = new maplibregl.Map({
       container: containerRef.current, style: STYLE_URL,
-      center: [-99.133, 19.432], zoom: 13, attributionControl: false,
+      center: [-99.133, 19.432], zoom: 15, attributionControl: false,
     });
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
     navigator.geolocation?.getCurrentPosition(
       pos => {
         proximityRef.current = [pos.coords.longitude, pos.coords.latitude];
-        mapRef.current?.setCenter([pos.coords.longitude, pos.coords.latitude]);
+        mapRef.current?.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 15, duration: 800 });
       },
       () => {}, { timeout: 8000, maximumAge: 60000 },
     );
@@ -450,94 +480,127 @@ export default function RouteMapBuilder({ tipoActividad, onConfirm, onCancel }: 
       map.addLayer({ id: 'route-casing', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#1d4ed8', 'line-width': 10, 'line-opacity': 0.3 } });
       map.addLayer({ id: 'route-line',   type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#60a5fa', 'line-width': 5,  'line-opacity': 0.95 } });
     });
-    map.on('click', async e => {
-      const mode = clickModeRef.current;
-      if (!mode) return;
-      const lngLat: [number, number] = [e.lngLat.lng, e.lngLat.lat];
-      const label = await reverseGeocode(lngLat);
-      if (mode === 'A') placeA(lngLat, label);
-      else              placeB(lngLat, label);
-      clickModeRef.current = null; setClickMode(null);
-    });
     mapRef.current = map;
     return () => { markerA.current?.remove(); markerB.current?.remove(); map.remove(); mapRef.current = null; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (mapRef.current) mapRef.current.getCanvas().style.cursor = clickMode ? 'crosshair' : '';
-  }, [clickMode]);
 
   const statusColor = step === 'error' ? 'text-red-400' : step === 'done' ? 'text-green-400' : 'text-gray-400';
   const statusText  = step === 'routing' ? 'Calculando ruta…'
     : step === 'done'    ? `✓ Ruta lista · ${distKm} km`
     : step === 'error'   ? 'No se encontró ruta entre esos puntos'
-    : clickMode          ? `Toca el mapa para colocar el punto ${clickMode}`
-    : !endpointA.center  ? 'Busca el punto de inicio o toca el mapa'
-    : !endpointB.center  ? 'Ahora busca el destino o toca el mapa'
+    : !endpointA.center  ? 'Busca el punto de inicio o usa el mapa'
+    : !endpointB.center  ? 'Ahora busca el destino o usa el mapa'
     : 'Calculando…';
 
   return createPortal(
     <div className="fixed inset-0 flex flex-col" style={{ zIndex: 9999, background: '#0f1117' }}>
 
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 px-3 pt-3 pb-2 flex-shrink-0">
-        <button onClick={onCancel}
-          className="w-8 h-8 rounded-full bg-dark-800 flex items-center justify-center text-gray-400 hover:text-white hover:bg-dark-700 transition-colors flex-shrink-0">
-          <X size={16} />
-        </button>
+      {/* ── Header (hidden in pin mode) ─────────────────────────────────── */}
+      {!pinMode && (
+        <div className="flex items-center gap-3 px-3 pt-3 pb-2 flex-shrink-0">
+          <button onClick={onCancel}
+            className="w-8 h-8 rounded-full bg-dark-800 flex items-center justify-center text-gray-400 hover:text-white hover:bg-dark-700 transition-colors flex-shrink-0">
+            <X size={16} />
+          </button>
 
-        {/* Search card */}
-        <div className="flex-1 bg-dark-800 rounded-2xl border border-white/8 overflow-visible shadow-lg">
-          {/* Row A */}
-          <SearchInput
-            which="A"
-            value={endpointA.label}
-            suggestions={sugA}
-            loading={loadA}
-            showCurrentLocation={focusedField === 'A'}
-            onChange={q => search('A', q)}
-            onSelect={handleSelectA}
-            onFocus={() => setFocused('A')}
-            onBlur={() => setFocused(null)}
-          />
+          {/* Search card */}
+          <div className="flex-1 bg-dark-800 rounded-2xl border border-white/8 overflow-visible shadow-lg">
+            {/* Row A */}
+            <SearchInput
+              which="A"
+              value={endpointA.label}
+              suggestions={sugA}
+              loading={loadA}
+              showCurrentLocation={focusedField === 'A'}
+              onChange={q => search('A', q)}
+              onSelect={handleSelectA}
+              onFocus={() => setFocused('A')}
+              onBlur={() => setFocused(null)}
+            />
 
-          {/* Connector */}
-          <div className="flex items-center px-3">
-            <div className="flex flex-col items-center gap-0.5 mr-2.5">
-              <div className="w-px h-1 bg-dark-600" />
-              <div className="w-px h-1 bg-dark-600" />
+            {/* Connector */}
+            <div className="flex items-center px-3">
+              <div className="flex flex-col items-center gap-0.5 mr-2.5">
+                <div className="w-px h-1 bg-dark-600" />
+                <div className="w-px h-1 bg-dark-600" />
+              </div>
+              <div className="flex-1 h-px bg-white/5" />
             </div>
-            <div className="flex-1 h-px bg-white/5" />
+
+            {/* Row B */}
+            <SearchInput
+              which="B"
+              value={endpointB.label}
+              suggestions={sugB}
+              loading={loadB}
+              showCurrentLocation={false}
+              onChange={q => search('B', q)}
+              onSelect={handleSelectB}
+              onFocus={() => setFocused('B')}
+              onBlur={() => setFocused(null)}
+            />
           </div>
 
-          {/* Row B */}
-          <SearchInput
-            which="B"
-            value={endpointB.label}
-            suggestions={sugB}
-            loading={loadB}
-            showCurrentLocation={false}
-            onChange={q => search('B', q)}
-            onSelect={handleSelectB}
-            onFocus={() => setFocused('B')}
-            onBlur={() => setFocused(null)}
-          />
+          <button onClick={reset}
+            className="w-8 h-8 rounded-full bg-dark-800 flex items-center justify-center text-gray-400 hover:text-white hover:bg-dark-700 transition-colors flex-shrink-0">
+            <RotateCcw size={15} />
+          </button>
         </div>
-
-        <button onClick={reset}
-          className="w-8 h-8 rounded-full bg-dark-800 flex items-center justify-center text-gray-400 hover:text-white hover:bg-dark-700 transition-colors flex-shrink-0">
-          <RotateCcw size={15} />
-        </button>
-      </div>
+      )}
 
       {/* ── Status bar ─────────────────────────────────────────────────── */}
-      <div className={`flex items-center justify-center gap-1.5 px-4 py-1.5 text-xs flex-shrink-0 ${statusColor}`}>
-        {step === 'routing' && <Loader2 size={11} className="animate-spin" />}
-        {statusText}
-      </div>
+      {!pinMode && (
+        <div className={`flex items-center justify-center gap-1.5 px-4 py-1.5 text-xs flex-shrink-0 ${statusColor}`}>
+          {step === 'routing' && <Loader2 size={11} className="animate-spin" />}
+          {statusText}
+        </div>
+      )}
 
-      {/* ── Map ────────────────────────────────────────────────────────── */}
-      <div ref={containerRef} className="flex-1 min-h-0" />
+      {/* ── Map (always full flex-1) ────────────────────────────────────── */}
+      <div className="flex-1 min-h-0 relative">
+        <div ref={containerRef} className="absolute inset-0" />
+
+        {/* ── Pin-drop mode overlay ────────────────────────────────────── */}
+        {pinMode && (
+          <>
+            {/* Crosshair */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 3 }}>
+              <div className="relative flex items-center justify-center">
+                {/* shadow pin */}
+                <div className="absolute w-1 bg-white/20 rounded-full" style={{ height: 40, bottom: -20, left: '50%', transform: 'translateX(-50%)' }} />
+                {/* pin head */}
+                <div
+                  className={`w-9 h-9 rounded-full border-4 border-white flex items-center justify-center shadow-2xl text-white font-bold text-base -translate-y-4`}
+                  style={{ background: pinMode === 'A' ? '#22c55e' : '#ef4444', boxShadow: '0 4px 20px rgba(0,0,0,0.6)' }}
+                >
+                  {pinMode}
+                </div>
+              </div>
+            </div>
+
+            {/* Top label + cancel */}
+            <div className="absolute top-0 left-0 right-0 flex items-center gap-3 px-4 pt-safe pt-4 pb-3" style={{ zIndex: 4, background: 'linear-gradient(to bottom, rgba(15,17,23,0.95) 60%, transparent)' }}>
+              <button onClick={() => setPinMode(null)} className="w-8 h-8 rounded-full bg-dark-800/80 flex items-center justify-center text-gray-300 flex-shrink-0">
+                <X size={16} />
+              </button>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs text-gray-400">Mueve el mapa · Punto {pinMode}</div>
+                <div className="text-sm text-white font-medium truncate">{pinAddress || '…'}</div>
+              </div>
+            </div>
+
+            {/* Bottom confirm */}
+            <div className="absolute bottom-0 left-0 right-0 px-4 pb-6 pt-8" style={{ zIndex: 4, background: 'linear-gradient(to top, rgba(15,17,23,0.97) 50%, transparent)' }}>
+              <button
+                onClick={confirmPin}
+                className="w-full py-3.5 rounded-2xl bg-brand-500 hover:bg-brand-600 text-white font-bold text-base flex items-center justify-center gap-2 transition-colors shadow-lg"
+              >
+                <Check size={18} /> Confirmar ubicación
+              </button>
+            </div>
+          </>
+        )}
+      </div>
 
       {/* ── Bottom actions ──────────────────────────────────────────────── */}
       {(step === 'done' || step === 'error') && (
