@@ -99,7 +99,7 @@ function CoachDashboard() {
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-black text-white">
-          Buenos días, <span className="gradient-text">Coach</span> 👋
+          {(() => { const h = new Date().getHours(); return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches'; })()}, <span className="gradient-text">Coach</span> 👋
         </h1>
         <p className="text-gray-500 text-sm mt-0.5 capitalize">
           {format(new Date(), "EEEE, d 'de' MMMM", { locale: es })}
