@@ -53,7 +53,13 @@ export default function Payments() {
 
   const createMutation = useMutation({
     mutationFn: (d: object) => paymentsApi.create(d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['payments'] }); qc.invalidateQueries({ queryKey: ['payment-stats'] }); setShowForm(false); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['payments'] });
+      qc.invalidateQueries({ queryKey: ['payment-stats'] });
+      setShowForm(false);
+      setForm({ runnerId: '', concepto: 'membresia', monto: '', moneda: 'MXN', estado: 'pendiente', fechaVencimiento: '', fechaPago: '', duracion: '', duracionUnidad: 'meses', notas: '' });
+      setRunnerSearch('');
+    },
   });
 
   const markPaidMutation = useMutation({
@@ -345,7 +351,7 @@ export default function Payments() {
                   fechaPago: form.fechaPago || undefined,
                   fechaVencimiento: form.fechaVencimiento || undefined,
                 })}
-                disabled={createMutation.isPending}
+                disabled={createMutation.isPending || !form.runnerId || !form.monto || Number(form.monto) <= 0}
                 className="flex-1 px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-sm font-medium text-white transition-colors disabled:opacity-50">
                 {createMutation.isPending ? 'Guardando...' : 'Registrar'}
               </button>
