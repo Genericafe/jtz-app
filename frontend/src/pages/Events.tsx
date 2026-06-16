@@ -280,25 +280,36 @@ function RegisterModal({ ev, onClose, runnerMe }: {
 
 function ShareModal({ ev, onClose }: { ev: Event; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [showQr, setShowQr] = useState(false);
 
   const tipoEmoji: Record<string, string> = { carrera: '🏃', trail: '🏔️', entrenamiento: '💪', social: '🎉' };
   const emoji = tipoEmoji[ev.tipo] ?? '🏃';
   const fecha = format(new Date(ev.fecha), "EEEE d 'de' MMMM · HH:mm 'hrs'", { locale: es });
   const precio = ev.precio === 0 ? 'Entrada libre' : `$${ev.precio.toLocaleString('es-MX')} MXN`;
 
-  const promo = `${emoji} ¡EVENTO JTZ RUNNING CLUB!
+  // Public registration landing page. The link is what makes the event an
+  // OPEN convocatoria — anyone (not just app users) can register from it.
+  const baseUrl   = `${window.location.origin}/evento/${ev.id}`;
+  // Per-channel UTM so the coach sees in "Inscritos" where each lead came from.
+  const linkFor = (source: string) =>
+    `${baseUrl}?utm_source=${source}&utm_medium=social&utm_campaign=evento_${ev.id}`;
+
+  const buildPromo = (link: string) => `${emoji} ¡EVENTO JTZ RUNNING CLUB!
 
 📌 ${ev.nombre}
 📅 ${fecha}
 📍 ${ev.lugar}${ev.ciudad ? `, ${ev.ciudad}` : ''}${ev.distanciaKm ? `\n🏁 Distancia: ${ev.distanciaKm} km` : ''}
 💰 ${precio}
 
-¡Únete a nosotros y demuestra de qué estás hecho! 💥
-Inscripciones e info: comunícate con tu coach.
+¡Inscríbete en línea, cupo limitado! 👇
+${link}
 
 #JTZRunning #JTZ #RunningMexico #${ev.tipo}`;
 
-  const encoded = encodeURIComponent(promo);
+  // Preview shows the clean link; each share button injects its UTM variant.
+  const promo = buildPromo(baseUrl);
+  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(linkFor('qr'))}&color=000000&bgcolor=ffffff&margin=1`;
 
   const copyText = async () => {
     await navigator.clipboard.writeText(promo);
@@ -306,11 +317,30 @@ Inscripciones e info: comunícate con tu coach.
     setTimeout(() => setCopied(false), 3000);
   };
 
+  const copyLink = async () => {
+    await navigator.clipboard.writeText(linkFor('directo'));
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
+  };
+
+  const downloadQr = async () => {
+    try {
+      const res = await fetch(qrSrc);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `QR_${ev.nombre.replace(/\s+/g, '_')}.png`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch { /* ignore */ }
+  };
+
   const platforms = [
     {
       name: 'WhatsApp',
       bg: 'bg-[#25D366]',
-      action: () => window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank'),
+      action: () => window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(buildPromo(linkFor('whatsapp')))}`, '_blank'),
       direct: true,
       svg: (
         <svg viewBox="0 0 24 24" fill="white" className="w-6 h-6">
@@ -321,7 +351,7 @@ Inscripciones e info: comunícate con tu coach.
     {
       name: 'X / Twitter',
       bg: 'bg-black border border-white/20',
-      action: () => window.open(`https://twitter.com/intent/tweet?text=${encoded}`, '_blank'),
+      action: () => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(buildPromo(''))}&url=${encodeURIComponent(linkFor('twitter'))}`, '_blank'),
       direct: true,
       svg: (
         <svg viewBox="0 0 24 24" fill="white" className="w-5 h-5">
@@ -332,7 +362,7 @@ Inscripciones e info: comunícate con tu coach.
     {
       name: 'Telegram',
       bg: 'bg-[#2AABEE]',
-      action: () => window.open(`https://t.me/share/url?url=https%3A%2F%2Fjtz.mx&text=${encoded}`, '_blank'),
+      action: () => window.open(`https://t.me/share/url?url=${encodeURIComponent(linkFor('telegram'))}&text=${encodeURIComponent(buildPromo(''))}`, '_blank'),
       direct: true,
       svg: (
         <svg viewBox="0 0 24 24" fill="white" className="w-6 h-6">
@@ -343,8 +373,8 @@ Inscripciones e info: comunícate con tu coach.
     {
       name: 'Facebook',
       bg: 'bg-[#1877F2]',
-      action: async () => { await copyText(); window.open('https://www.facebook.com/', '_blank'); },
-      direct: false,
+      action: () => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(linkFor('facebook'))}`, '_blank'),
+      direct: true,
       svg: (
         <svg viewBox="0 0 24 24" fill="white" className="w-6 h-6">
           <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
@@ -354,7 +384,11 @@ Inscripciones e info: comunícate con tu coach.
     {
       name: 'Instagram',
       bg: 'bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400',
-      action: async () => { await copyText(); window.open('https://www.instagram.com/', '_blank'); },
+      action: async () => {
+        await navigator.clipboard.writeText(buildPromo(linkFor('instagram')));
+        setCopied(true); setTimeout(() => setCopied(false), 3000);
+        window.open('https://www.instagram.com/', '_blank');
+      },
       direct: false,
       svg: (
         <svg viewBox="0 0 24 24" fill="white" className="w-6 h-6">
@@ -384,6 +418,43 @@ Inscripciones e info: comunícate con tu coach.
             <p className="text-sm text-gray-500">{ev.nombre}</p>
           </div>
           <button onClick={onClose} className="btn-ghost p-2"><X size={18} /></button>
+        </div>
+
+        {/* Public registration link — the heart of an open convocatoria */}
+        <div className="bg-brand-500/10 border border-brand-500/25 rounded-xl p-3 mb-4">
+          <p className="text-xs text-brand-300 font-semibold uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+            <ExternalLink size={12} /> Página pública de inscripción
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 text-xs text-gray-300 bg-black/30 rounded-lg px-2.5 py-2 truncate">{baseUrl}</code>
+            <button onClick={copyLink}
+              className="flex-shrink-0 px-3 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold transition-colors">
+              {copiedLink ? '✓ Copiado' : 'Copiar'}
+            </button>
+          </div>
+          <p className="text-[11px] text-gray-500 mt-1.5">Cualquier persona (no solo del equipo) puede inscribirse desde este enlace.</p>
+          <div className="flex gap-2 mt-2">
+            <button onClick={() => setShowQr(s => !s)}
+              className="flex-1 py-1.5 rounded-lg border border-white/[0.08] text-xs text-gray-300 hover:text-white hover:bg-surface-600 transition-all">
+              {showQr ? 'Ocultar QR' : '📱 Mostrar QR'}
+            </button>
+            <a href={`/evento/${ev.id}`} target="_blank" rel="noreferrer"
+              className="flex-1 py-1.5 rounded-lg border border-white/[0.08] text-xs text-gray-300 hover:text-white hover:bg-surface-600 transition-all text-center">
+              Ver página →
+            </a>
+          </div>
+          {showQr && (
+            <div className="flex flex-col items-center gap-2 mt-3 pt-3 border-t border-white/[0.06]">
+              <div className="bg-white p-2.5 rounded-xl">
+                <img src={qrSrc} alt="QR inscripción" className="w-40 h-40" />
+              </div>
+              <p className="text-[11px] text-gray-500 text-center">Ideal para flyers, posters e historias de Instagram</p>
+              <button onClick={downloadQr}
+                className="text-xs text-brand-400 hover:text-brand-300 font-semibold">
+                ⬇ Descargar QR (PNG)
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Message preview */}
