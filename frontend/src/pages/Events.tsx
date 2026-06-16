@@ -985,7 +985,11 @@ export default function Events() {
 
   const createMutation = useMutation({
     mutationFn: (d: object) => eventsApi.create(d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['events'] }); setShowForm(false); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['events'] });
+      setShowForm(false);
+      setForm({ nombre: '', tipo: 'carrera', descripcion: '', fecha: '', lugar: '', ciudad: '', estado: '', distanciaKm: '', cupoMaximo: '', precio: '0', notificarCorredores: false });
+    },
   });
 
   const deleteMutation = useMutation({
@@ -1278,7 +1282,7 @@ export default function Events() {
                   cupoMaximo:  form.cupoMaximo  ? Number(form.cupoMaximo)  : undefined,
                   precio:      Number(form.precio),
                 })}
-                disabled={createMutation.isPending}
+                disabled={createMutation.isPending || !form.nombre.trim() || !form.fecha || !form.lugar.trim()}
                 className="flex-1 btn-primary py-2.5 text-sm">
                 {createMutation.isPending ? 'Creando...' : 'Crear evento'}
               </button>
