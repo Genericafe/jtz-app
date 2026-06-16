@@ -72,23 +72,52 @@ export default function RecordActivity() {
     ? trackMapPoints[trackMapPoints.length - 1] : undefined;
 
   const navInfo = useMemo(() => {
-    if (!currentPos || referenceRoute.length === 0) return null;
+    if (!currentPos || referenceRoute.length < 2) return null;
+
+    // Closest point on the reference route
     let minDist = Infinity, minIdx = 0;
     for (let i = 0; i < referenceRoute.length; i++) {
       const d = haversineM(currentPos, referenceRoute[i]);
       if (d < minDist) { minDist = d; minIdx = i; }
     }
+
+    // Remaining distance from here to the end
     let remM = 0;
     for (let i = minIdx; i < referenceRoute.length - 1; i++) remM += haversineM(referenceRoute[i], referenceRoute[i + 1]);
-    // Bearing to a point slightly ahead on the route
-    const aheadIdx = Math.min(minIdx + 8, referenceRoute.length - 1);
+
+    // Look ~25 m ahead along the route (distance-based, not point-count based)
+    let aheadIdx = minIdx, acc = 0;
+    while (aheadIdx < referenceRoute.length - 1 && acc < 25) {
+      acc += haversineM(referenceRoute[aheadIdx], referenceRoute[aheadIdx + 1]);
+      aheadIdx++;
+    }
     const nextPt = referenceRoute[aheadIdx];
     const absBearing = bearingDeg(currentPos, nextPt);
-    // Relative to current heading so arrow points left/right/forward
-    const relBearing = state.headingDeg != null
-      ? (absBearing - state.headingDeg + 360) % 360
-      : absBearing;
-    return { offRouteM: minDist, remainingKm: remM / 1000, relBearing, absBearing };
+
+    // Heading of the runner (native compass / course, falls back to movement)
+    const heading = state.headingDeg;
+    const hasHeading = heading != null;
+
+    // Relative bearing: where to go vs where facing. 0 = straight ahead.
+    const relBearing = hasHeading ? (absBearing - heading + 360) % 360 : absBearing;
+    // Signed −180..180 for turn classification
+    const signed = relBearing > 180 ? relBearing - 360 : relBearing;
+    const a = Math.abs(signed);
+
+    type Turn = 'straight' | 'slight-left' | 'slight-right' | 'left' | 'right' | 'uturn';
+    let turn: Turn = 'straight';
+    if (a <= 20)       turn = 'straight';
+    else if (a <= 55)  turn = signed > 0 ? 'slight-right' : 'slight-left';
+    else if (a < 150)  turn = signed > 0 ? 'right' : 'left';
+    else               turn = 'uturn';
+
+    const offRoute   = minDist > 50;
+    const atFinish   = remM < 20;
+
+    return {
+      offRouteM: minDist, remainingKm: remM / 1000,
+      relBearing, absBearing, signed, turn, offRoute, atFinish, hasHeading,
+    };
   }, [currentPos, referenceRoute, state.headingDeg]);
 
   const totalRouteKm = useMemo(() => {
@@ -173,7 +202,6 @@ export default function RecordActivity() {
 
   // ── Main recording screen ─────────────────────────────────────────────────
   const isActive = state.status === 'running' || state.status === 'paused';
-  const onRoute  = navInfo ? navInfo.offRouteM <= 50 : null;
 
   // MAP MODE — map fills the screen, compact overlay at bottom
   if (showMap) {
@@ -235,30 +263,33 @@ export default function RecordActivity() {
         {/* ── Bottom panel ── */}
         <div className="bg-dark-900/95 backdrop-blur-md border-t border-white/10 flex-shrink-0">
 
-          {/* Navigation status */}
-          {(routeId || savedRouteId) && isActive && navInfo && (
-            <div className={`flex items-center justify-between px-4 py-2 border-b border-white/[0.06] ${
-              onRoute ? 'bg-green-500/10' : 'bg-red-500/10'
-            }`}>
-              <div className="flex items-center gap-2">
-                {/* Direction arrow */}
+          {/* Navigation guide */}
+          {(routeId || savedRouteId) && isActive && navInfo && (() => {
+            const g = navGuide(navInfo);
+            const bg = g.tone === 'ok' ? 'bg-green-500/10' : g.tone === 'turn' ? 'bg-yellow-500/10' : 'bg-red-500/10';
+            const ring = g.tone === 'ok' ? 'border-green-400/50' : g.tone === 'turn' ? 'border-yellow-400/50' : 'border-red-400/50';
+            return (
+              <div className={`flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.06] ${bg}`}>
+                {/* Big direction arrow — rotates toward where to head next */}
                 <div
-                  className="w-8 h-8 rounded-full bg-blue-500/20 border border-blue-400/40 flex items-center justify-center flex-shrink-0"
-                  style={{ transform: `rotate(${navInfo.relBearing}deg)`, transition: 'transform 0.6s ease' }}
+                  className={`w-12 h-12 rounded-full bg-dark-900/60 border-2 ${ring} flex items-center justify-center flex-shrink-0`}
+                  style={{ transform: `rotate(${navInfo.relBearing}deg)`, transition: 'transform 0.5s ease' }}
                   title={`${Math.round(navInfo.absBearing)}°`}
                 >
-                  <Navigation size={14} className="text-blue-300" />
+                  <Navigation size={22} className={g.color} fill="currentColor" />
                 </div>
-                {onRoute
-                  ? <CheckCircle size={14} className="text-green-400" />
-                  : <Navigation size={14} className="text-red-400" />}
-                <span className={`text-sm font-bold ${onRoute ? 'text-green-400' : 'text-red-400'}`}>
-                  {onRoute ? 'En ruta' : `Desviado ${Math.round(navInfo.offRouteM)} m`}
-                </span>
+                <div className="flex-1 min-w-0">
+                  <div className={`text-base font-bold leading-tight ${g.color}`}>{g.text}</div>
+                  <div className="text-xs text-gray-400 mt-0.5">
+                    {navInfo.offRoute
+                      ? `A ${Math.round(navInfo.offRouteM)} m de la ruta · `
+                      : ''}
+                    {navInfo.remainingKm.toFixed(2)} km restantes
+                  </div>
+                </div>
               </div>
-              <span className="text-xs text-gray-400">{navInfo.remainingKm.toFixed(2)} km restantes</span>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Idle: type selector */}
           {state.status === 'idle' && (
@@ -377,20 +408,29 @@ export default function RecordActivity() {
         </div>
       )}
 
-      {/* Navigation status */}
-      {(routeId || savedRouteId) && isActive && navInfo && (
-        <div className={`mx-4 mb-3 px-4 py-2.5 rounded-xl border flex items-center justify-between ${
-          onRoute ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20'
-        }`}>
-          <div className="flex items-center gap-2">
-            {onRoute ? <CheckCircle size={14} className="text-green-400" /> : <Navigation size={14} className="text-red-400" />}
-            <span className={`text-xs font-semibold ${onRoute ? 'text-green-400' : 'text-red-400'}`}>
-              {onRoute ? 'En ruta' : `Desviado ${Math.round(navInfo.offRouteM)} m`}
-            </span>
+      {/* Navigation guide */}
+      {(routeId || savedRouteId) && isActive && navInfo && (() => {
+        const g = navGuide(navInfo);
+        const bg = g.tone === 'ok' ? 'bg-green-500/10 border-green-500/20' : g.tone === 'turn' ? 'bg-yellow-500/10 border-yellow-500/20' : 'bg-red-500/10 border-red-500/20';
+        const ring = g.tone === 'ok' ? 'border-green-400/50' : g.tone === 'turn' ? 'border-yellow-400/50' : 'border-red-400/50';
+        return (
+          <div className={`mx-4 mb-3 px-4 py-3 rounded-xl border flex items-center gap-3 ${bg}`}>
+            <div
+              className={`w-12 h-12 rounded-full bg-dark-900/60 border-2 ${ring} flex items-center justify-center flex-shrink-0`}
+              style={{ transform: `rotate(${navInfo.relBearing}deg)`, transition: 'transform 0.5s ease' }}
+            >
+              <Navigation size={22} className={g.color} fill="currentColor" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className={`text-base font-bold leading-tight ${g.color}`}>{g.text}</div>
+              <div className="text-xs text-gray-400 mt-0.5">
+                {navInfo.offRoute ? `A ${Math.round(navInfo.offRouteM)} m de la ruta · ` : ''}
+                {navInfo.remainingKm.toFixed(2)} km restantes
+              </div>
+            </div>
           </div>
-          <span className="text-xs text-gray-400">{navInfo.remainingKm.toFixed(2)} km restantes</span>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Big metrics */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 gap-6">
@@ -455,6 +495,26 @@ export default function RecordActivity() {
       </div>
     </div>
   );
+}
+
+type NavGuide = {
+  offRoute: boolean; atFinish: boolean; hasHeading: boolean;
+  turn: 'straight' | 'slight-left' | 'slight-right' | 'left' | 'right' | 'uturn';
+};
+
+// Maps the nav state to a spoken-style instruction, color and a tone.
+function navGuide(n: NavGuide): { text: string; color: string; tone: 'ok' | 'turn' | 'bad' } {
+  if (n.atFinish)  return { text: '¡Llegaste al final!', color: 'text-green-400', tone: 'ok' };
+  if (n.offRoute)  return { text: 'Vuelve a la ruta', color: 'text-red-400', tone: 'bad' };
+  if (!n.hasHeading) return { text: 'Empieza a moverte para guiarte', color: 'text-gray-300', tone: 'turn' };
+  switch (n.turn) {
+    case 'straight':     return { text: 'Sigue recto', color: 'text-green-400', tone: 'ok' };
+    case 'slight-left':  return { text: 'Ligera izquierda', color: 'text-green-400', tone: 'ok' };
+    case 'slight-right': return { text: 'Ligera derecha', color: 'text-green-400', tone: 'ok' };
+    case 'left':         return { text: 'Gira a la izquierda', color: 'text-yellow-400', tone: 'turn' };
+    case 'right':        return { text: 'Gira a la derecha', color: 'text-yellow-400', tone: 'turn' };
+    case 'uturn':        return { text: 'Media vuelta · vas al revés', color: 'text-red-400', tone: 'bad' };
+  }
 }
 
 function MetricCell({ value, label, icon, highlight, color }: {
