@@ -1,7 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Capacitor } from '@capacitor/core';
-import { Geolocation } from '@capacitor/geolocation';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import type { BackgroundGeolocationPlugin } from '@capacitor-community/background-geolocation';
+
+// Foreground-service-backed GPS so tracking continues with the screen locked.
+const BackgroundGeolocation = registerPlugin<BackgroundGeolocationPlugin>('BackgroundGeolocation');
 
 export interface TrackPoint {
   lat: number; lng: number; ele?: number; time: string; accuracy?: number;
@@ -80,7 +83,7 @@ export function useActivityRecorder() {
     if (watchIdRef.current === null) return;
     try {
       if (isNative) {
-        await Geolocation.clearWatch({ id: watchIdRef.current as string });
+        await BackgroundGeolocation.removeWatcher({ id: watchIdRef.current as string });
       } else {
         navigator.geolocation.clearWatch(watchIdRef.current as number);
       }
@@ -108,13 +111,16 @@ export function useActivityRecorder() {
     }, 1000);
   };
 
-  // Shared point processor for both native and web callbacks
-  const processPoint = (point: TrackPoint) => {
+  // Shared point processor for both native and web callbacks.
+  // `nativeBearing` is the device compass/course heading when the platform
+  // provides one (background-geolocation does); otherwise it is computed.
+  const processPoint = (point: TrackPoint, nativeBearing?: number | null) => {
     setState(s => {
       if (s.status === 'paused') return s;
+      const prev = lastPointRef.current;
       let addedKm = 0;
-      if (lastPointRef.current) {
-        addedKm = haversineKm(lastPointRef.current, point);
+      if (prev) {
+        addedKm = haversineKm(prev, point);
         if (addedKm < 0.0005) return s; // filter noise < 0.5 m
         recentDistRef.current.push({ time: Date.now(), dist: addedKm });
       }
@@ -130,10 +136,13 @@ export function useActivityRecorder() {
         lastAltitudeRef.current = point.ele;
       }
 
-      // Heading — computed from last GPS point to current (only when moving)
+      // Heading — prefer the device's native bearing; fall back to the bearing
+      // between the previous and current GPS points while moving.
       let headingDeg = s.headingDeg;
-      if (lastPointRef.current && addedKm > 0.002) {
-        headingDeg = bearingDeg(lastPointRef.current, point);
+      if (nativeBearing != null && nativeBearing >= 0) {
+        headingDeg = nativeBearing;
+      } else if (prev && addedKm > 0.002) {
+        headingDeg = bearingDeg(prev, point);
       }
 
       return {
@@ -149,27 +158,37 @@ export function useActivityRecorder() {
 
   const startGpsWatch = async () => {
     if (isNative) {
-      // ── Native Capacitor GPS (Android / iOS) ──────────────────────────────
+      // ── Native background GPS (Android / iOS) ─────────────────────────────
+      // Uses a foreground service so tracking continues with the screen locked.
       try {
-        const perms = await Geolocation.requestPermissions();
-        if (perms.location !== 'granted') {
-          setState(s => ({ ...s, error: 'Permiso de ubicación denegado. Actívalo en Configuración del dispositivo.' }));
-          return;
-        }
-        const id = await Geolocation.watchPosition(
-          { enableHighAccuracy: true, timeout: 10000 },
-          (position, err) => {
-            if (err || !position) {
-              if (err) setState(s => ({ ...s, error: `GPS: ${err.message}` }));
+        const id = await BackgroundGeolocation.addWatcher(
+          {
+            backgroundMessage: 'Grabando tu actividad. Toca para volver a la app.',
+            backgroundTitle:   'JTZ Running Club',
+            requestPermissions: true,
+            stale: false,
+            distanceFilter: 5,
+          },
+          (location, error) => {
+            if (error) {
+              if (error.code === 'NOT_AUTHORIZED') {
+                setState(s => ({ ...s, error: 'Permiso de ubicación denegado. Actívalo en Configuración del dispositivo.' }));
+              } else {
+                setState(s => ({ ...s, error: `GPS: ${error.message}` }));
+              }
               return;
             }
-            processPoint({
-              lat: position.coords.latitude,
-              lng: position.coords.longitude,
-              ele: position.coords.altitude ?? undefined,
-              time: new Date().toISOString(),
-              accuracy: position.coords.accuracy ?? undefined,
-            });
+            if (!location) return;
+            processPoint(
+              {
+                lat: location.latitude,
+                lng: location.longitude,
+                ele: location.altitude ?? undefined,
+                time: new Date(location.time ?? Date.now()).toISOString(),
+                accuracy: location.accuracy ?? undefined,
+              },
+              location.bearing,
+            );
           },
         );
         watchIdRef.current = id;
