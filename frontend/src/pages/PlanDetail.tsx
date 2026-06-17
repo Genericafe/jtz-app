@@ -643,6 +643,18 @@ export default function PlanDetail() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['plan', Number(id)] }),
   });
 
+  const [editingPlan, setEditingPlan] = useState(false);
+  const [planForm, setPlanForm] = useState({ nombre: '', objetivo: '', descripcion: '' });
+  const updatePlanMutation = useMutation({
+    mutationFn: (data: object) => plansApi.update(Number(id), data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['plan', Number(id)] }); setEditingPlan(false); },
+  });
+  const openEditPlan = () => {
+    if (!plan) return;
+    setPlanForm({ nombre: plan.nombre, objetivo: plan.objetivo ?? '', descripcion: plan.descripcion ?? '' });
+    setEditingPlan(true);
+  };
+
   // Intercambia el CONTENIDO de entrenamiento entre dos días; el día de la semana no cambia
   const swapDaysMutation = useMutation({
     mutationFn: async ({ source, target }: { source: TrainingDay; target: TrainingDay }) => {
@@ -720,6 +732,12 @@ export default function PlanDetail() {
         </button>
         {isCoach && (
           <div className="flex items-center gap-2">
+            <button
+              onClick={openEditPlan}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-white/[0.08] bg-surface-600 text-gray-300 hover:text-white hover:border-brand-500/40 transition-all"
+            >
+              <Edit2 size={13} /> Editar
+            </button>
             <button
               onClick={() => templateMutation.mutate()}
               title={plan.isTemplate ? 'Quitar de plantillas' : 'Guardar como plantilla'}
@@ -902,6 +920,46 @@ export default function PlanDetail() {
           )}
         </div>
       </div>
+
+      {/* Edit plan modal (coach) */}
+      {editingPlan && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 px-4" onClick={() => setEditingPlan(false)}>
+          <div onClick={e => e.stopPropagation()} className="card w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slide-up">
+            <div className="flex items-center justify-between p-5 border-b border-white/[0.06] sticky top-0 bg-surface-800 z-10">
+              <h2 className="font-black text-white">Editar plan</h2>
+              <button onClick={() => setEditingPlan(false)} className="btn-ghost p-2"><X size={18} /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5">Nombre del plan</label>
+                <input value={planForm.nombre} onChange={e => setPlanForm(f => ({ ...f, nombre: e.target.value }))}
+                  className="input w-full text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5">Objetivo</label>
+                <input value={planForm.objetivo} onChange={e => setPlanForm(f => ({ ...f, objetivo: e.target.value }))}
+                  placeholder="Ej: Media Maratón 21K" className="input w-full text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5">Filosofía y principios del plan</label>
+                <textarea value={planForm.descripcion} onChange={e => setPlanForm(f => ({ ...f, descripcion: e.target.value }))}
+                  rows={10} spellCheck lang="es-MX"
+                  placeholder="Describe tu enfoque, filosofía y principios para este plan…"
+                  className="input w-full text-sm resize-none leading-relaxed" />
+                <p className="text-[11px] text-gray-500 mt-1">Este texto es lo que ven los corredores como filosofía del plan. Puedes ajustarlo a tu perspectiva.</p>
+              </div>
+            </div>
+            <div className="flex gap-3 p-5 border-t border-white/[0.06] sticky bottom-0 bg-surface-800">
+              <button onClick={() => setEditingPlan(false)} className="flex-1 py-2.5 rounded-xl border border-white/[0.08] text-sm text-gray-400 hover:text-white transition-colors">Cancelar</button>
+              <button onClick={() => updatePlanMutation.mutate({ nombre: planForm.nombre.trim(), objetivo: planForm.objetivo.trim() || null, descripcion: planForm.descripcion })}
+                disabled={updatePlanMutation.isPending || !planForm.nombre.trim()}
+                className="flex-1 btn-primary py-2.5 text-sm flex items-center justify-center gap-2">
+                {updatePlanMutation.isPending ? 'Guardando…' : 'Guardar cambios'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
