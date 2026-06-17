@@ -2,5 +2,8 @@
   "buildCommand": "cd frontend && npm install --legacy-peer-deps && npm run build",
   "outputDirectory": "frontend/dist",
   "installCommand": "echo skip",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/evento/:id", "destination": "/api/evento/:id" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }

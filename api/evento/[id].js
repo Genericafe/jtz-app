@@ -5,62 +5,58 @@
 // Real users still get the full SPA: we fetch the built index.html and inject
 // the OG tags into <head>. If anything fails we fall back to the plain SPA so
 // the public registration page never breaks.
+//
+// NOTE: lives at the REPO-ROOT /api because the active Vercel config is the
+// root vercel.json (project root = repo root). CommonJS because the repo root
+// is not an ESM package.
 
 const API_BASE =
   process.env.VITE_API_URL || 'https://jtz-app-production.up.railway.app/api';
 
 function esc(s) {
-  return String(s ?? '')
+  return String(s == null ? '' : s)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
 
-export default async function handler(req, res) {
-  const { id } = req.query;
+module.exports = async function handler(req, res) {
+  const id    = (req.query && req.query.id) || '';
   const host  = req.headers['x-forwarded-host'] || req.headers.host;
   const proto = req.headers['x-forwarded-proto'] || 'https';
   const origin = `${proto}://${host}`;
 
-  // Debug headers to diagnose injection (safe to keep; ignored by browsers).
-  res.setHeader('x-jtz-fn', 'og');
-  res.setHeader('x-jtz-id', String(id ?? ''));
-  res.setHeader('x-jtz-api', API_BASE);
-
-  // 1. Always fetch the SPA shell first — this is what makes the page work.
+  // 1. Fetch the SPA shell — this is what makes the page actually work.
   let html = '';
   try {
     const r = await fetch(`${origin}/index.html`);
     html = await r.text();
-  } catch {
-    // Can't get the shell → let Vercel serve the static file normally.
-    res.setHeader('Cache-Control', 'no-store');
-    return res.redirect(302, `/index.html`);
+  } catch (e) {
+    res.statusCode = 302;
+    res.setHeader('Location', '/index.html');
+    return res.end();
   }
 
-  // 2. Try to enrich with event-specific OG tags. Non-fatal on failure.
+  // 2. Enrich with event-specific OG tags. Non-fatal on failure.
   try {
     const r = await fetch(`${API_BASE}/public/events/${id}`);
-    res.setHeader('x-jtz-event', String(r.status));
     if (r.ok) {
       const ev = await r.json();
-      res.setHeader('x-jtz-inject', '1');
-      const fecha = (() => {
-        try {
-          return new Date(ev.fecha).toLocaleDateString('es-MX', {
-            weekday: 'long', day: 'numeric', month: 'long',
-          });
-        } catch { return ''; }
-      })();
-      const title = `${ev.nombre} · JTZ Running Club`;
+      let fecha = '';
+      try {
+        fecha = new Date(ev.fecha).toLocaleDateString('es-MX', {
+          weekday: 'long', day: 'numeric', month: 'long',
+        });
+      } catch (_) { fecha = ''; }
+      const title  = `${ev.nombre} · JTZ Running Club`;
       const precio = ev.precio === 0 ? 'Entrada libre' : `$${ev.precio} MXN`;
-      const desc =
-        (ev.descripcion && ev.descripcion.slice(0, 160)) ||
+      const desc   =
+        (ev.descripcion && ev.descripcion.replace(/\s+/g, ' ').slice(0, 180)) ||
         [fecha, `${ev.lugar}${ev.ciudad ? ', ' + ev.ciudad : ''}`, precio]
           .filter(Boolean).join(' · ');
-      const url   = `${origin}/evento/${id}`;
-      const image = `${API_BASE}/public/events/${id}/image`;
+      const url    = `${origin}/evento/${id}`;
+      const image  = `${API_BASE}/public/events/${id}/image`;
       const hasImg = !!ev.imagen;
 
       const tags = [
@@ -78,16 +74,13 @@ export default async function handler(req, res) {
         `<meta name="description" content="${esc(desc)}">`,
       ].filter(Boolean).join('\n    ');
 
-      // Replace the document <title> and inject the OG tags before </head>.
       html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${esc(title)}</title>`);
       html = html.replace('</head>', `    ${tags}\n  </head>`);
     }
-  } catch (e) {
-    res.setHeader('x-jtz-err', String(e && e.message ? e.message : e).slice(0, 120));
-  }
+  } catch (e) { /* keep plain SPA html */ }
 
+  res.statusCode = 200;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  // Short CDN cache so updated event details/images refresh reasonably fast.
   res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=600');
-  return res.status(200).send(html);
-}
+  return res.end(html);
+};
