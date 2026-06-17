@@ -45,6 +45,37 @@ function diaOffset(diaSemana: string): number | null {
 const fixRunTerms = (s?: string) =>
   (s ?? '').replace(/Rodaje/g, 'Trote').replace(/rodaje/g, 'trote');
 
+// Map each training day of a plan to a real calendar date, given a start date.
+// Weekday-labelled days align to real weekdays; "Día N" days are sequential.
+const WEEKDAY_IDX: Record<string, number> = {
+  lunes: 0, martes: 1, miércoles: 2, miercoles: 2, jueves: 3,
+  viernes: 4, sábado: 5, sabado: 5, domingo: 6,
+};
+function planDayDates(plan: Plan, startDate: Date | null): Map<number, Date> {
+  const map = new Map<number, Date>();
+  if (!startDate) return map;
+  const start = new Date(startDate); start.setHours(0, 0, 0, 0);
+  const startMon0 = (start.getDay() + 6) % 7;        // 0 = Monday
+  const monday = new Date(start); monday.setDate(start.getDate() - startMon0);
+  for (const s of plan.semanas) {
+    for (const d of s.dias) {
+      const off = diaOffset(d.diaSemana);            // "Día N" → N-1
+      let date: Date;
+      if (off != null) {
+        date = new Date(start); date.setDate(start.getDate() + off);
+      } else {
+        const w = WEEKDAY_IDX[d.diaSemana.toLowerCase()];
+        if (w == null) continue;
+        date = new Date(monday);
+        date.setDate(monday.getDate() + (s.numeroSemana - 1) * 7 + w);
+      }
+      map.set(d.id, date);
+    }
+  }
+  return map;
+}
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 // Collapsible group header in the "assigned runners" dropdown.
 function GroupSection({ nombre, color, count, children }: {
   nombre: string; color: string; count: number; children: React.ReactNode;
@@ -60,6 +91,126 @@ function GroupSection({ nombre, color, count, children }: {
         <span className="text-[11px] text-gray-500">{count}</span>
       </button>
       {open && <div>{children}</div>}
+    </div>
+  );
+}
+
+// ── Month-grid calendar of the plan's training days on real dates ─────────────
+function PlanCalendar({ plan, startDate, dayDates, activityByDay, isCoach }: {
+  plan: Plan;
+  startDate: Date | null;
+  dayDates: Map<number, Date>;
+  activityByDay: Record<number, ActivityLog | null>;
+  isCoach: boolean;
+}) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+
+  const byDate = new Map<string, TrainingDay[]>();
+  plan.semanas.forEach(s => s.dias.forEach(d => {
+    const dt = dayDates.get(d.id);
+    if (!dt) return;
+    const k = ymd(dt);
+    const arr = byDate.get(k) ?? []; arr.push(d); byDate.set(k, arr);
+  }));
+
+  const base = startDate ?? today;
+  const [cursor, setCursor] = useState(new Date(base.getFullYear(), base.getMonth(), 1));
+  const [selected, setSelected] = useState<string>(ymd(startDate ?? today));
+
+  const year = cursor.getFullYear(), month = cursor.getMonth();
+  const first = new Date(year, month, 1);
+  const firstMon0 = (first.getDay() + 6) % 7;
+  const gridStart = new Date(first); gridStart.setDate(1 - firstMon0);
+  const cells = Array.from({ length: 42 }, (_, i) => { const d = new Date(gridStart); d.setDate(gridStart.getDate() + i); return d; });
+
+  const selDays = (byDate.get(selected) ?? []).filter(d => d.tipo !== 'descanso');
+  const selDate = new Date(selected + 'T00:00:00');
+
+  return (
+    <div>
+      {/* Month nav */}
+      <div className="flex items-center justify-between mb-3">
+        <button onClick={() => setCursor(new Date(year, month - 1, 1))}
+          className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-surface-600 transition-colors">
+          <ChevronRight size={16} className="rotate-180" />
+        </button>
+        <h3 className="text-sm font-black text-white capitalize">{format(cursor, 'MMMM yyyy', { locale: es })}</h3>
+        <button onClick={() => setCursor(new Date(year, month + 1, 1))}
+          className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-surface-600 transition-colors">
+          <ChevronRight size={16} />
+        </button>
+      </div>
+
+      {/* Weekday labels */}
+      <div className="grid grid-cols-7 gap-1 mb-1">
+        {['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'].map(d => (
+          <div key={d} className="text-center text-[10px] font-bold text-gray-600 uppercase">{d}</div>
+        ))}
+      </div>
+
+      {/* Grid */}
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map((d, i) => {
+          const k = ymd(d);
+          const inMonth = d.getMonth() === month;
+          const isToday = ymd(today) === k;
+          const isSel = selected === k;
+          const days = (byDate.get(k) ?? []).filter(x => x.tipo !== 'descanso');
+          const done = days.some(x => activityByDay[x.id]);
+          return (
+            <button key={i} onClick={() => setSelected(k)}
+              className={`aspect-square rounded-lg flex flex-col items-center justify-center gap-0.5 text-xs transition-all relative
+                ${isSel ? 'bg-brand-500/25 ring-1 ring-brand-500' : days.length ? 'bg-surface-700 hover:bg-surface-600' : 'hover:bg-surface-700/50'}
+                ${!inMonth ? 'opacity-30' : ''}`}>
+              <span className={`${isToday ? 'text-brand-400 font-black' : days.length ? 'text-white font-semibold' : 'text-gray-500'}`}>
+                {d.getDate()}
+              </span>
+              {days.length > 0 && (
+                <div className="flex items-center gap-0.5">
+                  {days.slice(0, 3).map((x, j) => (
+                    <span key={j} className="w-1.5 h-1.5 rounded-full"
+                      style={{ background: done ? '#22c55e' : (tipoIcon[x.tipo]?.color?.includes('green') ? '#4ade80' : tipoIcon[x.tipo]?.color?.includes('orange') ? '#fb923c' : tipoIcon[x.tipo]?.color?.includes('red') ? '#f87171' : tipoIcon[x.tipo]?.color?.includes('blue') ? '#60a5fa' : '#9ca3af') }} />
+                  ))}
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Selected day detail */}
+      <div className="mt-4 pt-4 border-t border-white/[0.06]">
+        <p className="text-sm font-bold text-white capitalize mb-2">
+          {format(selDate, "EEEE d 'de' MMMM yyyy", { locale: es })}
+        </p>
+        {selDays.length === 0 ? (
+          <p className="text-xs text-gray-500">Sin entrenamiento programado este día.</p>
+        ) : (
+          <div className="space-y-2">
+            {selDays.map(d => {
+              const act = activityByDay[d.id];
+              const cfg = tipoIcon[d.tipo] ?? tipoIcon.descanso;
+              return (
+                <div key={d.id} className="flex items-start gap-3 bg-surface-700 rounded-xl p-3 border border-white/[0.06]">
+                  <span className={`flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 ${cfg.bg}`}>
+                    <span className={cfg.color}>{cfg.icon}</span>
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-semibold text-white">{tipoLabel[d.tipo] ?? d.tipo.replace(/_/g, ' ')}</p>
+                      {d.distanciaKm != null && <span className="text-xs text-gray-400">{d.distanciaKm} km</span>}
+                      {!isCoach && (act
+                        ? <span className="flex items-center gap-1 text-[10px] text-green-400 font-medium"><CheckCircle2 size={10} /> Hecho</span>
+                        : <span className="flex items-center gap-1 text-[10px] text-gray-500"><Clock3 size={10} /> Pendiente</span>)}
+                    </div>
+                    {d.descripcion && <p className="text-xs text-gray-400 mt-1 line-clamp-2">{fixRunTerms(d.descripcion)}</p>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -663,6 +814,7 @@ export default function PlanDetail() {
   });
 
   const [editingPlan, setEditingPlan] = useState(false);
+  const [planView, setPlanView] = useState<'lista' | 'calendario'>('lista');
   const [planForm, setPlanForm] = useState({ nombre: '', objetivo: '', descripcion: '' });
   const updatePlanMutation = useMutation({
     mutationFn: (data: object) => plansApi.update(Number(id), data),
@@ -879,6 +1031,30 @@ export default function PlanDetail() {
         )}
       </div>
 
+      {/* View toggle: list vs calendar */}
+      <div className="flex items-center gap-1 p-1 bg-surface-700 rounded-xl w-fit mb-4">
+        {([['lista', 'Lista'], ['calendario', 'Calendario']] as const).map(([v, label]) => (
+          <button key={v} onClick={() => setPlanView(v)}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${planView === v ? 'bg-brand-500 text-white' : 'text-gray-400 hover:text-white'}`}>
+            {v === 'calendario' && <Calendar size={13} />}{label}
+          </button>
+        ))}
+      </div>
+
+      {planView === 'calendario' ? (
+        <div className="card p-5">
+          {!startDate && isCoach && (
+            <p className="text-xs text-gray-500 mb-3">Vista previa desde hoy. Cada corredor verá las fechas según su día de inicio asignado.</p>
+          )}
+          <PlanCalendar
+            plan={plan}
+            startDate={startDate ?? new Date()}
+            dayDates={planDayDates(plan, startDate ?? new Date())}
+            activityByDay={activityByDay}
+            isCoach={isCoach}
+          />
+        </div>
+      ) : (
       <div className={`grid grid-cols-1 gap-5 ${isSingleWeek ? '' : 'xl:grid-cols-4'}`}>
         {/* Week selector — hidden for single-week plans (redundant) */}
         {!isSingleWeek && (
@@ -968,6 +1144,7 @@ export default function PlanDetail() {
           )}
         </div>
       </div>
+      )}
 
       {/* Edit plan modal (coach) */}
       {editingPlan && (
