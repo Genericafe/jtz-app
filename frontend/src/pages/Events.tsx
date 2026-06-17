@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { format, isAfter, formatDistanceToNow } from 'date-fns';
 import { generarTextoEvento } from '../utils/formatearTexto';
 import { es } from 'date-fns/locale';
+import { formatEvent } from '../utils/eventDate';
 
 // Compress an uploaded image client-side to a small JPEG data URL so it fits
 // comfortably in the DB and loads fast as an Open Graph preview image.
@@ -299,7 +300,7 @@ function RegisterModal({ ev, onClose, runnerMe }: {
           <p className="text-white/70 text-xs font-semibold uppercase tracking-wide mb-1">{ev.tipo}</p>
           <h2 className="text-lg font-black text-white leading-tight pr-8">{ev.nombre}</h2>
           <div className="flex items-center gap-3 mt-2 text-white/80 text-xs flex-wrap">
-            <span className="flex items-center gap-1"><Calendar size={11} /> {format(new Date(ev.fecha), "d 'de' MMMM · HH:mm 'hrs'", { locale: es })}</span>
+            <span className="flex items-center gap-1"><Calendar size={11} /> {formatEvent(ev.fecha, "d 'de' MMMM · HH:mm 'hrs'")}</span>
             <span className="flex items-center gap-1"><MapPin size={11} /> {ev.lugar}</span>
             {ev.distanciaKm && <span className="flex items-center gap-1"><Trophy size={11} /> {ev.distanciaKm} km</span>}
           </div>
@@ -395,7 +396,7 @@ function ShareModal({ ev, onClose }: { ev: Event; onClose: () => void }) {
 
   const tipoEmoji: Record<string, string> = { carrera: '🏃', trail: '🏔️', entrenamiento: '💪', social: '🎉' };
   const emoji = tipoEmoji[ev.tipo] ?? '🏃';
-  const fecha = format(new Date(ev.fecha), "EEEE d 'de' MMMM · HH:mm 'hrs'", { locale: es });
+  const fecha = formatEvent(ev.fecha, "EEEE d 'de' MMMM · HH:mm 'hrs'");
   const precio = ev.precio === 0 ? 'Entrada libre' : `$${ev.precio.toLocaleString('es-MX')} MXN`;
 
   // Public registration landing page. The link is what makes the event an
@@ -725,7 +726,7 @@ function RunnerEventDetailModal({ ev, isPaid, onClose }: { ev: Event; isPaid: bo
           <p className="text-white/70 text-xs font-semibold uppercase tracking-wide mb-1">{cfg.label}</p>
           <h2 className="text-xl font-black text-white leading-tight pr-8">{ev.nombre}</h2>
           <div className="flex flex-wrap gap-3 mt-2 text-white/80 text-xs">
-            <span className="flex items-center gap-1"><Calendar size={11} /> {format(new Date(ev.fecha), "d 'de' MMMM · HH:mm 'hrs'", { locale: es })}</span>
+            <span className="flex items-center gap-1"><Calendar size={11} /> {formatEvent(ev.fecha, "d 'de' MMMM · HH:mm 'hrs'")}</span>
             <span className="flex items-center gap-1"><MapPin size={11} /> {ev.lugar}{ev.ciudad ? `, ${ev.ciudad}` : ''}</span>
             {ev.distanciaKm && <span className="flex items-center gap-1"><Trophy size={11} /> {ev.distanciaKm} km</span>}
           </div>
@@ -893,7 +894,7 @@ function CoachEventDetailModal({ ev, onClose }: { ev: Event; onClose: () => void
           <div className="min-w-0 mr-3">
             <h2 className="text-base sm:text-lg font-black text-white truncate">{ev.nombre}</h2>
             <div className="flex items-center gap-3 mt-1 text-xs sm:text-sm text-gray-400 flex-wrap">
-              <span className="hidden sm:inline">{format(new Date(ev.fecha), "d 'de' MMMM yyyy · HH:mm 'hrs'", { locale: es })}</span>
+              <span className="hidden sm:inline">{formatEvent(ev.fecha, "d 'de' MMMM yyyy · HH:mm 'hrs'")}</span>
               <span className="flex items-center gap-1"><Users size={12} />{rows.length} inscrito{rows.length !== 1 ? 's' : ''}</span>
               {totalRecaudado > 0 && (
                 <span className="text-green-400 font-semibold">${totalRecaudado.toLocaleString('es-MX')} MXN</span>
@@ -1046,10 +1047,10 @@ function EventCard({ ev, onRegisterClick, onViewDetail, myRegistrations, isCoach
         <div className="absolute top-4 right-4">
           <div className="bg-black/30 backdrop-blur rounded-xl p-2 text-center min-w-[44px]">
             <p className="text-xs text-white/70 uppercase leading-none">
-              {format(new Date(ev.fecha), 'MMM', { locale: es })}
+              {formatEvent(ev.fecha, 'MMM')}
             </p>
             <p className="text-xl font-black text-white leading-none">
-              {format(new Date(ev.fecha), 'd')}
+              {formatEvent(ev.fecha, 'd')}
             </p>
           </div>
         </div>
@@ -1064,7 +1065,7 @@ function EventCard({ ev, onRegisterClick, onViewDetail, myRegistrations, isCoach
           </div>
           <div className="flex items-center gap-2 text-xs text-gray-400">
             <Clock size={12} className="flex-shrink-0" />
-            {format(new Date(ev.fecha), "HH:mm 'hrs'", { locale: es })} ·{' '}
+            {formatEvent(ev.fecha, "HH:mm 'hrs'")} ·{' '}
             {isPast
               ? formatDistanceToNow(new Date(ev.fecha), { locale: es, addSuffix: true })
               : formatDistanceToNow(new Date(ev.fecha), { locale: es, addSuffix: true })}

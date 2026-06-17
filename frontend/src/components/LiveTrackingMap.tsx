@@ -1,4 +1,4 @@
-import { useEffect, useRef, memo } from 'react';
+import { useEffect, useRef, useState, memo } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -62,6 +62,8 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
   const routeIdxRef     = useRef(0);
   const startMarkerRef  = useRef<maplibregl.Marker | null>(null);
   const endMarkerRef    = useRef<maplibregl.Marker | null>(null);
+  const posMarkerRef    = useRef<maplibregl.Marker | null>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
 
   // ── Map initialisation (runs once) ────────────────────────────────────────
   useEffect(() => {
@@ -101,6 +103,7 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
 
     map.on('load', () => {
       readyRef.current = true;
+      setMapLoaded(true);
 
       // ── Reference route ──────────────────────────────────────────────────
       map.addSource('ref-route', {
@@ -191,15 +194,14 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
         source: 'current-pos',
         paint: { 'circle-radius': 16, 'circle-color': '#3b82f6', 'circle-opacity': 0.2 },
       });
-      map.addLayer({
-        id: 'pos-dot',
-        type: 'circle',
-        source: 'current-pos',
-        paint: {
-          'circle-radius': 9, 'circle-color': '#3b82f6',
-          'circle-stroke-color': '#ffffff', 'circle-stroke-width': 3,
-        },
-      });
+      // The solid dot + heading cone is a DOM marker (rotates with the compass).
+      const initPos2 = currentPos ?? (track.length > 0 ? track[track.length - 1] : null);
+      if (initPos2) {
+        posMarkerRef.current = new maplibregl.Marker({
+          element: makeHeadingEl(),
+          rotationAlignment: 'map',
+        }).setLngLat([initPos2.lng, initPos2.lat]).addTo(map);
+      }
     });
 
     mapRef.current = map;
@@ -207,6 +209,8 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
       readyRef.current = false;
       startMarkerRef.current?.remove();
       endMarkerRef.current?.remove();
+      posMarkerRef.current?.remove();
+      posMarkerRef.current = null;
       map.remove();
       mapRef.current = null;
     };
@@ -247,12 +251,24 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
     (map.getSource('current-pos') as maplibregl.GeoJSONSource | undefined)
       ?.setData(pointFeature(currentPos) as any);
 
+    // Move + rotate the heading cone marker (north-up map, rotating arrow).
+    if (!posMarkerRef.current) {
+      posMarkerRef.current = new maplibregl.Marker({
+        element: makeHeadingEl(),
+        rotationAlignment: 'map',
+      }).setLngLat([currentPos.lng, currentPos.lat]).addTo(map);
+    }
+    posMarkerRef.current.setLngLat([currentPos.lng, currentPos.lat]);
+    const beam = posMarkerRef.current.getElement().querySelector('.jtz-beam') as HTMLElement | null;
+    if (heading != null) {
+      posMarkerRef.current.setRotation(heading);
+      if (beam) beam.style.opacity = '1';
+    } else if (beam) {
+      beam.style.opacity = '0'; // no heading yet → just the dot
+    }
+
     if (autoFollowRef.current) {
       map.panTo([currentPos.lng, currentPos.lat], { duration: 800 });
-      // Rotate map to face direction of travel (course-up)
-      if (heading != null) {
-        map.rotateTo(heading, { duration: 600, easing: t => t });
-      }
     }
 
     // Update next-waypoint marker
@@ -269,13 +285,45 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
   }, [currentPos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div ref={containerRef} className={className} style={{ width: '100%', height: '100%' }} />
+    <div className={className} style={{ position: 'relative', width: '100%', height: '100%', background: '#0f1115' }}>
+      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      {!mapLoaded && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 12, background: '#0f1115', color: '#9ca3af' }}>
+          <div style={{ width: 32, height: 32, border: '3px solid #22c55e', borderTopColor: 'transparent',
+            borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          <p style={{ fontSize: 13 }}>Cargando mapa…</p>
+          <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+        </div>
+      )}
+    </div>
   );
 });
 
 export default LiveTrackingMap;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+// Google-Maps-style position marker: a solid blue dot with a directional cone
+// ("beam") pointing in the direction of travel / compass heading. The beam is
+// rotated by maplibregl's setRotation; opacity is toggled when no heading.
+function makeHeadingEl(): HTMLDivElement {
+  const el = document.createElement('div');
+  el.style.width = '0';
+  el.style.height = '0';
+  el.innerHTML = `
+    <div style="position:relative;width:0;height:0;">
+      <div class="jtz-beam" style="
+        position:absolute;left:-15px;top:-34px;width:30px;height:34px;opacity:0;
+        background:linear-gradient(to top, rgba(59,130,246,0.6), rgba(59,130,246,0));
+        clip-path:polygon(50% 0, 100% 100%, 0 100%);
+        transition:opacity .3s ease;pointer-events:none;"></div>
+      <div style="
+        position:absolute;left:-9px;top:-9px;width:18px;height:18px;border-radius:50%;
+        background:#3b82f6;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.45);"></div>
+    </div>`;
+  return el;
+}
 
 function placeRouteMarkers(map: maplibregl.Map, route: MapPoint[]) {
   // Start — green flag

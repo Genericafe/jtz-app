@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { publicApi } from '../services/api';
 import { Event } from '../types';
-import { format, isAfter, formatDistanceToNow } from 'date-fns';
+import { isAfter, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { MapPin, Calendar, Trophy, Users, CheckCircle, Clock, Zap, CreditCard, Shirt } from 'lucide-react';
+import { formatEvent } from '../utils/eventDate';
+import { MapPin, Calendar, Trophy, CheckCircle, Clock, Zap, CreditCard, Shirt } from 'lucide-react';
 
 const typeGradient: Record<string, string> = {
   carrera:       'from-orange-500 via-red-500 to-rose-700',
@@ -174,7 +175,7 @@ export default function EventLanding() {
         <p className="text-gray-400 mb-2">Revisa tu correo — te enviamos todos los detalles del evento.</p>
         <p className="text-lg font-bold text-brand-400 mt-4">{event.nombre}</p>
         <p className="text-gray-400 text-sm mt-1">
-          {format(new Date(event.fecha), "EEEE d 'de' MMMM · HH:mm 'hrs'", { locale: es })}
+          {formatEvent(event.fecha, "EEEE d 'de' MMMM · HH:mm 'hrs'")}
         </p>
         <p className="text-gray-500 text-sm mt-1">{event.lugar}, {event.ciudad}</p>
         <div className="mt-8 p-5 bg-surface-700 rounded-2xl border border-white/[0.06]">
@@ -191,7 +192,6 @@ export default function EventLanding() {
   const isPast = !isAfter(new Date(event.fecha), new Date());
   const gradient = typeGradient[event.tipo] ?? typeGradient.carrera;
   const emoji = typeEmoji[event.tipo] ?? '🏃';
-  const inscritosTotal = (event._count?.leads ?? 0);
 
   return (
     <div className="min-h-screen bg-surface-900">
@@ -218,8 +218,8 @@ export default function EventLanding() {
         {/* Info pills */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
           {[
-            { icon: Calendar, label: 'Fecha', value: format(new Date(event.fecha), "d 'de' MMMM", { locale: es }) },
-            { icon: Clock,    label: 'Hora',  value: format(new Date(event.fecha), "HH:mm 'hrs'") },
+            { icon: Calendar, label: 'Fecha', value: formatEvent(event.fecha, "d 'de' MMMM") },
+            { icon: Clock,    label: 'Hora',  value: formatEvent(event.fecha, "HH:mm 'hrs'") },
             { icon: MapPin,   label: 'Lugar', value: `${event.lugar}, ${event.ciudad}` },
             { icon: Trophy,   label: 'Distancia', value: event.distanciaKm ? `${event.distanciaKm} km` : 'Por confirmar' },
           ].map(({ icon: Icon, label, value }) => (
@@ -230,16 +230,6 @@ export default function EventLanding() {
             </div>
           ))}
         </div>
-
-        {/* Social proof */}
-        {inscritosTotal > 0 && (
-          <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 mb-6">
-            <Users size={16} className="text-green-400" />
-            <p className="text-sm text-green-300">
-              <strong>{inscritosTotal}</strong> {inscritosTotal === 1 ? 'persona ya se inscribió' : 'personas ya se inscribieron'} — ¡no te quedes fuera!
-            </p>
-          </div>
-        )}
 
         {isPast ? (
           <div className="bg-surface-700 border border-white/[0.06] rounded-2xl p-8 text-center">

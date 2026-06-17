@@ -29,7 +29,7 @@ export default function ActivityShareCard({ activity, onClose }: {
   const [photo, setPhoto] = useState<HTMLImageElement | null>(null);
   const [format, setFormat] = useState<'story' | 'square'>('story');
   const [busy, setBusy] = useState(false);
-  const canShare = typeof navigator !== 'undefined' && !!(navigator as Navigator & { canShare?: (d: unknown) => boolean }).canShare;
+  const [err, setErr] = useState<string | null>(null);
 
   // ── Draw the card ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -141,42 +141,76 @@ export default function ActivityShareCard({ activity, onClose }: {
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setErr(null);
     const img = new Image();
+    // Same-origin blob URL — won't taint the canvas, but be explicit for safety.
+    img.crossOrigin = 'anonymous';
     img.onload = () => setPhoto(img);
+    img.onerror = () => setErr('No se pudo cargar esa imagen. Prueba con otra.');
     img.src = URL.createObjectURL(file);
     e.target.value = '';
   };
 
-  const toBlob = (): Promise<Blob | null> =>
-    new Promise(res => canvasRef.current?.toBlob(b => res(b), 'image/jpeg', 0.92) ?? res(null));
+  const fileName = `JTZ-${(activity.nombre ?? activity.tipo).replace(/\s+/g, '_')}.jpg`;
+
+  // Get a JPEG of the card as a Blob. Falls back to decoding a data URL when
+  // toBlob isn't available, so download/share work across browsers.
+  const toBlob = async (): Promise<Blob> => {
+    const canvas = canvasRef.current;
+    if (!canvas) throw new Error('No se generó la imagen.');
+    const blob = await new Promise<Blob | null>(res => {
+      try { canvas.toBlob(b => res(b), 'image/jpeg', 0.92); }
+      catch { res(null); }
+    });
+    if (blob) return blob;
+    // Fallback: data URL → Blob
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    const resp = await fetch(dataUrl);
+    return resp.blob();
+  };
 
   const download = async () => {
-    setBusy(true);
+    setBusy(true); setErr(null);
     try {
       const blob = await toBlob();
-      if (!blob) return;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `JTZ-${(activity.nombre ?? activity.tipo).replace(/\s+/g, '_')}.jpg`;
+      a.download = fileName;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      console.error('[share-card] download failed', e);
+      setErr('No se pudo descargar la imagen. Intenta de nuevo.');
     } finally { setBusy(false); }
   };
 
   const share = async () => {
-    setBusy(true);
+    setBusy(true); setErr(null);
     try {
       const blob = await toBlob();
-      if (!blob) return;
-      const file = new File([blob], 'JTZ-actividad.jpg', { type: 'image/jpeg' });
-      const nav = navigator as Navigator & { canShare?: (d: unknown) => boolean; share?: (d: unknown) => Promise<void> };
-      if (nav.canShare?.({ files: [file] }) && nav.share) {
+      const file = new File([blob], fileName, { type: 'image/jpeg' });
+      const nav = navigator as Navigator & {
+        canShare?: (d: unknown) => boolean;
+        share?: (d: unknown) => Promise<void>;
+      };
+      if (nav.share && nav.canShare?.({ files: [file] })) {
         await nav.share({ files: [file], title: 'Mi actividad JTZ' });
       } else {
-        await download();
+        // Desktop / unsupported: just download the image.
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = fileName;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
-    } catch { /* user cancelled */ } finally { setBusy(false); }
+    } catch (e) {
+      // AbortError = user cancelled the share sheet; ignore.
+      if ((e as Error)?.name !== 'AbortError') {
+        console.error('[share-card] share failed', e);
+        setErr('No se pudo compartir. Descarga la imagen y súbela manualmente.');
+      }
+    } finally { setBusy(false); }
   };
 
   return (
@@ -219,13 +253,14 @@ export default function ActivityShareCard({ activity, onClose }: {
               className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-white/[0.1] text-sm font-semibold text-gray-200 hover:bg-surface-600 transition-all disabled:opacity-50">
               {busy ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} Descargar
             </button>
-            {canShare && (
-              <button onClick={share} disabled={busy}
-                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold transition-all disabled:opacity-50">
-                <Share2 size={15} /> Compartir
-              </button>
-            )}
+            <button onClick={share} disabled={busy}
+              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold transition-all disabled:opacity-50">
+              {busy ? <Loader2 size={15} className="animate-spin" /> : <Share2 size={15} />} Compartir
+            </button>
           </div>
+          {err && (
+            <p className="text-[12px] text-red-400 text-center bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">{err}</p>
+          )}
           <p className="text-[11px] text-gray-500 text-center">
             Descarga la imagen y súbela como historia o post en Instagram, Facebook, TikTok o WhatsApp.
           </p>

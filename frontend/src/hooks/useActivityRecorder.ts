@@ -73,7 +73,45 @@ export function useActivityRecorder() {
   const lastPointRef    = useRef<TrackPoint | null>(null);
   const lastAltitudeRef = useRef<number | null>(null);
   const recentDistRef   = useRef<{ time: number; dist: number }[]>([]);
+  const hasCompassRef   = useRef(false);
+  const lastCompassRef  = useRef(0);
   const isNative      = Capacitor.isNativePlatform();
+
+  // ── Device compass (magnetometer) ──────────────────────────────────────────
+  // Gives a heading even while standing still, so the position marker behaves
+  // like a real compass. Takes priority over the GPS-derived bearing.
+  const orientationHandler = useRef((e: DeviceOrientationEvent & { webkitCompassHeading?: number }) => {
+    let h: number | null = null;
+    if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)) {
+      h = e.webkitCompassHeading;                 // iOS: already a compass bearing
+    } else if (e.absolute && e.alpha != null) {
+      h = (360 - e.alpha) % 360;                  // Android: alpha is CCW from north
+    }
+    if (h == null || !isFinite(h)) return;
+    const now = Date.now();
+    if (now - lastCompassRef.current < 200) return; // throttle to ~5/s
+    lastCompassRef.current = now;
+    hasCompassRef.current = true;
+    setState(s => ({ ...s, headingDeg: h! }));
+  }).current;
+
+  const enableCompass = async () => {
+    if (typeof window === 'undefined' || !('DeviceOrientationEvent' in window)) return;
+    const DOE = window.DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> };
+    try {
+      if (typeof DOE.requestPermission === 'function') {
+        const res = await DOE.requestPermission();
+        if (res !== 'granted') return;
+      }
+    } catch { return; }
+    window.addEventListener('deviceorientationabsolute', orientationHandler as EventListener, true);
+    window.addEventListener('deviceorientation', orientationHandler as EventListener, true);
+  };
+
+  const disableCompass = () => {
+    window.removeEventListener('deviceorientationabsolute', orientationHandler as EventListener, true);
+    window.removeEventListener('deviceorientation', orientationHandler as EventListener, true);
+  };
 
   const clearTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -136,13 +174,16 @@ export function useActivityRecorder() {
         lastAltitudeRef.current = point.ele;
       }
 
-      // Heading — prefer the device's native bearing; fall back to the bearing
-      // between the previous and current GPS points while moving.
+      // Heading — the device compass (if available) wins, since it works even
+      // while standing still. Otherwise prefer the native bearing, then fall
+      // back to the bearing between the previous and current GPS points.
       let headingDeg = s.headingDeg;
-      if (nativeBearing != null && nativeBearing >= 0) {
-        headingDeg = nativeBearing;
-      } else if (prev && addedKm > 0.002) {
-        headingDeg = bearingDeg(prev, point);
+      if (!hasCompassRef.current) {
+        if (nativeBearing != null && nativeBearing >= 0) {
+          headingDeg = nativeBearing;
+        } else if (prev && addedKm > 0.002) {
+          headingDeg = bearingDeg(prev, point);
+        }
       }
 
       return {
@@ -220,6 +261,7 @@ export function useActivityRecorder() {
   const start = useCallback(async () => {
     setState(s => ({ ...s, status: 'running', error: null }));
     startTimer();
+    enableCompass();
     await startGpsWatch();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -233,12 +275,14 @@ export function useActivityRecorder() {
   const resume = useCallback(async () => {
     setState(s => ({ ...s, status: 'running' }));
     startTimer();
+    enableCompass();
     await startGpsWatch();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const finish = useCallback(async () => {
     clearTimer();
     await clearWatch();
+    disableCompass();
     if (isNative) Haptics.impact({ style: ImpactStyle.Heavy });
     setState(s => ({ ...s, status: 'finished' }));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -247,6 +291,7 @@ export function useActivityRecorder() {
     lastPointRef.current = null;
     lastAltitudeRef.current = null;
     recentDistRef.current = [];
+    hasCompassRef.current = false;
     setState({
       status: 'idle', elapsed: 0, distanceKm: 0,
       paceMinKm: null, currentPaceMinKm: null,
@@ -263,6 +308,7 @@ export function useActivityRecorder() {
   useEffect(() => () => {
     clearTimer();
     clearWatch();
+    disableCompass();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { state, start, pause, resume, finish, reset, getGpx };
