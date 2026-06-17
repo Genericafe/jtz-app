@@ -17,12 +17,15 @@ router.get('/', async (_req: AuthRequest, res: Response) => {
 });
 
 router.get('/stats', coachOnly, async (_req: AuthRequest, res: Response) => {
-  const [total, pendiente, pagado, vencido] = await Promise.all([
+  const now = new Date();
+  const [total, pagado, unpaid] = await Promise.all([
     prisma.payment.aggregate({ _sum: { monto: true }, where: { estado: 'pagado' } }),
-    prisma.payment.count({ where: { estado: 'pendiente' } }),
     prisma.payment.count({ where: { estado: 'pagado' } }),
-    prisma.payment.count({ where: { estado: 'vencido' } }),
+    // 'vencido' is computed: an unpaid payment past its due date.
+    prisma.payment.findMany({ where: { estado: { not: 'pagado' } }, select: { fechaVencimiento: true } }),
   ]);
+  const vencido = unpaid.filter(p => p.fechaVencimiento != null && p.fechaVencimiento < now).length;
+  const pendiente = unpaid.length - vencido;
   return res.json({ totalRecaudado: total._sum.monto ?? 0, pendiente, pagado, vencido });
 });
 
@@ -43,11 +46,18 @@ router.post('/', coachOnly, async (req: AuthRequest, res: Response) => {
   const parse = schema.safeParse(req.body);
   if (!parse.success) return res.status(400).json({ error: 'Datos inválidos' });
 
+  // 'vencido' is computed at read time, never stored. Only pendiente/pagado.
+  const estado = parse.data.estado === 'pagado' ? 'pagado' : 'pendiente';
+  const fechaPago = estado === 'pagado'
+    ? (parse.data.fechaPago ? new Date(parse.data.fechaPago) : new Date())
+    : null;
+
   const payment = await prisma.payment.create({
     data: {
       ...parse.data,
+      estado,
       fechaVencimiento: parse.data.fechaVencimiento ? new Date(parse.data.fechaVencimiento) : undefined,
-      fechaPago: parse.data.fechaPago ? new Date(parse.data.fechaPago) : undefined,
+      fechaPago,
     },
   });
   return res.status(201).json(payment);
@@ -64,7 +74,18 @@ router.put('/:id/pay', coachOnly, async (req: AuthRequest, res: Response) => {
 router.put('/:id', coachOnly, async (req: AuthRequest, res: Response) => {
   const data = { ...req.body };
   if (data.fechaVencimiento) data.fechaVencimiento = new Date(data.fechaVencimiento);
-  if (data.fechaPago) data.fechaPago = new Date(data.fechaPago);
+  // Keep estado and fechaPago consistent. 'vencido' is computed, not stored:
+  // anything that isn't 'pagado' is stored as 'pendiente' with no payment date.
+  if (data.estado != null) {
+    if (data.estado === 'pagado') {
+      data.fechaPago = data.fechaPago ? new Date(data.fechaPago) : new Date();
+    } else {
+      data.estado = 'pendiente';
+      data.fechaPago = null;
+    }
+  } else if (data.fechaPago) {
+    data.fechaPago = new Date(data.fechaPago);
+  }
   const payment = await prisma.payment.update({ where: { id: Number(req.params.id) }, data });
   return res.json(payment);
 });

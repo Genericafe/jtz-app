@@ -14,6 +14,14 @@ const estadoStyles: Record<string, { cls: string; icon: typeof CheckCircle }> = 
   vencido:  { cls: 'bg-red-500/15 text-red-400 border-red-500/20', icon: AlertTriangle },
 };
 
+// 'vencido' is computed, never a stored/manual state: an unpaid payment past
+// its due date. This keeps pendiente vs vencido unambiguous and consistent.
+function effEstado(p: { estado: string; fechaVencimiento?: string | null }): 'pagado' | 'vencido' | 'pendiente' {
+  if (p.estado === 'pagado') return 'pagado';
+  if (p.fechaVencimiento && new Date(p.fechaVencimiento).getTime() < Date.now()) return 'vencido';
+  return 'pendiente';
+}
+
 export default function Payments() {
   const { isCoach, user } = useAuth();
   const qc = useQueryClient();
@@ -93,7 +101,7 @@ export default function Payments() {
   const [editForm, setEditForm] = useState({ concepto: 'membresia', monto: '', estado: 'pendiente', fechaVencimiento: '', fechaPago: '', notas: '' });
   const openEditPay = (p: Payment) => {
     setEditForm({
-      concepto: p.concepto, monto: String(p.monto), estado: p.estado,
+      concepto: p.concepto, monto: String(p.monto), estado: effEstado(p) === 'pagado' ? 'pagado' : 'pendiente',
       fechaVencimiento: p.fechaVencimiento ? p.fechaVencimiento.slice(0, 10) : '',
       fechaPago: p.fechaPago ? p.fechaPago.slice(0, 10) : '',
       notas: p.notas ?? '',
@@ -116,7 +124,7 @@ export default function Payments() {
     onSuccess: (res) => { window.location.href = res.data.url; },
   });
 
-  const filtered = filter === 'todos' ? allPayments : allPayments.filter((p) => p.estado === filter);
+  const filtered = filter === 'todos' ? allPayments : allPayments.filter((p) => effEstado(p) === filter);
 
   const handleTogglePay = (id: number) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const exitSelectionPay = () => { setSelectionMode(false); setSelectedIds(new Set()); };
@@ -228,7 +236,7 @@ export default function Payments() {
           </thead>
           <tbody>
             {filtered.map((p) => {
-              const { cls, icon: Icon } = estadoStyles[p.estado] ?? estadoStyles.pendiente;
+              const { cls, icon: Icon } = estadoStyles[effEstado(p)] ?? estadoStyles.pendiente;
               const isSelected = selectedIds.has(p.id);
               return (
                 <tr key={p.id} className={`border-b border-dark-700/50 hover:bg-surface-700/30 transition-colors ${isSelected ? 'bg-brand-500/5' : ''}`}
@@ -252,18 +260,18 @@ export default function Payments() {
                   </td>
                   <td className="px-5 py-3">
                     <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${cls}`}>
-                      <Icon size={11} /> {p.estado}
+                      <Icon size={11} /> {effEstado(p)}
                     </span>
                   </td>
                   <td className="px-5 py-3 text-sm text-gray-400">
                     <div>{p.fechaVencimiento ? format(new Date(p.fechaVencimiento), "d MMM yyyy", { locale: es }) : '—'}</div>
                     {p.duracion && <div className="text-xs text-indigo-400 mt-0.5">{p.duracion} {p.duracionUnidad}</div>}
-                    {p.fechaPago && <div className="text-xs text-green-400 mt-0.5">Pagado {format(new Date(p.fechaPago), "d MMM", { locale: es })}</div>}
+                    {effEstado(p)==="pagado" && p.fechaPago && <div className="text-xs text-green-400 mt-0.5">Pagado {format(new Date(p.fechaPago), "d MMM", { locale: es })}</div>}
                   </td>
                   <td className="px-5 py-3">
                     {isCoach && !selectionMode ? (
                       <div className="flex items-center gap-1 justify-end">
-                        {p.estado === 'pendiente' && (
+                        {effEstado(p) !== 'pagado' && (
                           <button onClick={() => markPaidMutation.mutate(p.id)} title="Marcar pagado"
                             className="text-xs px-2 py-1 rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors">
                             Pagado
@@ -308,7 +316,7 @@ export default function Payments() {
         {filtered.length === 0 ? (
           <div className="card p-10 text-center text-gray-500 text-sm">Sin pagos registrados</div>
         ) : filtered.map((p) => {
-          const { cls, icon: Icon } = estadoStyles[p.estado] ?? estadoStyles.pendiente;
+          const { cls, icon: Icon } = estadoStyles[effEstado(p)] ?? estadoStyles.pendiente;
           return (
             <div key={p.id} className={`card p-4 ${selectionMode && isCoach ? 'cursor-pointer' : ''} ${selectedIds.has(p.id) ? 'ring-2 ring-brand-500' : ''}`}
               onClick={selectionMode && isCoach ? () => handleTogglePay(p.id) : undefined}>
@@ -318,18 +326,18 @@ export default function Payments() {
                   <p className="text-xs text-gray-400 capitalize">{p.concepto.replace('_', ' ')}</p>
                 </div>
                 <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border flex-shrink-0 ${cls}`}>
-                  <Icon size={11} /> {p.estado}
+                  <Icon size={11} /> {effEstado(p)}
                 </span>
               </div>
               <div className="flex items-end justify-between gap-2">
                 <div>
                   <p className="text-lg font-black text-white">${p.monto.toLocaleString('es-MX')} <span className="text-xs text-gray-500 font-normal">{p.moneda}</span></p>
                   {p.fechaVencimiento && <p className="text-[11px] text-gray-500">Vence {format(new Date(p.fechaVencimiento), "d MMM yyyy", { locale: es })}</p>}
-                  {p.fechaPago && <p className="text-[11px] text-green-400">Pagado {format(new Date(p.fechaPago), "d MMM", { locale: es })}</p>}
+                  {effEstado(p)==="pagado" && p.fechaPago && <p className="text-[11px] text-green-400">Pagado {format(new Date(p.fechaPago), "d MMM", { locale: es })}</p>}
                 </div>
                 {!selectionMode && (isCoach ? (
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    {p.estado === 'pendiente' && (
+                    {effEstado(p) !== 'pagado' && (
                       <button onClick={() => markPaidMutation.mutate(p.id)} className="text-xs px-2 py-1.5 rounded-lg bg-green-500/20 text-green-400">Pagado</button>
                     )}
                     {p.estado !== 'pagado' && (
@@ -442,7 +450,7 @@ export default function Payments() {
                   <label className="block text-xs font-medium text-gray-400 mb-1">Estado inicial</label>
                   <select value={form.estado} onChange={(e) => setForm({ ...form, estado: e.target.value })}
                     className="w-full input">
-                    {['pendiente', 'pagado', 'vencido'].map((s) => <option key={s} value={s}>{s}</option>)}
+                    {['pendiente', 'pagado'].map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
               </div>
@@ -536,7 +544,7 @@ export default function Payments() {
                 <div>
                   <label className="block text-xs font-medium text-gray-400 mb-1">Estado</label>
                   <select value={editForm.estado} onChange={e => setEditForm({ ...editForm, estado: e.target.value })} className="w-full input">
-                    {['pendiente', 'pagado', 'vencido'].map(s => <option key={s} value={s}>{s}</option>)}
+                    {['pendiente', 'pagado'].map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
               </div>
