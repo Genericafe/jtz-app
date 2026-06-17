@@ -84,7 +84,8 @@ model RunnerGroup {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  members RunnerGroupMember[]
+  members         RunnerGroupMember[]
+  planAssignments TrainingPlanAssignment[]
 }
 
 model RunnerGroupMember {
@@ -198,6 +199,9 @@ model TrainingPlanAssignment {
   runner      Runner       @relation(fields: [runnerId], references: [id], onDelete: Cascade)
   planId      Int
   plan        TrainingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  // Set when the plan was assigned through a group (snapshot of origin).
+  groupId     Int?
+  group       RunnerGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   fechaInicio DateTime
   fechaFin    DateTime?
   activo      Boolean      @default(true)

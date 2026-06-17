@@ -161,7 +161,7 @@ router.post('/:id/assign-plan', coachOnly, async (req: AuthRequest, res: Respons
         data:  { activo: false },
       });
       await prisma.trainingPlanAssignment.create({
-        data: { runnerId: m.runnerId, planId: plan.id, fechaInicio, fechaFin },
+        data: { runnerId: m.runnerId, planId: plan.id, groupId, fechaInicio, fechaFin },
       });
       assigned++;
     }

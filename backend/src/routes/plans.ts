@@ -89,7 +89,10 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
         semanas: { include: { dias: true }, orderBy: { numeroSemana: 'asc' } },
         asignaciones: {
           where: { activo: true },
-          include: { runner: { select: { id: true, nombre: true, apellido: true, nivel: true } } },
+          include: {
+            runner: { select: { id: true, nombre: true, apellido: true, nivel: true } },
+            group:  { select: { id: true, nombre: true, color: true } },
+          },
           orderBy: { createdAt: 'desc' },
         },
       },

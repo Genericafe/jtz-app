@@ -30,7 +30,7 @@ interface Plan {
   id: number; nombre: string; descripcion?: string;
   duracionSemanas: number; nivel: string; objetivo?: string;
   semanas: TrainingWeek[];
-  asignaciones?: { runner: AssignedRunner }[];
+  asignaciones?: { runner: AssignedRunner; group?: { id: number; nombre: string; color: string } | null }[];
   fechaInicio?: string; // runner's assignment start date (for exact day dates)
 }
 
@@ -44,6 +44,25 @@ function diaOffset(diaSemana: string): number | null {
 // display time so existing plans (text already stored) also read correctly.
 const fixRunTerms = (s?: string) =>
   (s ?? '').replace(/Rodaje/g, 'Trote').replace(/rodaje/g, 'trote');
+
+// Collapsible group header in the "assigned runners" dropdown.
+function GroupSection({ nombre, color, count, children }: {
+  nombre: string; color: string; count: number; children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="border-b border-white/[0.04] last:border-0">
+      <button onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-surface-600/60 transition-colors text-left">
+        <ChevronRight size={13} className={`text-gray-500 transition-transform ${open ? 'rotate-90' : ''}`} />
+        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
+        <span className="text-sm font-semibold text-white truncate flex-1">{nombre}</span>
+        <span className="text-[11px] text-gray-500">{count}</span>
+      </button>
+      {open && <div>{children}</div>}
+    </div>
+  );
+}
 
 const tipoLabel: Record<string, string> = {
   rodaje_facil:       'Trote Fácil',
@@ -788,26 +807,55 @@ export default function PlanDetail() {
                     {plan.asignaciones?.length ?? 0} corredor{(plan.asignaciones?.length ?? 0) !== 1 ? 'es' : ''}
                   </button>
                   {showRunners && (
-                    <div className="absolute left-0 top-full mt-2 z-50 w-56 bg-surface-700 border border-white/[0.08] rounded-xl shadow-xl overflow-hidden">
+                    <div className="absolute left-0 top-full mt-2 z-50 w-64 bg-surface-700 border border-white/[0.08] rounded-xl shadow-xl overflow-hidden">
                       <p className="px-3 py-2 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-white/[0.06]">
                         Corredores asignados
                       </p>
                       {!plan.asignaciones?.length ? (
                         <p className="px-3 py-3 text-sm text-gray-500">Sin corredores asignados</p>
                       ) : (
-                        <div className="max-h-48 overflow-y-auto">
-                          {plan.asignaciones.map(({ runner }) => (
-                            <button key={runner.id} onClick={() => navigate(`/corredores/${runner.id}`)}
-                              className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-surface-600 transition-colors text-left">
-                              <div className="w-7 h-7 rounded-full bg-brand-500/20 text-brand-400 text-xs font-bold flex items-center justify-center flex-shrink-0">
-                                {runner.nombre[0]}{runner.apellido[0]}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm text-white font-medium truncate hover:underline">{runner.nombre} {runner.apellido}</p>
-                                <p className="text-xs text-gray-500 capitalize">{runner.nivel}</p>
-                              </div>
-                            </button>
-                          ))}
+                        <div className="max-h-64 overflow-y-auto">
+                          {(() => {
+                            const a = plan.asignaciones!;
+                            // Group by group; ungrouped runners listed at the end.
+                            const byGroup = new Map<number, { nombre: string; color: string; runners: AssignedRunner[] }>();
+                            const solo: AssignedRunner[] = [];
+                            a.forEach(({ runner, group }) => {
+                              if (group) {
+                                const g = byGroup.get(group.id) ?? { nombre: group.nombre, color: group.color, runners: [] };
+                                g.runners.push(runner); byGroup.set(group.id, g);
+                              } else solo.push(runner);
+                            });
+                            const RunnerRow = (runner: AssignedRunner, pad = false) => (
+                              <button key={runner.id} onClick={() => navigate(`/corredores/${runner.id}`)}
+                                className={`w-full flex items-center gap-2.5 px-3 py-2 hover:bg-surface-600 transition-colors text-left ${pad ? 'pl-7' : ''}`}>
+                                <div className="w-6 h-6 rounded-full bg-brand-500/20 text-brand-400 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                                  {runner.nombre[0]}{runner.apellido[0]}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm text-white font-medium truncate hover:underline">{runner.nombre} {runner.apellido}</p>
+                                  <p className="text-[11px] text-gray-500 capitalize">{runner.nivel}</p>
+                                </div>
+                              </button>
+                            );
+                            return (
+                              <>
+                                {[...byGroup.entries()].map(([gid, g]) => (
+                                  <GroupSection key={gid} nombre={g.nombre} color={g.color} count={g.runners.length}>
+                                    {g.runners.map(r => RunnerRow(r, true))}
+                                  </GroupSection>
+                                ))}
+                                {solo.length > 0 && (
+                                  <>
+                                    {byGroup.size > 0 && (
+                                      <p className="px-3 pt-2 pb-1 text-[10px] font-bold text-gray-600 uppercase tracking-wider">Individuales</p>
+                                    )}
+                                    {solo.map(r => RunnerRow(r, false))}
+                                  </>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>
