@@ -120,6 +120,7 @@ export const groupsApi = {
   setMembers:  (id: number, runnerIds: number[])   => api.put(`/groups/${id}/members`, { runnerIds }),
   assignPlan:  (id: number, planId: number, fechaInicio: string) =>
     api.post(`/groups/${id}/assign-plan`, { planId, fechaInicio }),
+  charge:      (id: number, data: object)          => api.post(`/groups/${id}/charge`, data),
 };
 
 export const publicApi = {

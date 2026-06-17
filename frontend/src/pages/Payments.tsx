@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, CheckCircle, Clock, AlertTriangle, X, CreditCard, Search, ChevronDown, Check, Trash2 } from 'lucide-react';
-import { paymentsApi, runnersApi, stripeApi } from '../services/api';
+import { paymentsApi, runnersApi, stripeApi, groupsApi } from '../services/api';
 import { Payment, Runner } from '../types';
 import { useAuth } from '../context/AuthContext';
+import type { RunnerGroup } from '../components/GroupsManager';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -22,6 +23,9 @@ export default function Payments() {
   const [bulkPending, setBulkPending] = useState(false);
   const [filter, setFilter] = useState<'todos' | 'pendiente' | 'pagado' | 'vencido'>('todos');
   const [form, setForm] = useState({ runnerId: '', concepto: 'membresia', monto: '', moneda: 'MXN', estado: 'pendiente', fechaVencimiento: '', fechaPago: '', duracion: '', duracionUnidad: 'meses', notas: '' });
+  const [payTarget, setPayTarget] = useState<'runner' | 'group'>('runner');
+  const [groupId, setGroupId] = useState('');
+  const [groupMsg, setGroupMsg] = useState('');
   const [runnerSearch, setRunnerSearch] = useState('');
   const [runnerDropdown, setRunnerDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -43,6 +47,19 @@ export default function Payments() {
   });
   const { data: runnersData } = useQuery({ queryKey: ['runners'], queryFn: () => runnersApi.list(), enabled: isCoach });
   const { data: statsData } = useQuery({ queryKey: ['payment-stats'], queryFn: () => paymentsApi.stats(), enabled: isCoach });
+  const { data: groupsData } = useQuery({ queryKey: ['groups'], queryFn: () => groupsApi.list(), enabled: isCoach });
+  const groups: RunnerGroup[] = groupsData?.data ?? [];
+
+  const groupChargeMutation = useMutation({
+    mutationFn: (d: object) => groupsApi.charge(Number(groupId), d),
+    onSuccess: (res: { data: { created: number } }) => {
+      qc.invalidateQueries({ queryKey: ['payments'] }); qc.invalidateQueries({ queryKey: ['payment-stats'] });
+      setGroupMsg(`✓ Pago creado para ${res.data.created} corredor(es) del grupo`);
+      setTimeout(() => { setShowForm(false); setGroupMsg(''); setGroupId(''); setPayTarget('runner'); }, 1500);
+    },
+    onError: (err: { response?: { data?: { error?: string } } }) =>
+      setGroupMsg(`⚠ ${err?.response?.data?.error ?? 'Error al crear pagos'}`),
+  });
 
   const allPayments: Payment[] = isCoach
     ? (paymentsData?.data ?? [])
@@ -253,6 +270,30 @@ export default function Payments() {
               <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-white"><X size={20} /></button>
             </div>
             <div className="space-y-4">
+              {/* Target: individual runner or whole group */}
+              <div className="flex gap-1 p-1 bg-surface-700 rounded-xl">
+                {([['runner', 'Corredor'], ['group', 'Grupo']] as const).map(([t, l]) => (
+                  <button key={t} type="button" onClick={() => setPayTarget(t)}
+                    className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${payTarget === t ? 'bg-brand-500 text-white' : 'text-gray-400 hover:text-white'}`}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+
+              {payTarget === 'group' ? (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1.5">Grupo</label>
+                  {groups.length === 0 ? (
+                    <p className="text-xs text-gray-500 bg-surface-700 rounded-lg px-3 py-2.5">Aún no tienes grupos. Créalos en Corredores → Grupos.</p>
+                  ) : (
+                    <select value={groupId} onChange={e => setGroupId(e.target.value)} className="input w-full text-sm">
+                      <option value="">Seleccionar grupo...</option>
+                      {groups.map(g => <option key={g.id} value={g.id}>{g.nombre} ({g._count?.members ?? g.members.length})</option>)}
+                    </select>
+                  )}
+                  <p className="text-[11px] text-gray-500 mt-1.5">Se creará el mismo pago para todos los corredores del grupo.</p>
+                </div>
+              ) : (
               <div ref={dropdownRef} className="relative">
                 <label className="block text-xs font-semibold text-gray-400 mb-1.5">Corredor</label>
                 <div
@@ -291,6 +332,7 @@ export default function Payments() {
                   </div>
                 )}
               </div>
+              )}
               <div>
                 <label className="block text-xs font-medium text-gray-400 mb-1">Concepto</label>
                 <select value={form.concepto} onChange={(e) => setForm({ ...form, concepto: e.target.value })}
@@ -340,21 +382,41 @@ export default function Payments() {
                 </div>
               </div>
             </div>
+            {groupMsg && (
+              <p className={`text-xs mt-3 ${groupMsg.startsWith('✓') ? 'text-green-400' : 'text-yellow-400'}`}>{groupMsg}</p>
+            )}
             <div className="flex gap-3 mt-5">
               <button onClick={() => setShowForm(false)} className="flex-1 px-4 py-2 rounded-lg border border-dark-600 text-sm text-gray-300 hover:text-white transition-colors">Cancelar</button>
-              <button onClick={() => createMutation.mutate({
-                  ...form,
-                  runnerId: Number(form.runnerId),
-                  monto: Number(form.monto),
-                  duracion: form.duracion ? Number(form.duracion) : undefined,
-                  duracionUnidad: form.duracion ? form.duracionUnidad : undefined,
-                  fechaPago: form.fechaPago || undefined,
-                  fechaVencimiento: form.fechaVencimiento || undefined,
-                })}
-                disabled={createMutation.isPending || !form.runnerId || !form.monto || Number(form.monto) <= 0}
-                className="flex-1 px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-sm font-medium text-white transition-colors disabled:opacity-50">
-                {createMutation.isPending ? 'Guardando...' : 'Registrar'}
-              </button>
+              {payTarget === 'group' ? (
+                <button onClick={() => groupChargeMutation.mutate({
+                    concepto: form.concepto,
+                    monto: Number(form.monto),
+                    moneda: form.moneda,
+                    estado: form.estado,
+                    duracion: form.duracion ? Number(form.duracion) : undefined,
+                    duracionUnidad: form.duracion ? form.duracionUnidad : undefined,
+                    fechaVencimiento: form.fechaVencimiento || undefined,
+                    notas: form.notas || undefined,
+                  })}
+                  disabled={groupChargeMutation.isPending || !groupId || !form.monto || Number(form.monto) <= 0}
+                  className="flex-1 px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-sm font-medium text-white transition-colors disabled:opacity-50">
+                  {groupChargeMutation.isPending ? 'Creando...' : 'Cobrar al grupo'}
+                </button>
+              ) : (
+                <button onClick={() => createMutation.mutate({
+                    ...form,
+                    runnerId: Number(form.runnerId),
+                    monto: Number(form.monto),
+                    duracion: form.duracion ? Number(form.duracion) : undefined,
+                    duracionUnidad: form.duracion ? form.duracionUnidad : undefined,
+                    fechaPago: form.fechaPago || undefined,
+                    fechaVencimiento: form.fechaVencimiento || undefined,
+                  })}
+                  disabled={createMutation.isPending || !form.runnerId || !form.monto || Number(form.monto) <= 0}
+                  className="flex-1 px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-sm font-medium text-white transition-colors disabled:opacity-50">
+                  {createMutation.isPending ? 'Guardando...' : 'Registrar'}
+                </button>
+              )}
             </div>
           </div>
         </div>

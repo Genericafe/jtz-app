@@ -172,4 +172,45 @@ router.post('/:id/assign-plan', coachOnly, async (req: AuthRequest, res: Respons
   }
 });
 
+// ── Create the same payment for every current member of a group ───────────────
+router.post('/:id/charge', coachOnly, async (req: AuthRequest, res: Response) => {
+  const schema = z.object({
+    concepto:         z.string().min(1),
+    monto:            z.number().positive(),
+    moneda:           z.string().optional(),
+    estado:           z.string().optional(),
+    fechaVencimiento: z.string().optional(),
+    duracion:         z.number().int().optional(),
+    duracionUnidad:   z.string().optional(),
+    notas:            z.string().optional(),
+  });
+  const parse = schema.safeParse(req.body);
+  if (!parse.success) return res.status(400).json({ error: parse.error.errors[0]?.message ?? 'Datos inválidos' });
+
+  const groupId = Number(req.params.id);
+  try {
+    const members = await prisma.runnerGroupMember.findMany({ where: { groupId } });
+    if (members.length === 0) return res.status(400).json({ error: 'El grupo no tiene corredores' });
+
+    const d = parse.data;
+    await prisma.payment.createMany({
+      data: members.map(m => ({
+        runnerId:         m.runnerId,
+        concepto:         d.concepto,
+        monto:            d.monto,
+        moneda:           d.moneda ?? 'MXN',
+        estado:           d.estado ?? 'pendiente',
+        fechaVencimiento: d.fechaVencimiento ? new Date(d.fechaVencimiento) : null,
+        duracion:         d.duracion ?? null,
+        duracionUnidad:   d.duracionUnidad ?? null,
+        notas:            d.notas ?? null,
+      })),
+    });
+    return res.status(201).json({ ok: true, created: members.length });
+  } catch (err) {
+    console.error('POST /groups/:id/charge error:', err);
+    return res.status(500).json({ error: 'Error al crear los pagos del grupo' });
+  }
+});
+
 export default router;
