@@ -1,6 +1,11 @@
-// Open Graph injector for /evento/:id — see repo-root /api/evento/[id].js.
-// Duplicated here so it works whether Vercel's project root is the repo root
-// or the frontend/ directory. ESM form (frontend package.json is type:module).
+// Vercel Edge Middleware — injects event-specific Open Graph tags for
+// /evento/:id so shared links show a rich preview (image, title, date).
+//
+// Middleware is a first-class Vercel feature that is always deployed, unlike
+// api/ serverless functions which weren't being detected in this Vite setup.
+// It runs on the Edge runtime: only `fetch` + string ops are used here.
+
+export const config = { matcher: '/evento/:path*' };
 
 const API_BASE =
   process.env.VITE_API_URL || 'https://jtz-app-production.up.railway.app/api';
@@ -13,22 +18,20 @@ function esc(s) {
     .replace(/"/g, '&quot;');
 }
 
-export default async function handler(req, res) {
-  const id    = (req.query && req.query.id) || '';
-  const host  = req.headers['x-forwarded-host'] || req.headers.host;
-  const proto = req.headers['x-forwarded-proto'] || 'https';
-  const origin = `${proto}://${host}`;
+export default async function middleware(req) {
+  const url = new URL(req.url);
+  const id = url.pathname.split('/')[2] || '';
 
-  let html = '';
+  // Fetch the built SPA shell (static file, not intercepted by this matcher).
+  let html;
   try {
-    const r = await fetch(`${origin}/index.html`);
-    html = await r.text();
+    const shell = await fetch(new URL('/index.html', url.origin));
+    html = await shell.text();
   } catch (e) {
-    res.statusCode = 302;
-    res.setHeader('Location', '/index.html');
-    return res.end();
+    return; // let Vercel serve the page normally
   }
 
+  // Enrich with event-specific tags. Non-fatal on failure.
   try {
     const r = await fetch(`${API_BASE}/public/events/${id}`);
     if (r.ok) {
@@ -45,16 +48,16 @@ export default async function handler(req, res) {
         (ev.descripcion && ev.descripcion.replace(/\s+/g, ' ').slice(0, 180)) ||
         [fecha, `${ev.lugar}${ev.ciudad ? ', ' + ev.ciudad : ''}`, precio]
           .filter(Boolean).join(' · ');
-      const url    = `${origin}/evento/${id}`;
-      const image  = `${API_BASE}/public/events/${id}/image`;
-      const hasImg = !!ev.imagen;
+      const pageUrl = `${url.origin}/evento/${id}`;
+      const image   = `${API_BASE}/public/events/${id}/image`;
+      const hasImg  = !!ev.imagen;
 
       const tags = [
         `<meta property="og:type" content="website">`,
         `<meta property="og:site_name" content="JTZ Running Club">`,
         `<meta property="og:title" content="${esc(title)}">`,
         `<meta property="og:description" content="${esc(desc)}">`,
-        `<meta property="og:url" content="${esc(url)}">`,
+        `<meta property="og:url" content="${esc(pageUrl)}">`,
         hasImg ? `<meta property="og:image" content="${esc(image)}">` : '',
         hasImg ? `<meta property="og:image:width" content="1200">` : '',
         `<meta name="twitter:card" content="${hasImg ? 'summary_large_image' : 'summary'}">`,
@@ -67,10 +70,13 @@ export default async function handler(req, res) {
       html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${esc(title)}</title>`);
       html = html.replace('</head>', `    ${tags}\n  </head>`);
     }
-  } catch (e) { /* keep plain SPA html */ }
+  } catch (e) { /* keep plain shell */ }
 
-  res.statusCode = 200;
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=600');
-  return res.end(html);
+  return new Response(html, {
+    status: 200,
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'public, max-age=0, s-maxage=300, stale-while-revalidate=600',
+    },
+  });
 }
