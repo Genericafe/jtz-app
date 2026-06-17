@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { integrationsApi } from '../services/api';
-import { Plus, Trash2, Upload, X, FileText, ChevronRight, CheckCircle2, Clock3, Radio, Heart, Navigation, Link2, RefreshCw, Unlink } from 'lucide-react';
+import { Plus, Trash2, Upload, X, FileText, ChevronRight, CheckCircle2, Clock3, Radio, Heart, Navigation, Link2, RefreshCw, Unlink, Share2 } from 'lucide-react';
+import ActivityShareCard from '../components/ActivityShareCard';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { parseGpx } from '../utils/gpxParser';
@@ -105,6 +106,7 @@ export default function MyActivities() {
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [shareActivity, setShareActivity] = useState<ActivityLog | null>(null);
   const [importingHealth, setImportingHealth] = useState(false);
   const isNative = Capacitor.isNativePlatform();
   const { isCoach } = useAuth();
@@ -638,15 +640,23 @@ export default function MyActivities() {
                     <div className="pt-4">
                       <ActivityStatsView activity={a} showGpxDetails />
                     </div>
-                    {/* Solo actividades con GPX pueden repetirse con navegación */}
-                    {a.gpxNombre && (
+                    <div className="mt-4 flex gap-2">
                       <button
-                        onClick={() => navigate(`/grabar?routeId=${a.id}`)}
-                        className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-brand-500/30 bg-brand-500/10 text-brand-400 text-sm font-semibold hover:bg-brand-500/20 transition-all"
+                        onClick={() => setShareActivity(a)}
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-white/[0.1] text-gray-200 text-sm font-semibold hover:bg-surface-600 transition-all"
                       >
-                        <Navigation size={14} /> Seguir esta ruta
+                        <Share2 size={14} /> Compartir
                       </button>
-                    )}
+                      {/* Solo actividades con GPX pueden repetirse con navegación */}
+                      {a.gpxNombre && (
+                        <button
+                          onClick={() => navigate(`/grabar?routeId=${a.id}`)}
+                          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-brand-500/30 bg-brand-500/10 text-brand-400 text-sm font-semibold hover:bg-brand-500/20 transition-all"
+                        >
+                          <Navigation size={14} /> Seguir esta ruta
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -738,6 +748,10 @@ export default function MyActivities() {
             </form>
           </div>
         </div>
+      )}
+
+      {shareActivity && (
+        <ActivityShareCard activity={shareActivity} onClose={() => setShareActivity(null)} />
       )}
     </div>
   );
