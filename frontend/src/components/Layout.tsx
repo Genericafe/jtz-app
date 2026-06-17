@@ -1,10 +1,36 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Outlet, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { MessageCircle, X, Menu, Zap } from 'lucide-react';
+import { MessageCircle, X, Menu, Zap, Lock, CreditCard } from 'lucide-react';
 import Sidebar from './Sidebar';
 import { useAuth } from '../context/AuthContext';
 import { chatApi } from '../services/api';
+import { useAccountLock, isPathAllowedWhileLocked } from '../hooks/useAccountLock';
+
+// Shown to a runner whose account is locked for an overdue payment when they
+// try to reach a restricted area.
+function SuspendedScreen() {
+  const navigate = useNavigate();
+  return (
+    <div className="flex-1 flex items-center justify-center p-6">
+      <div className="text-center max-w-md">
+        <div className="w-16 h-16 rounded-2xl bg-red-500/15 border border-red-500/25 flex items-center justify-center mx-auto mb-5">
+          <Lock size={28} className="text-red-400" />
+        </div>
+        <h1 className="text-2xl font-black text-white mb-2">Cuenta en pausa</h1>
+        <p className="text-gray-400 text-sm leading-relaxed mb-6">
+          Tu cuenta tiene un <strong className="text-red-300">pago vencido</strong>. Mientras se regulariza, el plan,
+          actividades, rutas y comunicados quedan en pausa. Sigues teniendo acceso a tus pagos, la tienda y el chat con tu coach.
+          En cuanto registres tu pago, tu cuenta se reactiva automáticamente.
+        </p>
+        <button onClick={() => navigate('/pagos')}
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-semibold text-sm transition-colors">
+          <CreditCard size={16} /> Ir a Mis pagos
+        </button>
+      </div>
+    </div>
+  );
+}
 
 interface ConvEntry {
   runner: { id: number; nombre: string; apellido: string };
@@ -118,6 +144,7 @@ export default function Layout() {
   const { user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
+  const { locked } = useAccountLock();
 
   // Close sidebar on route change (mobile)
   useEffect(() => {
@@ -125,6 +152,8 @@ export default function Layout() {
   }, [location.pathname]);
 
   if (!user) return <Navigate to="/login" replace />;
+
+  const blockedByLock = locked && !isPathAllowedWhileLocked(location.pathname);
 
   return (
     <div className="flex min-h-screen bg-surface-900 text-white">
@@ -156,7 +185,7 @@ export default function Layout() {
 
         <div className="pointer-events-none fixed top-0 left-64 right-0 h-64 bg-glow-green z-0 hidden lg:block" />
         <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
-          <Outlet />
+          {blockedByLock ? <SuspendedScreen /> : <Outlet />}
         </div>
       </main>
 

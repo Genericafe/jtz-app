@@ -6,6 +6,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { runnersApi, chatApi } from '../services/api';
+import { useAccountLock, LOCK_ALLOWED } from '../hooks/useAccountLock';
 
 const coachNav = [
   { to: '/',             label: 'Inicio',          icon: LayoutDashboard },
@@ -57,7 +58,13 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { user, logout, isCoach } = useAuth();
-  const navItems = isCoach ? coachNav : runnerNav;
+  const { locked } = useAccountLock();
+  // When a runner is locked for overdue payment, only allow pay/store/chat.
+  const navItems = isCoach
+    ? coachNav
+    : locked
+      ? runnerNav.filter(n => LOCK_ALLOWED.some(a => n.to === a || n.to.startsWith(a + '/')))
+      : runnerNav;
 
   const { data: meData } = useQuery({
     queryKey: ['runner-me'],
