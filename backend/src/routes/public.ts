@@ -10,15 +10,16 @@ import { es } from 'date-fns/locale';
 const router = Router();
 const prisma = new PrismaClient();
 
-// Single-coach app: confirmation emails are sent FROM the coach's configured
-// address. Look up the coach so getSender() can use their email config.
-let _coachUserIdCache: number | null | undefined;
+// Confirmation emails are sent FROM the coach's configured address. Prefer the
+// user who actually has a VERIFIED email config (so getSender succeeds even if
+// several 'coach' users exist), falling back to the first coach.
 async function coachUserId(): Promise<number | undefined> {
-  if (_coachUserIdCache === undefined) {
-    const coach = await prisma.user.findFirst({ where: { role: 'coach' }, select: { id: true } });
-    _coachUserIdCache = coach?.id ?? null;
-  }
-  return _coachUserIdCache ?? undefined;
+  const verified = await prisma.emailConfig.findFirst({
+    where: { verified: true }, select: { userId: true }, orderBy: { updatedAt: 'desc' },
+  });
+  if (verified) return verified.userId;
+  const coach = await prisma.user.findFirst({ where: { role: 'coach' }, select: { id: true } });
+  return coach?.id ?? undefined;
 }
 
 // ── GPX público con token firmado (para QR) ───────────────────────────────────
