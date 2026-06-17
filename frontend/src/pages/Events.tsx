@@ -471,9 +471,9 @@ ${link}
   ];
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 px-4">
-      <div className="card p-6 w-full max-w-md animate-slide-up">
-        <div className="flex items-center justify-between mb-4">
+    <div onClick={onClose} className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-start sm:items-center justify-center z-50 px-4 py-6 overflow-y-auto">
+      <div onClick={e => e.stopPropagation()} className="card w-full max-w-md animate-slide-up my-auto max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-5 pb-3 sticky top-0 bg-surface-800 z-10 border-b border-white/[0.06]">
           <div>
             <h3 className="font-black text-white text-lg">Promover evento</h3>
             <p className="text-sm text-gray-500">{ev.nombre}</p>
@@ -481,6 +481,7 @@ ${link}
           <button onClick={onClose} className="btn-ghost p-2"><X size={18} /></button>
         </div>
 
+        <div className="p-5 pt-4">
         {/* Public registration link — the heart of an open convocatoria */}
         <div className="bg-brand-500/10 border border-brand-500/25 rounded-xl p-3 mb-4">
           <p className="text-xs text-brand-300 font-semibold uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
@@ -553,6 +554,7 @@ ${link}
           </svg>
           Copiar texto al portapapeles
         </button>
+        </div>
       </div>
     </div>
   );

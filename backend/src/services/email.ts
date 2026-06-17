@@ -154,10 +154,10 @@ function baseTemplate(content: string) {
     .body{background:#161626;padding:32px 28px;border-radius:0 0 16px 16px}
     .body p{color:#cbd5e1;font-size:15px;line-height:1.6;margin:0 0 16px}
     .info-box{background:#1e1e30;border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:20px 24px;margin:20px 0}
-    .info-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
+    .info-row{padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
     .info-row:last-child{border-bottom:none}
-    .info-label{color:#64748b;font-size:13px}
-    .info-value{color:#ffffff;font-size:13px;font-weight:600}
+    .info-label{display:inline-block;min-width:90px;padding-right:10px;color:#64748b;font-size:13px;vertical-align:top}
+    .info-value{display:inline-block;color:#ffffff;font-size:13px;font-weight:600;vertical-align:top}
     .footer{text-align:center;padding:24px;color:#475569;font-size:12px}
   </style></head><body>
   <div class="wrapper">${content}
@@ -200,7 +200,7 @@ export async function sendEventNotification(opts: {
   const emoji: Record<string, string> = { carrera: '🏃', trail: '🏔️', entrenamiento: '💪', social: '🎉' };
   const e = emoji[opts.eventType] ?? '🏃';
   const url = `${process.env.FRONTEND_URL ?? 'http://localhost:5173'}/evento/${opts.eventId}`;
-  const btn = opts.precio === 0 ? '¡Inscribirme gratis!' : `¡Pagar e inscribirme · $${opts.precio.toLocaleString('es-MX')} MXN!`;
+  const btn = opts.precio === 0 ? 'Inscríbete gratis' : 'Inscríbete aquí';
 
   for (const r of opts.recipients) {
     await send({ from, to: r.email, subject: `${e} Nuevo evento: ${opts.eventName}`, html: baseTemplate(`

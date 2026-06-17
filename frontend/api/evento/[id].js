@@ -23,6 +23,11 @@ export default async function handler(req, res) {
   const proto = req.headers['x-forwarded-proto'] || 'https';
   const origin = `${proto}://${host}`;
 
+  // Debug headers to diagnose injection (safe to keep; ignored by browsers).
+  res.setHeader('x-jtz-fn', 'og');
+  res.setHeader('x-jtz-id', String(id ?? ''));
+  res.setHeader('x-jtz-api', API_BASE);
+
   // 1. Always fetch the SPA shell first — this is what makes the page work.
   let html = '';
   try {
@@ -37,8 +42,10 @@ export default async function handler(req, res) {
   // 2. Try to enrich with event-specific OG tags. Non-fatal on failure.
   try {
     const r = await fetch(`${API_BASE}/public/events/${id}`);
+    res.setHeader('x-jtz-event', String(r.status));
     if (r.ok) {
       const ev = await r.json();
+      res.setHeader('x-jtz-inject', '1');
       const fecha = (() => {
         try {
           return new Date(ev.fecha).toLocaleDateString('es-MX', {
@@ -75,8 +82,8 @@ export default async function handler(req, res) {
       html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${esc(title)}</title>`);
       html = html.replace('</head>', `    ${tags}\n  </head>`);
     }
-  } catch {
-    // keep plain SPA html
+  } catch (e) {
+    res.setHeader('x-jtz-err', String(e && e.message ? e.message : e).slice(0, 120));
   }
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
