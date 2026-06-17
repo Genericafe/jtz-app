@@ -156,10 +156,25 @@ export function useActivityRecorder() {
     setState(s => {
       if (s.status === 'paused') return s;
       const prev = lastPointRef.current;
+      const acc = point.accuracy ?? 0;
+
+      // ── Reliability filters (keep the track exact, even with weak signal) ──
+      // Always accept the very first fix so we have a position to show.
+      if (prev) {
+        // Drop clearly unreliable fixes (large error radius) — the usual cause
+        // of the marker jumping around in cities / low signal.
+        if (acc > 0 && acc > 45) return s;
+        const movedM = haversineKm(prev, point) * 1000;
+        // GPS spike / teleport guard: a single fix that jumps absurdly far.
+        if (movedM > 120) return s;
+        // Noise floor: ignore sub-metre wobble while standing still so distance
+        // doesn't creep up and the dot stays put.
+        if (movedM < 2) return s;
+      }
+
       let addedKm = 0;
       if (prev) {
         addedKm = haversineKm(prev, point);
-        if (addedKm < 0.0005) return s; // filter noise < 0.5 m
         recentDistRef.current.push({ time: Date.now(), dist: addedKm });
       }
       lastPointRef.current = point;
@@ -252,8 +267,15 @@ export function useActivityRecorder() {
             accuracy: pos.coords.accuracy ?? undefined,
           });
         },
-        (err) => setState(s => ({ ...s, error: err.message })),
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+        (err) => {
+          // Timeouts are transient with weak signal — keep the last position and
+          // wait for the next fix instead of surfacing a scary error.
+          if (err.code === err.TIMEOUT) return;
+          setState(s => ({ ...s, error: err.message }));
+        },
+        // maximumAge lets a recent fix be reused → faster updates and far more
+        // resilient when the signal drops in and out.
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 3000 },
       );
     }
   };

@@ -63,6 +63,8 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
   const startMarkerRef  = useRef<maplibregl.Marker | null>(null);
   const endMarkerRef    = useRef<maplibregl.Marker | null>(null);
   const posMarkerRef    = useRef<maplibregl.Marker | null>(null);
+  const lastTrackDrawRef = useRef(0);
+  const lastFollowRef    = useRef(0);
   const [mapLoaded, setMapLoaded] = useState(false);
 
   // ── Map initialisation (runs once) ────────────────────────────────────────
@@ -236,9 +238,14 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
     }
   }, [referenceRoute]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Update live track ──────────────────────────────────────────────────────
+  // ── Update live track (throttled) ──────────────────────────────────────────
+  // Rebuilding the whole polyline on every GPS point is O(n) and gets heavy on
+  // long runs. Redraw at most ~once/sec; the line lags by <1s, imperceptible.
   useEffect(() => {
     if (!readyRef.current || !mapRef.current || track.length < 2) return;
+    const now = Date.now();
+    if (now - lastTrackDrawRef.current < 1000) return;
+    lastTrackDrawRef.current = now;
     (mapRef.current.getSource('live-track') as maplibregl.GeoJSONSource | undefined)
       ?.setData(lineFeature(track) as any);
   }, [track]);
@@ -268,7 +275,18 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
     }
 
     if (autoFollowRef.current) {
-      map.panTo([currentPos.lng, currentPos.lat], { duration: 800 });
+      // Throttle camera moves so we're not animating continuously (saves CPU/GPU
+      // and keeps it smooth on phones). Snap if the point is far off-screen.
+      const now = Date.now();
+      const center = map.getCenter();
+      const far = Math.abs(center.lng - currentPos.lng) > 0.004 || Math.abs(center.lat - currentPos.lat) > 0.004;
+      if (far) {
+        map.jumpTo({ center: [currentPos.lng, currentPos.lat] });
+        lastFollowRef.current = now;
+      } else if (now - lastFollowRef.current > 1200) {
+        map.easeTo({ center: [currentPos.lng, currentPos.lat], duration: 500 });
+        lastFollowRef.current = now;
+      }
     }
 
     // Update next-waypoint marker

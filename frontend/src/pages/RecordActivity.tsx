@@ -1,4 +1,4 @@
-import { useState, useMemo, lazy, Suspense } from 'react';
+import { useState, useMemo, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -71,36 +71,65 @@ export default function RecordActivity() {
   const currentPos: MapPoint | undefined = trackMapPoints.length > 0
     ? trackMapPoints[trackMapPoints.length - 1] : undefined;
 
-  const navInfo = useMemo(() => {
-    if (!currentPos || referenceRoute.length < 2) return null;
-
-    // Closest point on the reference route
-    let minDist = Infinity, minIdx = 0;
-    for (let i = 0; i < referenceRoute.length; i++) {
-      const d = haversineM(currentPos, referenceRoute[i]);
-      if (d < minDist) { minDist = d; minIdx = i; }
+  // Cumulative distance along the reference route — precomputed once so
+  // "remaining distance" is O(1) instead of summing the whole tail each fix.
+  const routeCum = useMemo(() => {
+    const c = new Array(referenceRoute.length).fill(0);
+    for (let i = 1; i < referenceRoute.length; i++) {
+      c[i] = c[i - 1] + haversineM(referenceRoute[i - 1], referenceRoute[i]);
     }
+    return c;
+  }, [referenceRoute]);
 
-    // Remaining distance from here to the end
-    let remM = 0;
-    for (let i = minIdx; i < referenceRoute.length - 1; i++) remM += haversineM(referenceRoute[i], referenceRoute[i + 1]);
+  // Remember where we were on the route so we only scan a small window ahead,
+  // not the whole polyline, on every position update.
+  const navIdxRef = useRef(0);
 
-    // Look ~25 m ahead along the route (distance-based, not point-count based)
+  // Heavy route math depends only on position (not heading) — kept separate so
+  // the 5×/sec compass updates don't re-scan the route.
+  const routeNav = useMemo(() => {
+    const n = referenceRoute.length;
+    if (!currentPos || n < 2) return null;
+
+    const scan = (from: number, to: number) => {
+      let md = Infinity, mi = from;
+      for (let i = from; i < to; i++) {
+        const d = haversineM(currentPos, referenceRoute[i]);
+        if (d < md) { md = d; mi = i; }
+      }
+      return { md, mi };
+    };
+
+    // Windowed search around the last known position…
+    const from = Math.max(0, navIdxRef.current - 15);
+    const to   = Math.min(n, navIdxRef.current + 80);
+    let { md: minDist, mi: minIdx } = scan(from, to);
+    // …with a full-route fallback if we drifted off the window (off route / GPS jump).
+    if (minDist > 60 || minIdx <= from + 1 || minIdx >= to - 1) {
+      const full = scan(0, n);
+      if (full.md < minDist) { minDist = full.md; minIdx = full.mi; }
+    }
+    navIdxRef.current = minIdx;
+
+    const remM = routeCum[n - 1] - routeCum[minIdx];
+
+    // Aim ~25 m ahead along the route for the next-direction bearing.
     let aheadIdx = minIdx, acc = 0;
-    while (aheadIdx < referenceRoute.length - 1 && acc < 25) {
+    while (aheadIdx < n - 1 && acc < 25) {
       acc += haversineM(referenceRoute[aheadIdx], referenceRoute[aheadIdx + 1]);
       aheadIdx++;
     }
-    const nextPt = referenceRoute[aheadIdx];
-    const absBearing = bearingDeg(currentPos, nextPt);
+    const absBearing = bearingDeg(currentPos, referenceRoute[aheadIdx]);
+    return { minDist, remM, absBearing };
+  }, [currentPos, referenceRoute, routeCum]);
 
-    // Heading of the runner (native compass / course, falls back to movement)
+  const navInfo = useMemo(() => {
+    if (!routeNav) return null;
+    const { minDist, remM, absBearing } = routeNav;
+
     const heading = state.headingDeg;
     const hasHeading = heading != null;
-
-    // Relative bearing: where to go vs where facing. 0 = straight ahead.
     const relBearing = hasHeading ? (absBearing - heading + 360) % 360 : absBearing;
-    // Signed −180..180 for turn classification
     const signed = relBearing > 180 ? relBearing - 360 : relBearing;
     const a = Math.abs(signed);
 
@@ -111,14 +140,12 @@ export default function RecordActivity() {
     else if (a < 150)  turn = signed > 0 ? 'right' : 'left';
     else               turn = 'uturn';
 
-    const offRoute   = minDist > 50;
-    const atFinish   = remM < 20;
-
     return {
       offRouteM: minDist, remainingKm: remM / 1000,
-      relBearing, absBearing, signed, turn, offRoute, atFinish, hasHeading,
+      relBearing, absBearing, signed, turn,
+      offRoute: minDist > 50, atFinish: remM < 20, hasHeading,
     };
-  }, [currentPos, referenceRoute, state.headingDeg]);
+  }, [routeNav, state.headingDeg]);
 
   const totalRouteKm = useMemo(() => {
     if (referenceRoute.length < 2) return 0;
