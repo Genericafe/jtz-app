@@ -1,11 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { runnersApi, eventsApi, stripeApi } from '../services/api';
+import { runnersApi, eventsApi, stripeApi, announcementsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { Calendar, CreditCard, CheckCircle, Clock, AlertTriangle, MapPin, Dumbbell, ChevronRight, Target } from 'lucide-react';
-import { format, isAfter } from 'date-fns';
+import { Calendar, CreditCard, CheckCircle, Clock, AlertTriangle, MapPin, Dumbbell, ChevronRight, Target, Megaphone } from 'lucide-react';
+import { format, isAfter, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
-import { Event, Payment } from '../types';
+import { Event, Payment, Announcement } from '../types';
 
 export default function RunnerDashboard() {
   const { user } = useAuth();
@@ -21,6 +21,12 @@ export default function RunnerDashboard() {
     queryKey: ['events'],
     queryFn: () => eventsApi.list(),
   });
+
+  const { data: annData } = useQuery({
+    queryKey: ['announcements'],
+    queryFn: () => announcementsApi.list(),
+  });
+  const announcements: Announcement[] = annData?.data ?? [];
 
   const checkoutMutation = useMutation({
     mutationFn: (paymentId: number) => stripeApi.createCheckout(paymentId),
@@ -59,6 +65,32 @@ export default function RunnerDashboard() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Mis planes */}
         <div className="xl:col-span-2">
+          {/* Comunicados del coach */}
+          {announcements.length > 0 && (
+            <div className="bg-dark-800 border border-dark-700 rounded-xl p-6 mb-6">
+              <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-4 flex items-center gap-2">
+                <Megaphone size={15} className="text-brand-400" /> Comunicados del coach
+              </h2>
+              <div className="space-y-3">
+                {announcements.slice(0, 4).map(ann => {
+                  const cfg: Record<string, string> = { general: '📢', urgente: '🚨', entrenamiento: '💪', evento: '🎯' };
+                  return (
+                    <div key={ann.id} className="bg-dark-700 rounded-xl p-4 border border-dark-600">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span>{cfg[ann.tipo] ?? '📢'}</span>
+                        <span className="text-sm font-bold text-white">{ann.titulo}</span>
+                        <span className="text-xs text-gray-500 ml-auto">
+                          {formatDistanceToNow(new Date(ann.createdAt), { locale: es, addSuffix: true })}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-400 leading-relaxed whitespace-pre-line">{ann.contenido}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="bg-dark-800 border border-dark-700 rounded-xl p-6 mb-6">
             <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-4 flex items-center gap-2">
               <Dumbbell size={15} className="text-brand-400" /> Mis planes de entrenamiento
