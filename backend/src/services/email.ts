@@ -223,6 +223,33 @@ export async function sendEventNotification(opts: {
   }
 }
 
+export async function sendPaymentReminder(opts: {
+  to: string; nombre: string; concepto: string; monto: number; moneda: string;
+  fechaVencimiento: string | null; vencido: boolean; coachUserId?: number;
+}) {
+  const { send, from } = await getSender(opts.coachUserId);
+  const fecha = opts.fechaVencimiento
+    ? new Date(opts.fechaVencimiento).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null;
+  const titulo = opts.vencido ? '⚠️ Tienes un pago vencido' : '🔔 Recordatorio de pago';
+  await send({ from, to: opts.to, subject: `${titulo} — JTZ Running Club`, html: baseTemplate(`
+    <div class="header"><h1>${titulo}</h1><p>JTZ Running Club</p></div>
+    <div class="body">
+      <p>¡Hola, <strong style="color:white">${opts.nombre}</strong>!</p>
+      <p>${opts.vencido
+        ? 'Tu cuenta tiene un pago <strong style="color:#f87171">vencido</strong>. Mientras esté pendiente, tu acceso al plan, actividades y comunicados queda en pausa.'
+        : 'Te recordamos que tienes un pago próximo a vencer.'}</p>
+      <div class="info-box">
+        <div class="info-row"><span class="info-label">Concepto</span><span class="info-value" style="text-transform:capitalize">${opts.concepto.replace(/_/g, ' ')}</span></div>
+        <div class="info-row"><span class="info-label">Monto</span><span class="info-value" style="color:#4ade80">$${opts.monto.toLocaleString('es-MX')} ${opts.moneda}</span></div>
+        ${fecha ? `<div class="info-row"><span class="info-label">Vence</span><span class="info-value">${fecha}</span></div>` : ''}
+      </div>
+      <p>Puedes pagar en línea desde la app, sección <strong style="color:white">Mis pagos</strong>. En cuanto se registre tu pago, tu cuenta se reactiva automáticamente.</p>
+      <p style="margin-top:24px;color:#94a3b8;font-size:13px">— Coach · JTZ Running Club</p>
+    </div>
+  `) });
+}
+
 export async function sendBulkUpdate(opts: {
   recipients: { nombre: string; email: string }[];
   eventName: string; subject: string; mensaje: string; coachUserId?: number;

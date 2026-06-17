@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, CheckCircle, Clock, AlertTriangle, X, CreditCard, Search, ChevronDown, Check, Trash2 } from 'lucide-react';
+import { Plus, CheckCircle, Clock, AlertTriangle, X, CreditCard, Search, ChevronDown, Check, Trash2, Edit2, Bell } from 'lucide-react';
 import { paymentsApi, runnersApi, stripeApi, groupsApi } from '../services/api';
 import { Payment, Runner } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -82,6 +82,33 @@ export default function Payments() {
   const markPaidMutation = useMutation({
     mutationFn: (id: number) => paymentsApi.markPaid(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['payments'] }); qc.invalidateQueries({ queryKey: ['payment-stats'] }); },
+  });
+
+  const deletePayMutation = useMutation({
+    mutationFn: (id: number) => paymentsApi.delete(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['payments'] }); qc.invalidateQueries({ queryKey: ['payment-stats'] }); },
+  });
+
+  const [editPay, setEditPay] = useState<Payment | null>(null);
+  const [editForm, setEditForm] = useState({ concepto: 'membresia', monto: '', estado: 'pendiente', fechaVencimiento: '', fechaPago: '', notas: '' });
+  const openEditPay = (p: Payment) => {
+    setEditForm({
+      concepto: p.concepto, monto: String(p.monto), estado: p.estado,
+      fechaVencimiento: p.fechaVencimiento ? p.fechaVencimiento.slice(0, 10) : '',
+      fechaPago: p.fechaPago ? p.fechaPago.slice(0, 10) : '',
+      notas: p.notas ?? '',
+    });
+    setEditPay(p);
+  };
+  const editPayMutation = useMutation({
+    mutationFn: (data: object) => paymentsApi.update(editPay!.id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['payments'] }); qc.invalidateQueries({ queryKey: ['payment-stats'] }); setEditPay(null); },
+  });
+
+  const [remindMsg, setRemindMsg] = useState<number | null>(null);
+  const remindMutation = useMutation({
+    mutationFn: (id: number) => paymentsApi.remind(id),
+    onSuccess: (_d, id) => { setRemindMsg(id); setTimeout(() => setRemindMsg(null), 2500); },
   });
 
   const checkoutMutation = useMutation({
@@ -185,7 +212,8 @@ export default function Payments() {
         </div>
       )}
 
-      <div className="card rounded-xl overflow-x-auto">
+      {/* Desktop table */}
+      <div className="card rounded-xl overflow-x-auto hidden sm:block">
         <table className="w-full min-w-[600px]">
           <thead>
             <tr className="border-b border-dark-700">
@@ -233,13 +261,26 @@ export default function Payments() {
                     {p.fechaPago && <div className="text-xs text-green-400 mt-0.5">Pagado {format(new Date(p.fechaPago), "d MMM", { locale: es })}</div>}
                   </td>
                   <td className="px-5 py-3">
-                    {isCoach && p.estado === 'pendiente' && (
-                      <button onClick={() => markPaidMutation.mutate(p.id)}
-                        className="text-xs px-2 py-1 rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors">
-                        Marcar pagado
-                      </button>
-                    )}
-                    {!isCoach && p.estado !== 'pagado' && (
+                    {isCoach && !selectionMode ? (
+                      <div className="flex items-center gap-1 justify-end">
+                        {p.estado === 'pendiente' && (
+                          <button onClick={() => markPaidMutation.mutate(p.id)} title="Marcar pagado"
+                            className="text-xs px-2 py-1 rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors">
+                            Pagado
+                          </button>
+                        )}
+                        {p.estado !== 'pagado' && (
+                          <button onClick={() => remindMutation.mutate(p.id)} title="Enviar recordatorio por correo"
+                            className="p-1.5 rounded-lg text-gray-500 hover:text-brand-400 hover:bg-brand-500/10 transition-all">
+                            {remindMsg === p.id ? <CheckCircle size={14} className="text-green-400" /> : <Bell size={14} />}
+                          </button>
+                        )}
+                        <button onClick={() => openEditPay(p)} title="Editar"
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-white/5 transition-all"><Edit2 size={14} /></button>
+                        <button onClick={() => { if (confirm('¿Eliminar este pago?')) deletePayMutation.mutate(p.id); }} title="Eliminar"
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all"><Trash2 size={14} /></button>
+                      </div>
+                    ) : !isCoach && p.estado !== 'pagado' ? (
                       <button
                         onClick={() => checkoutMutation.mutate(p.id)}
                         disabled={checkoutMutation.isPending}
@@ -248,7 +289,7 @@ export default function Payments() {
                         <CreditCard size={12} />
                         {checkoutMutation.isPending ? 'Cargando...' : 'Pagar'}
                       </button>
-                    )}
+                    ) : null}
                   </td>
                 </tr>
               );
@@ -260,6 +301,55 @@ export default function Payments() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile cards */}
+      <div className="sm:hidden space-y-3">
+        {filtered.length === 0 ? (
+          <div className="card p-10 text-center text-gray-500 text-sm">Sin pagos registrados</div>
+        ) : filtered.map((p) => {
+          const { cls, icon: Icon } = estadoStyles[p.estado] ?? estadoStyles.pendiente;
+          return (
+            <div key={p.id} className={`card p-4 ${selectionMode && isCoach ? 'cursor-pointer' : ''} ${selectedIds.has(p.id) ? 'ring-2 ring-brand-500' : ''}`}
+              onClick={selectionMode && isCoach ? () => handleTogglePay(p.id) : undefined}>
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="min-w-0">
+                  {isCoach && <p className="text-sm font-bold text-white truncate">{p.runner?.nombre} {p.runner?.apellido}</p>}
+                  <p className="text-xs text-gray-400 capitalize">{p.concepto.replace('_', ' ')}</p>
+                </div>
+                <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border flex-shrink-0 ${cls}`}>
+                  <Icon size={11} /> {p.estado}
+                </span>
+              </div>
+              <div className="flex items-end justify-between gap-2">
+                <div>
+                  <p className="text-lg font-black text-white">${p.monto.toLocaleString('es-MX')} <span className="text-xs text-gray-500 font-normal">{p.moneda}</span></p>
+                  {p.fechaVencimiento && <p className="text-[11px] text-gray-500">Vence {format(new Date(p.fechaVencimiento), "d MMM yyyy", { locale: es })}</p>}
+                  {p.fechaPago && <p className="text-[11px] text-green-400">Pagado {format(new Date(p.fechaPago), "d MMM", { locale: es })}</p>}
+                </div>
+                {!selectionMode && (isCoach ? (
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {p.estado === 'pendiente' && (
+                      <button onClick={() => markPaidMutation.mutate(p.id)} className="text-xs px-2 py-1.5 rounded-lg bg-green-500/20 text-green-400">Pagado</button>
+                    )}
+                    {p.estado !== 'pagado' && (
+                      <button onClick={() => remindMutation.mutate(p.id)} className="p-2 rounded-lg text-gray-400 hover:text-brand-400 bg-surface-600">
+                        {remindMsg === p.id ? <CheckCircle size={15} className="text-green-400" /> : <Bell size={15} />}
+                      </button>
+                    )}
+                    <button onClick={() => openEditPay(p)} className="p-2 rounded-lg text-gray-400 hover:text-white bg-surface-600"><Edit2 size={15} /></button>
+                    <button onClick={() => { if (confirm('¿Eliminar este pago?')) deletePayMutation.mutate(p.id); }} className="p-2 rounded-lg text-gray-400 hover:text-red-400 bg-surface-600"><Trash2 size={15} /></button>
+                  </div>
+                ) : p.estado !== 'pagado' ? (
+                  <button onClick={() => checkoutMutation.mutate(p.id)} disabled={checkoutMutation.isPending}
+                    className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-medium disabled:opacity-50">
+                    <CreditCard size={13} /> Pagar
+                  </button>
+                ) : null)}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {showForm && (
@@ -417,6 +507,68 @@ export default function Payments() {
                   {createMutation.isPending ? 'Guardando...' : 'Registrar'}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit payment modal */}
+      {editPay && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 px-4" onClick={() => setEditPay(null)}>
+          <div onClick={e => e.stopPropagation()} className="card rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-semibold text-white">Editar pago</h2>
+              <button onClick={() => setEditPay(null)} className="text-gray-400 hover:text-white"><X size={20} /></button>
+            </div>
+            {isCoach && <p className="text-xs text-gray-500 mb-4">{editPay.runner?.nombre} {editPay.runner?.apellido}</p>}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Concepto</label>
+                <select value={editForm.concepto} onChange={e => setEditForm({ ...editForm, concepto: e.target.value })} className="w-full input">
+                  {['membresia', 'plan_personalizado', 'evento', 'uniforme'].map(c => <option key={c} value={c}>{c.replace('_', ' ')}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Monto (MXN)</label>
+                  <input type="number" value={editForm.monto} onChange={e => setEditForm({ ...editForm, monto: e.target.value })} className="w-full input" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Estado</label>
+                  <select value={editForm.estado} onChange={e => setEditForm({ ...editForm, estado: e.target.value })} className="w-full input">
+                    {['pendiente', 'pagado', 'vencido'].map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1.5">Vencimiento</label>
+                  <input type="date" value={editForm.fechaVencimiento} onChange={e => setEditForm({ ...editForm, fechaVencimiento: e.target.value })} className="input w-full text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1.5">Fecha de pago</label>
+                  <input type="date" value={editForm.fechaPago} onChange={e => setEditForm({ ...editForm, fechaPago: e.target.value })} className="input w-full text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5">Notas</label>
+                <textarea value={editForm.notas} onChange={e => setEditForm({ ...editForm, notas: e.target.value })} rows={2} className="input w-full text-sm resize-none" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setEditPay(null)} className="flex-1 px-4 py-2 rounded-lg border border-dark-600 text-sm text-gray-300 hover:text-white transition-colors">Cancelar</button>
+              <button onClick={() => editPayMutation.mutate({
+                  concepto: editForm.concepto,
+                  monto: Number(editForm.monto),
+                  estado: editForm.estado,
+                  fechaVencimiento: editForm.fechaVencimiento || null,
+                  fechaPago: editForm.fechaPago || null,
+                  notas: editForm.notas || null,
+                })}
+                disabled={editPayMutation.isPending || !editForm.monto || Number(editForm.monto) <= 0}
+                className="flex-1 px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-sm font-medium text-white transition-colors disabled:opacity-50">
+                {editPayMutation.isPending ? 'Guardando...' : 'Guardar cambios'}
+              </button>
             </div>
           </div>
         </div>

@@ -69,4 +69,38 @@ router.put('/:id', coachOnly, async (req: AuthRequest, res: Response) => {
   return res.json(payment);
 });
 
+router.delete('/:id', coachOnly, async (req: AuthRequest, res: Response) => {
+  try {
+    await prisma.payment.delete({ where: { id: Number(req.params.id) } });
+    return res.json({ ok: true });
+  } catch {
+    return res.status(404).json({ error: 'Pago no encontrado' });
+  }
+});
+
+// ── Payment reminder email (coach triggers) ───────────────────────────────────
+router.post('/:id/remind', coachOnly, async (req: AuthRequest, res: Response) => {
+  const payment = await prisma.payment.findUnique({
+    where: { id: Number(req.params.id) },
+    include: { runner: { include: { user: { select: { email: true } } } } },
+  });
+  if (!payment) return res.status(404).json({ error: 'Pago no encontrado' });
+  const email = payment.runner?.user?.email;
+  if (!email) return res.status(400).json({ error: 'El corredor no tiene correo' });
+
+  const { sendPaymentReminder } = await import('../services/email');
+  await sendPaymentReminder({
+    to: email,
+    nombre: payment.runner.nombre,
+    concepto: payment.concepto,
+    monto: payment.monto,
+    moneda: payment.moneda,
+    fechaVencimiento: payment.fechaVencimiento ? payment.fechaVencimiento.toISOString() : null,
+    vencido: payment.estado === 'vencido',
+    coachUserId: req.userId,
+  }).catch((e) => console.error('[payment reminder]', e));
+
+  return res.json({ ok: true });
+});
+
 export default router;

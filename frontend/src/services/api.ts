@@ -77,6 +77,8 @@ export const paymentsApi = {
   create: (data: object) => api.post('/payments', data),
   markPaid: (id: number) => api.put(`/payments/${id}/pay`),
   update: (id: number, data: object) => api.put(`/payments/${id}`, data),
+  delete: (id: number) => api.delete(`/payments/${id}`),
+  remind: (id: number) => api.post(`/payments/${id}/remind`),
 };
 
 export const productsApi = {
