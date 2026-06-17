@@ -79,46 +79,89 @@ interface NominatimResult {
   };
 }
 
+interface PlaceSuggestion { lugar: string; ciudad: string; estado: string; lng?: number; lat?: number }
+
+const GEOAPIFY_KEY = import.meta.env.VITE_GEOAPIFY_KEY ?? '';
+
 function LocationInput({ value, onChange, onLocationSelect }: {
   value: string;
   onChange: (v: string) => void;
   onLocationSelect: (lugar: string, ciudad: string, estado: string) => void;
 }) {
-  const [suggestions, setSuggestions] = useState<NominatimResult[]>([]);
+  const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const proximityRef = useRef<[number, number] | null>(null);
 
-  const extractFields = (addr: NominatimResult['address'], displayName: string) => {
-    const lugar = addr.road || addr.suburb || addr.neighbourhood || addr.amenity || addr.village || displayName.split(',')[0].trim();
-    const ciudad = addr.city || addr.town || addr.municipality || addr.county || addr.village || '';
-    const estado = addr.state || '';
-    return { lugar, ciudad, estado };
+  // Grab the coach's GPS once so suggestions are biased to nearby places.
+  useEffect(() => {
+    navigator.geolocation?.getCurrentPosition(
+      pos => { proximityRef.current = [pos.coords.longitude, pos.coords.latitude]; },
+      () => {}, { timeout: 8000, maximumAge: 300000 },
+    );
+  }, []);
+
+  // Geoapify (INEGI data, finds local businesses/landmarks) with proximity bias.
+  const geoapify = async (q: string): Promise<PlaceSuggestion[]> => {
+    if (!GEOAPIFY_KEY) return [];
+    const params: Record<string, string> = {
+      text: q, apiKey: GEOAPIFY_KEY, lang: 'es', limit: '6', filter: 'countrycode:mx',
+      type: 'amenity,building,street,suburb,city,locality',
+    };
+    if (proximityRef.current) params.bias = `proximity:${proximityRef.current[0]},${proximityRef.current[1]}`;
+    try {
+      const res = await fetch(`https://api.geoapify.com/v1/geocode/autocomplete?${new URLSearchParams(params)}`);
+      const data = await res.json();
+      return (data.features ?? []).map((f: { geometry: { coordinates: [number, number] }; properties: Record<string, string> }) => {
+        const p = f.properties;
+        return {
+          lugar:  p.name ?? p.street ?? p.address_line1 ?? p.formatted?.split(',')[0] ?? q,
+          ciudad: p.city ?? p.town ?? p.village ?? p.county ?? p.district ?? '',
+          estado: p.state ?? '',
+          lng: f.geometry.coordinates[0], lat: f.geometry.coordinates[1],
+        };
+      });
+    } catch { return []; }
+  };
+
+  // Nominatim fallback (when no Geoapify key or no results).
+  const nominatim = async (q: string): Promise<PlaceSuggestion[]> => {
+    try {
+      const prox = proximityRef.current;
+      const vb = prox ? `&viewbox=${prox[0] - 0.5},${prox[1] + 0.5},${prox[0] + 0.5},${prox[1] - 0.5}` : '';
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=6&countrycodes=mx&addressdetails=1${vb}`,
+        { headers: { 'Accept-Language': 'es' } });
+      const data: NominatimResult[] = await res.json();
+      return data.map(r => {
+        const a = r.address;
+        return {
+          lugar:  a.road || a.suburb || a.neighbourhood || a.amenity || a.village || r.display_name.split(',')[0].trim(),
+          ciudad: a.city || a.town || a.municipality || a.county || a.village || '',
+          estado: a.state || '',
+        };
+      });
+    } catch { return []; }
   };
 
   const search = async (q: string) => {
-    if (q.length < 3) { setSuggestions([]); setOpen(false); return; }
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&countrycodes=mx&addressdetails=1`,
-        { headers: { 'Accept-Language': 'es' } }
-      );
-      const data: NominatimResult[] = await res.json();
-      setSuggestions(data);
-      setOpen(data.length > 0);
-    } catch { /* ignore */ }
+    if (q.length < 2) { setSuggestions([]); setOpen(false); return; }
+    let results = await geoapify(q);
+    if (results.length === 0) results = await nominatim(q);
+    setSuggestions(results);
+    setOpen(results.length > 0);
   };
 
   const handleChange = (v: string) => {
     onChange(v);
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => search(v), 350);
+    debounceRef.current = setTimeout(() => search(v), 320);
   };
 
-  const select = (r: NominatimResult) => {
-    const { lugar, ciudad, estado } = extractFields(r.address, r.display_name);
-    onChange(lugar);
-    onLocationSelect(lugar, ciudad, estado);
+  const select = (s: PlaceSuggestion) => {
+    onChange(s.lugar);
+    onLocationSelect(s.lugar, s.ciudad, s.estado);
     setSuggestions([]);
     setOpen(false);
   };
@@ -130,19 +173,28 @@ function LocationInput({ value, onChange, onLocationSelect }: {
       async pos => {
         try {
           const { latitude, longitude } = pos.coords;
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`,
-            { headers: { 'Accept-Language': 'es' } }
-          );
-          const data: NominatimResult = await res.json();
-          const { lugar, ciudad, estado } = extractFields(data.address, data.display_name);
+          proximityRef.current = [longitude, latitude];
+          let lugar = '', ciudad = '', estado = '';
+          if (GEOAPIFY_KEY) {
+            const res = await fetch(`https://api.geoapify.com/v1/geocode/reverse?lat=${latitude}&lon=${longitude}&lang=es&apiKey=${GEOAPIFY_KEY}`);
+            const p = (await res.json())?.features?.[0]?.properties ?? {};
+            lugar = p.name ?? p.street ?? p.address_line1 ?? ''; ciudad = p.city ?? p.county ?? ''; estado = p.state ?? '';
+          }
+          if (!lugar) {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`, { headers: { 'Accept-Language': 'es' } });
+            const data: NominatimResult = await res.json();
+            const a = data.address;
+            lugar = a.road || a.suburb || a.neighbourhood || a.amenity || data.display_name.split(',')[0].trim();
+            ciudad = a.city || a.town || a.municipality || a.county || ''; estado = a.state || '';
+          }
           onChange(lugar);
           onLocationSelect(lugar, ciudad, estado);
         } finally {
           setGpsLoading(false);
         }
       },
-      () => setGpsLoading(false)
+      () => setGpsLoading(false),
+      { enableHighAccuracy: true, timeout: 10000 },
     );
   };
 
@@ -154,7 +206,7 @@ function LocationInput({ value, onChange, onLocationSelect }: {
           onChange={e => handleChange(e.target.value)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
           onFocus={() => suggestions.length > 0 && setOpen(true)}
-          placeholder="Escribe o usa GPS…"
+          placeholder="Busca un lugar, negocio o dirección…"
           className="input w-full text-sm pr-9"
         />
         <button type="button" onClick={useGPS} title="Usar mi ubicación actual"
@@ -165,17 +217,14 @@ function LocationInput({ value, onChange, onLocationSelect }: {
         </button>
       </div>
       {open && (
-        <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-surface-700 border border-white/[0.1] rounded-xl shadow-xl overflow-hidden">
-          {suggestions.map((s, i) => {
-            const { lugar, ciudad, estado } = extractFields(s.address, s.display_name);
-            return (
-              <button key={i} type="button" onMouseDown={() => select(s)}
-                className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-600 transition-colors border-b border-white/[0.04] last:border-0 flex flex-col gap-0.5">
-                <span className="font-medium text-white">{lugar}</span>
-                <span className="text-xs text-gray-500">{[ciudad, estado].filter(Boolean).join(', ')}</span>
-              </button>
-            );
-          })}
+        <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-surface-700 border border-white/[0.1] rounded-xl shadow-xl overflow-hidden max-h-64 overflow-y-auto">
+          {suggestions.map((s, i) => (
+            <button key={i} type="button" onMouseDown={() => select(s)}
+              className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-600 transition-colors border-b border-white/[0.04] last:border-0 flex flex-col gap-0.5">
+              <span className="font-medium text-white">{s.lugar}</span>
+              {(s.ciudad || s.estado) && <span className="text-xs text-gray-500">{[s.ciudad, s.estado].filter(Boolean).join(', ')}</span>}
+            </button>
+          ))}
         </div>
       )}
     </div>

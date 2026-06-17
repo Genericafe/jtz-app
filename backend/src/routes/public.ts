@@ -10,6 +10,17 @@ import { es } from 'date-fns/locale';
 const router = Router();
 const prisma = new PrismaClient();
 
+// Single-coach app: confirmation emails are sent FROM the coach's configured
+// address. Look up the coach so getSender() can use their email config.
+let _coachUserIdCache: number | null | undefined;
+async function coachUserId(): Promise<number | undefined> {
+  if (_coachUserIdCache === undefined) {
+    const coach = await prisma.user.findFirst({ where: { role: 'coach' }, select: { id: true } });
+    _coachUserIdCache = coach?.id ?? null;
+  }
+  return _coachUserIdCache ?? undefined;
+}
+
 // ── GPX público con token firmado (para QR) ───────────────────────────────────
 router.get('/gpx/:eventId', async (req: Request, res: Response) => {
   const token = req.query.token as string;
@@ -113,6 +124,7 @@ router.post('/events/:id/register', async (req: Request, res: Response) => {
     distanciaKm: event.distanciaKm,
     precio: 0,
     tipo: event.tipo,
+    coachUserId: await coachUserId(),
   }).catch(console.error);
 
   return res.status(201).json({ ok: true, lead });
@@ -217,6 +229,7 @@ router.post('/webhook/stripe', async (req: Request, res: Response) => {
         distanciaKm: lead.event.distanciaKm,
         precio: lead.event.precio,
         tipo: lead.event.tipo,
+        coachUserId: await coachUserId(),
       }).catch(console.error);
     }
   }
@@ -255,6 +268,7 @@ router.get('/verify/:sessionId', async (req: Request, res: Response) => {
         distanciaKm: lead.event.distanciaKm,
         precio: lead.event.precio,
         tipo: lead.event.tipo,
+        coachUserId: await coachUserId(),
       }).catch(console.error);
       return res.json({ ok: true, lead });
     }

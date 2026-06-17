@@ -177,9 +177,12 @@ export default function EventLanding() {
           {format(new Date(event.fecha), "EEEE d 'de' MMMM · HH:mm 'hrs'", { locale: es })}
         </p>
         <p className="text-gray-500 text-sm mt-1">{event.lugar}, {event.ciudad}</p>
-        <div className="mt-8 p-4 bg-surface-700 rounded-2xl border border-white/[0.06]">
-          <p className="text-xs text-gray-400">¿Dudas? Contacta al coach:</p>
-          <p className="text-brand-400 font-bold mt-1">JTZ Running Club · Coach Jotaze</p>
+        <div className="mt-8 p-5 bg-surface-700 rounded-2xl border border-white/[0.06]">
+          <p className="text-sm text-gray-300">📩 Te enviamos la confirmación y los detalles a tu correo.</p>
+          <p className="text-xs text-gray-500 mt-1">Si no lo ves, revisa tu carpeta de spam.</p>
+          <div className="inline-flex items-center gap-2 mt-4 text-brand-400 font-bold text-sm">
+            <Zap size={14} /> JTZ Running Club
+          </div>
         </div>
       </div>
     </div>
