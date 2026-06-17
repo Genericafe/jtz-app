@@ -332,43 +332,36 @@ export default function RunnerProfile() {
       {activeTab === 'Plan' && (
         <div className="animate-slide-up">
           {activePlan ? (
-            <div className="card p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h2 className="text-lg font-black text-white">{activePlan.plan.nombre}</h2>
-                  <p className="text-sm text-gray-400 mt-0.5">{activePlan.plan.descripcion}</p>
+            <div className="card p-5 sm:p-6">
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div className="min-w-0">
+                  <h2 className="text-base sm:text-lg font-black text-white leading-tight">{activePlan.plan.nombre}</h2>
+                  {activePlan.plan.objetivo && (
+                    <span className="badge bg-brand-500/15 text-brand-400 mt-1 inline-block">{activePlan.plan.objetivo}</span>
+                  )}
                 </div>
-                <span className="badge bg-brand-500/15 text-brand-400">{activePlan.plan.objetivo}</span>
               </div>
-              <div className="grid grid-cols-3 gap-3 mb-5 text-center">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-5 text-center">
                 <div className="bg-surface-600 rounded-xl p-3">
                   <p className="text-lg font-black text-white">{activePlan.plan.duracionSemanas}</p>
-                  <p className="text-xs text-gray-500">semanas</p>
+                  <p className="text-[11px] text-gray-500">semanas</p>
                 </div>
                 <div className="bg-surface-600 rounded-xl p-3">
                   <p className="text-sm font-bold text-white capitalize">{activePlan.plan.nivel}</p>
-                  <p className="text-xs text-gray-500">nivel</p>
+                  <p className="text-[11px] text-gray-500">nivel</p>
                 </div>
                 <div className="bg-surface-600 rounded-xl p-3">
                   <p className="text-sm font-bold text-white">{format(new Date(activePlan.fechaInicio), "d MMM", { locale: es })}</p>
-                  <p className="text-xs text-gray-500">inicio</p>
+                  <p className="text-[11px] text-gray-500">inicio</p>
                 </div>
               </div>
-              {activePlan.plan.semanas?.map((semana: { id: number; numeroSemana: number; descripcion?: string; dias: { id: number; diaSemana: string; tipo: string; distanciaKm?: number; duracionMin?: number; descripcion?: string }[] }) => (
-                <div key={semana.id} className="mb-4">
-                  <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Semana {semana.numeroSemana}</h4>
-                  <div className="space-y-1.5">
-                    {semana.dias.map((dia) => (
-                      <div key={dia.id} className="flex items-center gap-3 p-2.5 bg-surface-600 rounded-lg text-sm">
-                        <span className="text-gray-400 capitalize w-20 flex-shrink-0">{dia.diaSemana}</span>
-                        <span className={`badge ${dia.tipo === 'descanso' ? 'bg-gray-500/10 text-gray-500' : 'bg-brand-500/10 text-brand-400'}`}>{dia.tipo}</span>
-                        {dia.distanciaKm && <span className="text-gray-300">{dia.distanciaKm}km</span>}
-                        {dia.descripcion && <span className="text-gray-400 truncate">{dia.descripcion}</span>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
+              <button
+                onClick={() => navigate(`/planes/${activePlan.plan.id}`)}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold transition-colors"
+              >
+                <Dumbbell size={15} /> Ver plan completo y calendario →
+              </button>
+              <p className="text-[11px] text-gray-500 text-center mt-2">Ahí ves cada entrenamiento con fechas exactas y el progreso del corredor.</p>
             </div>
           ) : (
             <div className="card p-12 text-center">
@@ -453,10 +446,16 @@ export default function RunnerProfile() {
           {isCoach && (
             <div className="mb-4">
               {!showLogForm ? (
-                <button onClick={() => setShowLogForm(true)}
-                  className="btn-primary flex items-center gap-2 px-4 py-2.5 text-sm">
-                  <MessageSquare size={15} /> Registrar comunicación
-                </button>
+                <div className="flex gap-2 flex-wrap">
+                  <button onClick={() => navigate(`/chat/${id}`)}
+                    className="btn-primary flex items-center gap-2 px-4 py-2.5 text-sm">
+                    <MessageSquare size={15} /> Abrir chat privado
+                  </button>
+                  <button onClick={() => setShowLogForm(true)}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/[0.08] text-sm text-gray-400 hover:text-white transition-colors">
+                    Registrar nota manual
+                  </button>
+                </div>
               ) : (
                 <div className="card p-5 mb-4">
                   <div className="flex items-center justify-between mb-4">
