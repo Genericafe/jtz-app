@@ -96,7 +96,7 @@ function fmtDuration(min?: number) {
 
 const tipoEmoji = (t: string) => TIPOS.find(x => x.id === t)?.emoji ?? '💪';
 
-export default function MyActivities() {
+export default function MyActivities({ embedded = false }: { embedded?: boolean }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -318,12 +318,12 @@ export default function MyActivities() {
   };
 
   return (
-    <div className="p-4 lg:p-6 max-w-3xl mx-auto space-y-6">
+    <div className={embedded ? 'space-y-6' : 'p-4 lg:p-6 max-w-3xl mx-auto space-y-6'}>
 
       {/* Header */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-black text-white">Mis actividades</h1>
+          <h1 className="text-2xl font-black text-white">{embedded ? 'Historial' : 'Mis actividades'}</h1>
           <p className="text-gray-500 text-sm mt-0.5">Historial de entrenamientos y carreras</p>
         </div>
         <div className="flex gap-2 flex-wrap">

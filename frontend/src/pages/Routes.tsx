@@ -63,7 +63,7 @@ const EMPTY_FORM: CreateForm = {
   gpxContent: '', gpxNombre: '',
 };
 
-export default function RoutesPage() {
+export default function RoutesPage({ embedded = false }: { embedded?: boolean }) {
   const navigate  = useNavigate();
   const qc        = useQueryClient();
   const { user, isCoach } = useAuth();
@@ -146,7 +146,7 @@ export default function RoutesPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-dark-900 p-4 sm:p-6 max-w-3xl mx-auto">
+    <div className={embedded ? '' : 'min-h-screen bg-dark-900 p-4 sm:p-6 max-w-3xl mx-auto'}>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>

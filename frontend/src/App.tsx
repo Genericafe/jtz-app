@@ -21,9 +21,8 @@ import PlanDetail from './pages/PlanDetail';
 import PlanBuilder from './pages/PlanBuilder';
 import PaymentSuccess from './pages/PaymentSuccess';
 import Chat from './pages/Chat';
-import MyActivities from './pages/MyActivities';
 import RecordActivity from './pages/RecordActivity';
-import RoutesPage from './pages/Routes';
+import ActivitiesHub from './pages/ActivitiesHub';
 import { initPush } from './services/pushService';
 
 // Initializes push notifications once user is logged in (needs navigate hook)
@@ -65,8 +64,9 @@ export default function App() {
             <Route path="/planes/nuevo" element={<PlanBuilder />} />
             <Route path="/chat" element={<Chat />} />
             <Route path="/chat/:runnerId" element={<Chat />} />
-            <Route path="/actividades" element={<MyActivities />} />
-            <Route path="/rutas" element={<RoutesPage />} />
+            <Route path="/actividades" element={<ActivitiesHub />} />
+            {/* Rutas merged into Actividades — keep the old path working */}
+            <Route path="/rutas" element={<Navigate to="/actividades?tab=rutas" replace />} />
           </Route>
           <Route path="/grabar" element={<RecordActivity />} />
           <Route path="*" element={<Navigate to="/" replace />} />
