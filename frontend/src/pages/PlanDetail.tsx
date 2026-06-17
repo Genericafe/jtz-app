@@ -96,26 +96,36 @@ function GroupSection({ nombre, color, count, children }: {
 }
 
 // ── Month-grid calendar of the plan's training days on real dates ─────────────
-function PlanCalendar({ plan, startDate, dayDates, activityByDay, isCoach }: {
+function PlanCalendar({ plan, fixedStartDate, activityByDay, isCoach }: {
   plan: Plan;
-  startDate: Date | null;
-  dayDates: Map<number, Date>;
+  fixedStartDate: Date | null;   // runner's assignment start; null for coach preview
   activityByDay: Record<number, ActivityLog | null>;
   isCoach: boolean;
 }) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
+  // Coach has no fixed start → pick a preview start date to lay out the plan.
+  const [previewStart, setPreviewStart] = useState<string>(ymd(fixedStartDate ?? today));
+  const effStart = fixedStartDate ?? new Date(previewStart + 'T00:00:00');
 
+  const dayDates = planDayDates(plan, effStart);
   const byDate = new Map<string, TrainingDay[]>();
   plan.semanas.forEach(s => s.dias.forEach(d => {
     const dt = dayDates.get(d.id);
     if (!dt) return;
     const k = ymd(dt);
-    const arr = byDate.get(k) ?? []; arr.push(d); byDate.set(k, arr);
+    const arr = byDate.get(k) ?? [];
+    arr.push(d); byDate.set(k, arr);
   }));
 
-  const base = startDate ?? today;
-  const [cursor, setCursor] = useState(new Date(base.getFullYear(), base.getMonth(), 1));
-  const [selected, setSelected] = useState<string>(ymd(startDate ?? today));
+  const [cursor, setCursor] = useState(new Date(effStart.getFullYear(), effStart.getMonth(), 1));
+  const [selected, setSelected] = useState<string>(ymd(fixedStartDate ?? today));
+
+  const goToStart = (v: string) => {
+    setPreviewStart(v);
+    const d = new Date(v + 'T00:00:00');
+    setCursor(new Date(d.getFullYear(), d.getMonth(), 1));
+    setSelected(v);
+  };
 
   const year = cursor.getFullYear(), month = cursor.getMonth();
   const first = new Date(year, month, 1);
@@ -125,86 +135,106 @@ function PlanCalendar({ plan, startDate, dayDates, activityByDay, isCoach }: {
 
   const selDays = (byDate.get(selected) ?? []).filter(d => d.tipo !== 'descanso');
   const selDate = new Date(selected + 'T00:00:00');
+  const dotColor = (tipo: string) => {
+    const c = tipoIcon[tipo]?.color ?? '';
+    return c.includes('green') ? '#4ade80' : c.includes('orange') ? '#fb923c' : c.includes('red') ? '#f87171'
+      : c.includes('blue') ? '#60a5fa' : c.includes('purple') ? '#c084fc' : c.includes('cyan') || c.includes('teal') ? '#2dd4bf' : '#9ca3af';
+  };
 
   return (
-    <div>
-      {/* Month nav */}
-      <div className="flex items-center justify-between mb-3">
-        <button onClick={() => setCursor(new Date(year, month - 1, 1))}
-          className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-surface-600 transition-colors">
-          <ChevronRight size={16} className="rotate-180" />
-        </button>
-        <h3 className="text-sm font-black text-white capitalize">{format(cursor, 'MMMM yyyy', { locale: es })}</h3>
-        <button onClick={() => setCursor(new Date(year, month + 1, 1))}
-          className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-surface-600 transition-colors">
-          <ChevronRight size={16} />
-        </button>
+    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-6">
+      {/* ── Calendar ── */}
+      <div className="min-w-0">
+        {/* Coach preview-start picker */}
+        {isCoach && !fixedStartDate && (
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            <span className="text-xs text-gray-400">Ver el plan desde:</span>
+            <input type="date" value={previewStart} onChange={e => goToStart(e.target.value)}
+              className="input text-xs py-1.5 px-2 w-auto" />
+            <span className="text-[11px] text-gray-500">cada corredor verá sus fechas según su día de inicio asignado</span>
+          </div>
+        )}
+
+        {/* Month nav */}
+        <div className="flex items-center justify-between mb-3">
+          <button onClick={() => setCursor(new Date(year, month - 1, 1))}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-surface-600 transition-colors">
+            <ChevronRight size={16} className="rotate-180" />
+          </button>
+          <h3 className="text-sm font-black text-white capitalize">{format(cursor, 'MMMM yyyy', { locale: es })}</h3>
+          <button onClick={() => setCursor(new Date(year, month + 1, 1))}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-surface-600 transition-colors">
+            <ChevronRight size={16} />
+          </button>
+        </div>
+
+        {/* Weekday labels */}
+        <div className="grid grid-cols-7 gap-1 mb-1">
+          {['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'].map(d => (
+            <div key={d} className="text-center text-[10px] font-bold text-gray-600 uppercase">{d}</div>
+          ))}
+        </div>
+
+        {/* Grid — compact fixed-height cells (not blown up on wide screens) */}
+        <div className="grid grid-cols-7 gap-1">
+          {cells.map((d, i) => {
+            const k = ymd(d);
+            const inMonth = d.getMonth() === month;
+            const isToday = ymd(today) === k;
+            const isSel = selected === k;
+            const days = (byDate.get(k) ?? []).filter(x => x.tipo !== 'descanso');
+            const done = days.some(x => activityByDay[x.id]);
+            return (
+              <button key={i} onClick={() => setSelected(k)}
+                className={`h-11 sm:h-12 rounded-lg flex flex-col items-center justify-center gap-0.5 text-xs transition-all
+                  ${isSel ? 'bg-brand-500/25 ring-1 ring-brand-500' : days.length ? 'bg-surface-700 hover:bg-surface-600' : 'hover:bg-surface-700/50'}
+                  ${!inMonth ? 'opacity-30' : ''}`}>
+                <span className={`${isToday ? 'text-brand-400 font-black' : days.length ? 'text-white font-semibold' : 'text-gray-500'}`}>
+                  {d.getDate()}
+                </span>
+                {days.length > 0 && (
+                  <div className="flex items-center gap-0.5">
+                    {days.slice(0, 3).map((x, j) => (
+                      <span key={j} className="w-1.5 h-1.5 rounded-full" style={{ background: done ? '#22c55e' : dotColor(x.tipo) }} />
+                    ))}
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Weekday labels */}
-      <div className="grid grid-cols-7 gap-1 mb-1">
-        {['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'].map(d => (
-          <div key={d} className="text-center text-[10px] font-bold text-gray-600 uppercase">{d}</div>
-        ))}
-      </div>
-
-      {/* Grid */}
-      <div className="grid grid-cols-7 gap-1">
-        {cells.map((d, i) => {
-          const k = ymd(d);
-          const inMonth = d.getMonth() === month;
-          const isToday = ymd(today) === k;
-          const isSel = selected === k;
-          const days = (byDate.get(k) ?? []).filter(x => x.tipo !== 'descanso');
-          const done = days.some(x => activityByDay[x.id]);
-          return (
-            <button key={i} onClick={() => setSelected(k)}
-              className={`aspect-square rounded-lg flex flex-col items-center justify-center gap-0.5 text-xs transition-all relative
-                ${isSel ? 'bg-brand-500/25 ring-1 ring-brand-500' : days.length ? 'bg-surface-700 hover:bg-surface-600' : 'hover:bg-surface-700/50'}
-                ${!inMonth ? 'opacity-30' : ''}`}>
-              <span className={`${isToday ? 'text-brand-400 font-black' : days.length ? 'text-white font-semibold' : 'text-gray-500'}`}>
-                {d.getDate()}
-              </span>
-              {days.length > 0 && (
-                <div className="flex items-center gap-0.5">
-                  {days.slice(0, 3).map((x, j) => (
-                    <span key={j} className="w-1.5 h-1.5 rounded-full"
-                      style={{ background: done ? '#22c55e' : (tipoIcon[x.tipo]?.color?.includes('green') ? '#4ade80' : tipoIcon[x.tipo]?.color?.includes('orange') ? '#fb923c' : tipoIcon[x.tipo]?.color?.includes('red') ? '#f87171' : tipoIcon[x.tipo]?.color?.includes('blue') ? '#60a5fa' : '#9ca3af') }} />
-                  ))}
-                </div>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Selected day detail */}
-      <div className="mt-4 pt-4 border-t border-white/[0.06]">
-        <p className="text-sm font-bold text-white capitalize mb-2">
+      {/* ── Selected-day detail (beside on desktop, below on mobile) ── */}
+      <div className="mt-5 pt-5 border-t border-white/[0.06] lg:mt-0 lg:pt-0 lg:border-t-0 lg:border-l lg:pl-6">
+        <p className="text-sm font-bold text-white capitalize mb-3">
           {format(selDate, "EEEE d 'de' MMMM yyyy", { locale: es })}
         </p>
         {selDays.length === 0 ? (
-          <p className="text-xs text-gray-500">Sin entrenamiento programado este día.</p>
+          <div className="text-center py-8 text-gray-500 text-xs bg-surface-700/40 rounded-xl">Sin entrenamiento programado este día.</div>
         ) : (
           <div className="space-y-2">
             {selDays.map(d => {
               const act = activityByDay[d.id];
               const cfg = tipoIcon[d.tipo] ?? tipoIcon.descanso;
               return (
-                <div key={d.id} className="flex items-start gap-3 bg-surface-700 rounded-xl p-3 border border-white/[0.06]">
-                  <span className={`flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 ${cfg.bg}`}>
-                    <span className={cfg.color}>{cfg.icon}</span>
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold text-white">{tipoLabel[d.tipo] ?? d.tipo.replace(/_/g, ' ')}</p>
-                      {d.distanciaKm != null && <span className="text-xs text-gray-400">{d.distanciaKm} km</span>}
-                      {!isCoach && (act
-                        ? <span className="flex items-center gap-1 text-[10px] text-green-400 font-medium"><CheckCircle2 size={10} /> Hecho</span>
-                        : <span className="flex items-center gap-1 text-[10px] text-gray-500"><Clock3 size={10} /> Pendiente</span>)}
+                <div key={d.id} className="bg-surface-700 rounded-xl p-4 border border-white/[0.06]">
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className={`flex items-center justify-center w-9 h-9 rounded-lg flex-shrink-0 ${cfg.bg}`}>
+                      <span className={cfg.color}>{cfg.icon}</span>
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-white">{tipoLabel[d.tipo] ?? d.tipo.replace(/_/g, ' ')}</p>
+                      <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                        {d.distanciaKm != null && <span className="text-xs text-gray-400">{d.distanciaKm} km</span>}
+                        {d.duracionMin != null && <span className="text-xs text-gray-400">{d.duracionMin} min</span>}
+                        {!isCoach && (act
+                          ? <span className="flex items-center gap-1 text-[10px] text-green-400 font-medium"><CheckCircle2 size={10} /> Hecho</span>
+                          : <span className="flex items-center gap-1 text-[10px] text-gray-500"><Clock3 size={10} /> Pendiente</span>)}
+                      </div>
                     </div>
-                    {d.descripcion && <p className="text-xs text-gray-400 mt-1 line-clamp-2">{fixRunTerms(d.descripcion)}</p>}
                   </div>
+                  {d.descripcion && <p className="text-xs text-gray-300 leading-relaxed">{fixRunTerms(d.descripcion)}</p>}
                 </div>
               );
             })}
@@ -1042,14 +1072,10 @@ export default function PlanDetail() {
       </div>
 
       {planView === 'calendario' ? (
-        <div className="card p-5">
-          {!startDate && isCoach && (
-            <p className="text-xs text-gray-500 mb-3">Vista previa desde hoy. Cada corredor verá las fechas según su día de inicio asignado.</p>
-          )}
+        <div className="card p-4 sm:p-5">
           <PlanCalendar
             plan={plan}
-            startDate={startDate ?? new Date()}
-            dayDates={planDayDates(plan, startDate ?? new Date())}
+            fixedStartDate={startDate}
             activityByDay={activityByDay}
             isCoach={isCoach}
           />
