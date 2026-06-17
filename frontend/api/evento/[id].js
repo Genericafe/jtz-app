@@ -1,0 +1,76 @@
+// Open Graph injector for /evento/:id — see repo-root /api/evento/[id].js.
+// Duplicated here so it works whether Vercel's project root is the repo root
+// or the frontend/ directory. ESM form (frontend package.json is type:module).
+
+const API_BASE =
+  process.env.VITE_API_URL || 'https://jtz-app-production.up.railway.app/api';
+
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+export default async function handler(req, res) {
+  const id    = (req.query && req.query.id) || '';
+  const host  = req.headers['x-forwarded-host'] || req.headers.host;
+  const proto = req.headers['x-forwarded-proto'] || 'https';
+  const origin = `${proto}://${host}`;
+
+  let html = '';
+  try {
+    const r = await fetch(`${origin}/index.html`);
+    html = await r.text();
+  } catch (e) {
+    res.statusCode = 302;
+    res.setHeader('Location', '/index.html');
+    return res.end();
+  }
+
+  try {
+    const r = await fetch(`${API_BASE}/public/events/${id}`);
+    if (r.ok) {
+      const ev = await r.json();
+      let fecha = '';
+      try {
+        fecha = new Date(ev.fecha).toLocaleDateString('es-MX', {
+          weekday: 'long', day: 'numeric', month: 'long',
+        });
+      } catch (_) { fecha = ''; }
+      const title  = `${ev.nombre} · JTZ Running Club`;
+      const precio = ev.precio === 0 ? 'Entrada libre' : `$${ev.precio} MXN`;
+      const desc   =
+        (ev.descripcion && ev.descripcion.replace(/\s+/g, ' ').slice(0, 180)) ||
+        [fecha, `${ev.lugar}${ev.ciudad ? ', ' + ev.ciudad : ''}`, precio]
+          .filter(Boolean).join(' · ');
+      const url    = `${origin}/evento/${id}`;
+      const image  = `${API_BASE}/public/events/${id}/image`;
+      const hasImg = !!ev.imagen;
+
+      const tags = [
+        `<meta property="og:type" content="website">`,
+        `<meta property="og:site_name" content="JTZ Running Club">`,
+        `<meta property="og:title" content="${esc(title)}">`,
+        `<meta property="og:description" content="${esc(desc)}">`,
+        `<meta property="og:url" content="${esc(url)}">`,
+        hasImg ? `<meta property="og:image" content="${esc(image)}">` : '',
+        hasImg ? `<meta property="og:image:width" content="1200">` : '',
+        `<meta name="twitter:card" content="${hasImg ? 'summary_large_image' : 'summary'}">`,
+        `<meta name="twitter:title" content="${esc(title)}">`,
+        `<meta name="twitter:description" content="${esc(desc)}">`,
+        hasImg ? `<meta name="twitter:image" content="${esc(image)}">` : '',
+        `<meta name="description" content="${esc(desc)}">`,
+      ].filter(Boolean).join('\n    ');
+
+      html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${esc(title)}</title>`);
+      html = html.replace('</head>', `    ${tags}\n  </head>`);
+    }
+  } catch (e) { /* keep plain SPA html */ }
+
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=600');
+  return res.end(html);
+}
