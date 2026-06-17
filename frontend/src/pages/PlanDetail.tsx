@@ -26,12 +26,61 @@ interface TrainingWeek {
 interface AssignedRunner {
   id: number; nombre: string; apellido: string; nivel: string;
 }
+interface Assignment {
+  id: number;
+  fechaInicio?: string;
+  runner: AssignedRunner;
+  group?: { id: number; nombre: string; color: string } | null;
+}
 interface Plan {
   id: number; nombre: string; descripcion?: string;
   duracionSemanas: number; nivel: string; objetivo?: string;
   semanas: TrainingWeek[];
-  asignaciones?: { runner: AssignedRunner; group?: { id: number; nombre: string; color: string } | null }[];
+  asignaciones?: Assignment[];
   fechaInicio?: string; // runner's assignment start date (for exact day dates)
+}
+
+const INDIVIDUAL_COLOR = '#94a3b8'; // slate — for runners assigned without a group
+const WEEKDAYS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+const weekdayOf = (d: Date) => WEEKDAYS[(d.getDay() + 6) % 7];
+
+// A "lane" is one timeline overlaid on the calendar: a group (with its color and
+// members) or an individual runner, each with its own start date.
+interface Lane {
+  key: string;
+  label: string;
+  color: string;
+  start: Date;
+  group?: { id: number; nombre: string; color: string };
+  runner?: AssignedRunner;
+  members: AssignedRunner[];
+}
+
+function buildLanes(plan: Plan): Lane[] {
+  const groups = new Map<number, Lane>();
+  const individuals: Lane[] = [];
+  for (const a of plan.asignaciones ?? []) {
+    const start = a.fechaInicio ? new Date(a.fechaInicio) : null;
+    if (!start) continue;
+    if (a.group) {
+      const existing = groups.get(a.group.id);
+      if (existing) {
+        existing.members.push(a.runner);
+        if (start < existing.start) existing.start = start;
+      } else {
+        groups.set(a.group.id, {
+          key: `g${a.group.id}`, label: a.group.nombre, color: a.group.color,
+          start, group: a.group, members: [a.runner],
+        });
+      }
+    } else {
+      individuals.push({
+        key: `r${a.runner.id}`, label: `${a.runner.nombre} ${a.runner.apellido}`,
+        color: INDIVIDUAL_COLOR, start, runner: a.runner, members: [a.runner],
+      });
+    }
+  }
+  return [...groups.values(), ...individuals];
 }
 
 // "Día 1", "Día 3"… → its 0-based offset. Returns null for weekday labels.
@@ -96,29 +145,48 @@ function GroupSection({ nombre, color, count, children }: {
 }
 
 // ── Month-grid calendar of the plan's training days on real dates ─────────────
+// Coach view overlays every assignment (group / individual): each date is
+// painted with the colour of the group(s) training that day, the side panel
+// lists the trainings with the groups + members doing them, the coach can
+// unassign a group/runner, and can drag a training onto another day.
 function PlanCalendar({ plan, fixedStartDate, activityByDay, isCoach }: {
   plan: Plan;
   fixedStartDate: Date | null;   // runner's assignment start; null for coach preview
   activityByDay: Record<number, ActivityLog | null>;
   isCoach: boolean;
 }) {
+  const qc = useQueryClient();
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  // Coach has no fixed start → pick a preview start date to lay out the plan.
+
+  const assignedLanes = isCoach ? buildLanes(plan) : [];
+  const hasOverlay = assignedLanes.length > 0;
+
+  // Single-timeline fallback: the runner's real start, or a coach preview start.
   const [previewStart, setPreviewStart] = useState<string>(ymd(fixedStartDate ?? today));
-  const effStart = fixedStartDate ?? new Date(previewStart + 'T00:00:00');
+  const singleStart = fixedStartDate ?? new Date(previewStart + 'T00:00:00');
 
-  const dayDates = planDayDates(plan, effStart);
-  const byDate = new Map<string, TrainingDay[]>();
-  plan.semanas.forEach(s => s.dias.forEach(d => {
-    const dt = dayDates.get(d.id);
-    if (!dt) return;
-    const k = ymd(dt);
-    const arr = byDate.get(k) ?? [];
-    arr.push(d); byDate.set(k, arr);
-  }));
+  const effLanes: Lane[] = hasOverlay ? assignedLanes : [{
+    key: 'self', label: 'Plan', color: '#22c55e', start: singleStart, members: [],
+  }];
 
-  const [cursor, setCursor] = useState(new Date(effStart.getFullYear(), effStart.getMonth(), 1));
+  // Map each calendar date → entries (one training × one lane doing it that day).
+  interface Entry { day: TrainingDay; lane: Lane }
+  const byDate = new Map<string, Entry[]>();
+  for (const lane of effLanes) {
+    const dd = planDayDates(plan, lane.start);
+    plan.semanas.forEach(s => s.dias.forEach(d => {
+      if (d.tipo === 'descanso') return;
+      const dt = dd.get(d.id); if (!dt) return;
+      const k = ymd(dt);
+      const arr = byDate.get(k) ?? [];
+      arr.push({ day: d, lane }); byDate.set(k, arr);
+    }));
+  }
+
+  const [cursor, setCursor] = useState(new Date(singleStart.getFullYear(), singleStart.getMonth(), 1));
   const [selected, setSelected] = useState<string>(ymd(fixedStartDate ?? today));
+  const [dragDay, setDragDay] = useState<{ day: TrainingDay; start: Date } | null>(null);
+  const [dragOver, setDragOver] = useState<string | null>(null);
 
   const goToStart = (v: string) => {
     setPreviewStart(v);
@@ -127,31 +195,82 @@ function PlanCalendar({ plan, fixedStartDate, activityByDay, isCoach }: {
     setSelected(v);
   };
 
+  const moveDayMutation = useMutation({
+    mutationFn: ({ dayId, diaSemana }: { dayId: number; diaSemana: string }) =>
+      plansApi.updateDay(dayId, { diaSemana }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['plan', plan.id] }),
+  });
+  const unassignGroupMutation = useMutation({
+    mutationFn: (groupId: number) => plansApi.unassignGroup(plan.id, groupId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['plan', plan.id] }),
+  });
+  const unassignRunnerMutation = useMutation({
+    mutationFn: (runnerId: number) => plansApi.unassignRunner(plan.id, runnerId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['plan', plan.id] }),
+  });
+
+  const handleDropOnDate = (targetDate: Date) => {
+    if (!dragDay) { setDragOver(null); return; }
+    const { day, start } = dragDay;
+    const off = diaOffset(day.diaSemana);
+    let diaSemana: string;
+    if (off != null) {
+      const s = new Date(start); s.setHours(0, 0, 0, 0);
+      const t = new Date(targetDate); t.setHours(0, 0, 0, 0);
+      const newOff = Math.round((t.getTime() - s.getTime()) / 86400000);
+      if (newOff < 0) { setDragDay(null); setDragOver(null); return; }
+      diaSemana = `Día ${newOff + 1}`;
+    } else {
+      diaSemana = weekdayOf(targetDate);
+    }
+    if (diaSemana !== day.diaSemana) moveDayMutation.mutate({ dayId: day.id, diaSemana });
+    setDragDay(null); setDragOver(null);
+  };
+
+  const unassignLane = (lane: Lane) => {
+    if (lane.group) {
+      if (confirm(`¿Desasignar al grupo "${lane.group.nombre}" de este plan?`)) unassignGroupMutation.mutate(lane.group.id);
+    } else if (lane.runner) {
+      if (confirm(`¿Desasignar a ${lane.runner.nombre} ${lane.runner.apellido}?`)) unassignRunnerMutation.mutate(lane.runner.id);
+    }
+  };
+
   const year = cursor.getFullYear(), month = cursor.getMonth();
   const first = new Date(year, month, 1);
   const firstMon0 = (first.getDay() + 6) % 7;
   const gridStart = new Date(first); gridStart.setDate(1 - firstMon0);
   const cells = Array.from({ length: 42 }, (_, i) => { const d = new Date(gridStart); d.setDate(gridStart.getDate() + i); return d; });
 
-  const selDays = (byDate.get(selected) ?? []).filter(d => d.tipo !== 'descanso');
   const selDate = new Date(selected + 'T00:00:00');
-  const dotColor = (tipo: string) => {
+  const selEntries = byDate.get(selected) ?? [];
+  const selByDay = new Map<number, { day: TrainingDay; lanes: Lane[] }>();
+  selEntries.forEach(({ day, lane }) => {
+    const e = selByDay.get(day.id) ?? { day, lanes: [] };
+    e.lanes.push(lane); selByDay.set(day.id, e);
+  });
+  const selDays = [...selByDay.values()];
+
+  const dotColorByType = (tipo: string) => {
     const c = tipoIcon[tipo]?.color ?? '';
     return c.includes('green') ? '#4ade80' : c.includes('orange') ? '#fb923c' : c.includes('red') ? '#f87171'
       : c.includes('blue') ? '#60a5fa' : c.includes('purple') ? '#c084fc' : c.includes('cyan') || c.includes('teal') ? '#2dd4bf' : '#9ca3af';
   };
+  const cellColors = (entries: Entry[]): string[] =>
+    hasOverlay
+      ? [...new Set(entries.map(e => e.lane.color))]
+      : [...new Set(entries.map(e => dotColorByType(e.day.tipo)))];
 
   return (
     <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-6">
       {/* ── Calendar ── */}
       <div className="min-w-0">
-        {/* Coach preview-start picker */}
-        {isCoach && !fixedStartDate && (
+        {/* Coach preview-start picker (only when nothing is assigned yet) */}
+        {isCoach && !hasOverlay && (
           <div className="flex items-center gap-2 mb-3 flex-wrap">
             <span className="text-xs text-gray-400">Ver el plan desde:</span>
             <input type="date" value={previewStart} onChange={e => goToStart(e.target.value)}
               className="input text-xs py-1.5 px-2 w-auto" />
-            <span className="text-[11px] text-gray-500">cada corredor verá sus fechas según su día de inicio asignado</span>
+            <span className="text-[11px] text-gray-500">asigna grupos para ver sus fechas reales con color</span>
           </div>
         )}
 
@@ -175,27 +294,32 @@ function PlanCalendar({ plan, fixedStartDate, activityByDay, isCoach }: {
           ))}
         </div>
 
-        {/* Grid — compact fixed-height cells (not blown up on wide screens) */}
+        {/* Grid — compact fixed-height cells */}
         <div className="grid grid-cols-7 gap-1">
           {cells.map((d, i) => {
             const k = ymd(d);
             const inMonth = d.getMonth() === month;
             const isToday = ymd(today) === k;
             const isSel = selected === k;
-            const days = (byDate.get(k) ?? []).filter(x => x.tipo !== 'descanso');
-            const done = days.some(x => activityByDay[x.id]);
+            const entries = byDate.get(k) ?? [];
+            const colors = cellColors(entries);
+            const done = !hasOverlay && entries.some(e => activityByDay[e.day.id]);
+            const isDropTarget = dragOver === k;
             return (
               <button key={i} onClick={() => setSelected(k)}
+                onDragOver={isCoach && dragDay ? (e) => { e.preventDefault(); if (dragOver !== k) setDragOver(k); } : undefined}
+                onDrop={isCoach && dragDay ? () => handleDropOnDate(d) : undefined}
                 className={`h-11 sm:h-12 rounded-lg flex flex-col items-center justify-center gap-0.5 text-xs transition-all
-                  ${isSel ? 'bg-brand-500/25 ring-1 ring-brand-500' : days.length ? 'bg-surface-700 hover:bg-surface-600' : 'hover:bg-surface-700/50'}
+                  ${isDropTarget ? 'ring-2 ring-brand-400 bg-brand-500/15' :
+                    isSel ? 'bg-brand-500/25 ring-1 ring-brand-500' : entries.length ? 'bg-surface-700 hover:bg-surface-600' : 'hover:bg-surface-700/50'}
                   ${!inMonth ? 'opacity-30' : ''}`}>
-                <span className={`${isToday ? 'text-brand-400 font-black' : days.length ? 'text-white font-semibold' : 'text-gray-500'}`}>
+                <span className={`${isToday ? 'text-brand-400 font-black' : entries.length ? 'text-white font-semibold' : 'text-gray-500'}`}>
                   {d.getDate()}
                 </span>
-                {days.length > 0 && (
+                {colors.length > 0 && (
                   <div className="flex items-center gap-0.5">
-                    {days.slice(0, 3).map((x, j) => (
-                      <span key={j} className="w-1.5 h-1.5 rounded-full" style={{ background: done ? '#22c55e' : dotColor(x.tipo) }} />
+                    {colors.slice(0, 4).map((c, j) => (
+                      <span key={j} className="w-1.5 h-1.5 rounded-full" style={{ background: done ? '#22c55e' : c }} />
                     ))}
                   </div>
                 )}
@@ -203,23 +327,61 @@ function PlanCalendar({ plan, fixedStartDate, activityByDay, isCoach }: {
             );
           })}
         </div>
+
+        {/* Legend: groups / individuals assigned, with members + unassign */}
+        {hasOverlay && (
+          <div className="mt-4 pt-4 border-t border-white/[0.06] space-y-2">
+            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+              <Users size={12} /> Quién entrena este plan
+            </p>
+            {assignedLanes.map(lane => (
+              <div key={lane.key} className="flex items-start gap-2 bg-surface-700/60 rounded-lg px-3 py-2">
+                <span className="w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0" style={{ background: lane.color }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white truncate">
+                    {lane.label}
+                    {lane.group && <span className="text-[11px] text-gray-500 font-normal"> · {lane.members.length} {lane.members.length === 1 ? 'corredor' : 'corredores'}</span>}
+                  </p>
+                  <p className="text-[11px] text-gray-400 truncate">
+                    {lane.members.map(m => `${m.nombre} ${m.apellido}`).join(', ')}
+                  </p>
+                  <p className="text-[10px] text-gray-600 mt-0.5">Inicia {format(lane.start, "d 'de' MMM", { locale: es })}</p>
+                </div>
+                {isCoach && (
+                  <button onClick={() => unassignLane(lane)} title="Desasignar"
+                    className="p-1 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded-md transition-all flex-shrink-0">
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* ── Selected-day detail (beside on desktop, below on mobile) ── */}
+      {/* ── Selected-day detail ── */}
       <div className="mt-5 pt-5 border-t border-white/[0.06] lg:mt-0 lg:pt-0 lg:border-t-0 lg:border-l lg:pl-6">
-        <p className="text-sm font-bold text-white capitalize mb-3">
+        <p className="text-sm font-bold text-white capitalize mb-1">
           {format(selDate, "EEEE d 'de' MMMM yyyy", { locale: es })}
         </p>
+        {isCoach && hasOverlay && selDays.length > 0 && (
+          <p className="text-[11px] text-gray-500 mb-3 flex items-center gap-1"><GripVertical size={11} /> Arrastra un entrenamiento a otro día para moverlo</p>
+        )}
         {selDays.length === 0 ? (
-          <div className="text-center py-8 text-gray-500 text-xs bg-surface-700/40 rounded-xl">Sin entrenamiento programado este día.</div>
+          <div className="text-center py-8 text-gray-500 text-xs bg-surface-700/40 rounded-xl mt-2">Sin entrenamiento programado este día.</div>
         ) : (
-          <div className="space-y-2">
-            {selDays.map(d => {
+          <div className="space-y-2 mt-2">
+            {selDays.map(({ day: d, lanes: doingLanes }) => {
               const act = activityByDay[d.id];
               const cfg = tipoIcon[d.tipo] ?? tipoIcon.descanso;
               return (
-                <div key={d.id} className="bg-surface-700 rounded-xl p-4 border border-white/[0.06]">
+                <div key={d.id}
+                  draggable={isCoach}
+                  onDragStart={isCoach ? () => setDragDay({ day: d, start: doingLanes[0]?.start ?? singleStart }) : undefined}
+                  onDragEnd={isCoach ? () => { setDragDay(null); setDragOver(null); } : undefined}
+                  className={`bg-surface-700 rounded-xl p-4 border border-white/[0.06] ${isCoach ? 'cursor-grab active:cursor-grabbing' : ''} ${dragDay?.day.id === d.id ? 'opacity-40' : ''}`}>
                   <div className="flex items-center gap-3 mb-2">
+                    {isCoach && <GripVertical size={14} className="text-gray-600 flex-shrink-0 -ml-1" />}
                     <span className={`flex items-center justify-center w-9 h-9 rounded-lg flex-shrink-0 ${cfg.bg}`}>
                       <span className={cfg.color}>{cfg.icon}</span>
                     </span>
@@ -234,6 +396,18 @@ function PlanCalendar({ plan, fixedStartDate, activityByDay, isCoach }: {
                       </div>
                     </div>
                   </div>
+                  {/* Who is doing it this date (group / individual chips) */}
+                  {hasOverlay && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {doingLanes.map(lane => (
+                        <span key={lane.key} className="inline-flex items-center gap-1.5 text-[11px] font-medium text-white rounded-full px-2 py-0.5"
+                          style={{ background: `${lane.color}22`, border: `1px solid ${lane.color}55` }}>
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ background: lane.color }} />
+                          {lane.label}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   {d.descripcion && <p className="text-xs text-gray-300 leading-relaxed">{fixRunTerms(d.descripcion)}</p>}
                 </div>
               );

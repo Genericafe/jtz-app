@@ -256,4 +256,22 @@ router.post('/:id/assign', coachOnly, async (req: AuthRequest, res: Response) =>
   return res.status(201).json(assignment);
 });
 
+// ── Unassign a single runner from this plan ───────────────────────────────────
+router.delete('/:id/assign/runner/:runnerId', coachOnly, async (req: AuthRequest, res: Response) => {
+  await prisma.trainingPlanAssignment.updateMany({
+    where: { planId: Number(req.params.id), runnerId: Number(req.params.runnerId), activo: true },
+    data: { activo: false },
+  });
+  return res.json({ ok: true });
+});
+
+// ── Unassign an entire group from this plan ───────────────────────────────────
+router.delete('/:id/assign/group/:groupId', coachOnly, async (req: AuthRequest, res: Response) => {
+  await prisma.trainingPlanAssignment.updateMany({
+    where: { planId: Number(req.params.id), groupId: Number(req.params.groupId), activo: true },
+    data: { activo: false },
+  });
+  return res.json({ ok: true });
+});
+
 export default router;
