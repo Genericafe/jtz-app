@@ -9,7 +9,7 @@ export default function Profile() {
   const qc = useQueryClient();
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState('');
-  const [form, setForm] = useState({ nombre: '', apellido: '', telefono: '', ciudad: '', estado: '' });
+  const [form, setForm] = useState({ nombre: '', apellido: '', telefono: '', ciudad: '', estado: '', peso: '' });
 
   const { data: meData, isLoading } = useQuery({
     queryKey: ['runner-me'],
@@ -26,6 +26,7 @@ export default function Profile() {
         telefono: me.telefono ?? '',
         ciudad: me.ciudad ?? '',
         estado: me.estado ?? 'México',
+        peso: me.peso != null ? String(me.peso) : '',
       });
     }
   }, [me]);
@@ -93,6 +94,21 @@ export default function Profile() {
           ))}
 
           <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Peso (kg)</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              min={1}
+              max={400}
+              step={0.1}
+              value={form.peso}
+              onChange={(e) => setForm({ ...form, peso: e.target.value })}
+              placeholder="Para estimar calorías"
+              className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
+            />
+          </div>
+
+          <div>
             <label className="block text-xs font-medium text-gray-400 mb-1">Correo electrónico</label>
             <input
               value={user?.email ?? ''}
@@ -115,7 +131,15 @@ export default function Profile() {
           )}
           <div className="flex justify-end">
             <button
-              onClick={() => { setSaveError(''); updateMutation.mutate(form); }}
+              onClick={() => {
+                setSaveError('');
+                const pesoNum = parseFloat(form.peso);
+                updateMutation.mutate({
+                  ...form,
+                  // peso must go to the API as a number (or null to clear), not a string
+                  peso: form.peso.trim() === '' ? null : (isNaN(pesoNum) ? undefined : pesoNum),
+                });
+              }}
               disabled={updateMutation.isPending}
               className="px-6 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
             >

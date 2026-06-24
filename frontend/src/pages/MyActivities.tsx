@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { integrationsApi } from '../services/api';
-import { Plus, Trash2, Upload, X, FileText, ChevronRight, CheckCircle2, Clock3, Radio, Heart, Navigation, Link2, RefreshCw, Unlink, Share2 } from 'lucide-react';
+import { Plus, Trash2, Upload, X, FileText, ChevronRight, CheckCircle2, Clock3, Radio, Heart, Navigation, Link2, RefreshCw, Unlink, Share2, Download } from 'lucide-react';
 import ActivityShareCard from '../components/ActivityShareCard';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -108,8 +108,40 @@ export default function MyActivities({ embedded = false }: { embedded?: boolean 
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [shareActivity, setShareActivity] = useState<ActivityLog | null>(null);
   const [importingHealth, setImportingHealth] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const isNative = Capacitor.isNativePlatform();
   const { isCoach } = useAuth();
+
+  // Descarga el GPX de una actividad. La lista no incluye gpxContent, así que se
+  // pide on-demand y se entrega como archivo .gpx mediante un Blob.
+  const downloadGpx = async (a: ActivityLog) => {
+    setDownloadingId(a.id);
+    try {
+      let gpx = a.gpxContent;
+      if (!gpx) {
+        const res = await integrationsApi.getActivity(a.id);
+        gpx = res.data?.gpxContent;
+      }
+      if (!gpx) { alert('Esta actividad no tiene archivo GPX.'); return; }
+
+      const safeName = (a.gpxNombre || `${a.nombre ?? 'actividad'}.gpx`)
+        .replace(/[^\w.\-]+/g, '_')
+        .replace(/\.gpx$/i, '') + '.gpx';
+      const blob = new Blob([gpx], { type: 'application/gpx+xml' });
+      const url  = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = safeName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert('No se pudo descargar el GPX. Intenta de nuevo.');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   // Strava
   const [stravaUrl, setStravaUrl] = useState('');
@@ -647,7 +679,16 @@ export default function MyActivities({ embedded = false }: { embedded?: boolean 
                       >
                         <Share2 size={14} /> Compartir
                       </button>
-                      {/* Solo actividades con GPX pueden repetirse con navegación */}
+                      {/* Solo actividades con GPX pueden descargarse / repetirse con navegación */}
+                      {a.gpxNombre && (
+                        <button
+                          onClick={() => downloadGpx(a)}
+                          disabled={downloadingId === a.id}
+                          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-white/[0.1] text-gray-200 text-sm font-semibold hover:bg-surface-600 transition-all disabled:opacity-50"
+                        >
+                          <Download size={14} /> {downloadingId === a.id ? 'Descargando…' : 'Descargar GPX'}
+                        </button>
+                      )}
                       {a.gpxNombre && (
                         <button
                           onClick={() => navigate(`/grabar?routeId=${a.id}`)}

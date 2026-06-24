@@ -9,6 +9,7 @@ import {
   importStravaActivityById,
   resolveStravaActivityId,
 } from '../services/strava';
+import { estimateCalories } from '../services/calories';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -273,6 +274,11 @@ router.post('/activities', async (req: AuthRequest, res: Response) => {
   const ritmoMinKm = d.distanciaKm && d.duracionMin
     ? d.duracionMin / d.distanciaKm : undefined;
 
+  // Estimate calories from the runner's weight when the client didn't send a
+  // value (e.g. the in-app recorder). Stays undefined if no weight is set.
+  const caloriasKcal = d.caloriasKcal
+    ?? estimateCalories(d.tipo, d.distanciaKm, d.duracionMin, (runner as any).peso);
+
   try {
     const log = await (prisma as any).activityLog.create({
       data: {
@@ -280,6 +286,7 @@ router.post('/activities', async (req: AuthRequest, res: Response) => {
         fuente:   d.gpxContent ? 'gpx' : 'manual',
         ...d,
         ritmoMinKm,
+        caloriasKcal,
         fecha: d.fecha ? new Date(d.fecha) : new Date(),
       },
     });

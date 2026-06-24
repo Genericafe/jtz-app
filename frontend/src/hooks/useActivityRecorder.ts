@@ -259,13 +259,22 @@ export function useActivityRecorder() {
       }
       watchIdRef.current = navigator.geolocation.watchPosition(
         (pos) => {
-          processPoint({
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            ele: pos.coords.altitude ?? undefined,
-            time: new Date(pos.timestamp).toISOString(),
-            accuracy: pos.coords.accuracy ?? undefined,
-          });
+          // Browsers expose the GPS course in `heading` (degrees clockwise from
+          // north) once the device is moving. Pass it through like the native
+          // path's `location.bearing` so the direction cone shows on web too —
+          // otherwise web users (e.g. the coach) get no heading arrow unless the
+          // magnetometer compass happens to be available.
+          const webBearing = pos.coords.heading;
+          processPoint(
+            {
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+              ele: pos.coords.altitude ?? undefined,
+              time: new Date(pos.timestamp).toISOString(),
+              accuracy: pos.coords.accuracy ?? undefined,
+            },
+            webBearing != null && !isNaN(webBearing) ? webBearing : null,
+          );
         },
         (err) => {
           // Timeouts are transient with weak signal — keep the last position and

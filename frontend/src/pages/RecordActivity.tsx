@@ -147,6 +147,12 @@ export default function RecordActivity() {
     };
   }, [routeNav, state.headingDeg]);
 
+  // Heading fed to the map's direction cone. Prefer the real device heading
+  // (compass / GPS course). When it's unavailable — e.g. the coach following a
+  // route from a desktop with no compass — fall back to the bearing toward the
+  // next point on the route, so the cone still clearly points "this way".
+  const mapHeading = state.headingDeg ?? routeNav?.absBearing ?? null;
+
   const totalRouteKm = useMemo(() => {
     if (referenceRoute.length < 2) return 0;
     return referenceRoute.reduce((acc, _, i, arr) => i === 0 ? 0 : acc + haversineM(arr[i - 1], arr[i]), 0) / 1000;
@@ -162,6 +168,7 @@ export default function RecordActivity() {
         duracionMin: Math.round(state.elapsed / 60),
         ...(state.paceMinKm ? { ritmoMinKm: parseFloat(state.paceMinKm.toFixed(2)) } : {}),
         ...(state.fcActual  ? { fcPromedio: state.fcActual } : {}),
+        ...(state.elevationGainM > 0 ? { elevacionM: Math.round(state.elevationGainM) } : {}),
         ...(gpx ? { gpxContent: gpx, gpxNombre: `${actName}.gpx` } : {}),
         fuente: 'app',
       });
@@ -281,7 +288,7 @@ export default function RecordActivity() {
               track={trackMapPoints}
               referenceRoute={referenceRoute.length > 0 ? referenceRoute : undefined}
               currentPos={currentPos}
-              heading={state.headingDeg}
+              heading={mapHeading}
               className="w-full h-full"
             />
           </Suspense>

@@ -53,6 +53,7 @@ model Runner {
   nivel           String    @default("principiante")
   pais            String    @default("México")
   genero          String?
+  peso            Float?    // kg — usado para estimar calorías de cada actividad
   tallaCamiseta   String?
   fotoPerfil      String?
   activo          Boolean   @default(true)

@@ -42,7 +42,7 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
         id: 0, userId: req.userId, nombre: '', apellido: '',
         ciudad: 'México', estado: 'México', pais: 'México',
         nivel: 'elite', telefono: null, genero: null,
-        tallaCamiseta: null, notas: null, activo: true,
+        tallaCamiseta: null, peso: null, notas: null, activo: true,
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
         trainingPlans: [], payments: [], eventRegistrations: [], activityLogs: [],
         paidLeadEventIds: [],
@@ -72,6 +72,7 @@ router.put('/me', async (req: AuthRequest, res: Response) => {
     pais:          z.string().optional(),
     genero:        z.string().optional(),
     tallaCamiseta: z.string().optional(),
+    peso:          z.number().positive().max(400).nullable().optional(),
     notas:         z.string().optional(),
   });
 
