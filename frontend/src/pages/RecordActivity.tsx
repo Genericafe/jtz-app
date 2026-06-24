@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Play, Pause, Square, MapPin, Heart, Clock, ChevronLeft,
-  CheckCircle, Map, Navigation, Zap, TrendingUp, Mountain,
+  CheckCircle, Map, Navigation, Zap, TrendingUp, Mountain, BarChart3,
 } from 'lucide-react';
 import { integrationsApi, routesApi } from '../services/api';
 import { useActivityRecorder, formatPace, formatElapsed, bearingDeg } from '../hooks/useActivityRecorder';
@@ -11,6 +11,7 @@ import { parseGpx } from '../utils/gpxParser';
 import type { MapPoint } from '../components/LiveTrackingMap';
 
 const LiveTrackingMap = lazy(() => import('../components/LiveTrackingMap'));
+const ElevationChartModal = lazy(() => import('../components/ElevationChartModal'));
 
 const TIPOS = [
   { value: 'correr',   label: 'Correr'   },
@@ -38,6 +39,8 @@ export default function RecordActivity() {
   const [tipo, setTipo] = useState('correr');
   const [nombre, setNombre] = useState('');
   const [saved, setSaved] = useState(false);
+  const [showElevation, setShowElevation] = useState(false);
+  const hasElevation = useMemo(() => state.track.filter(p => p.ele != null).length >= 2, [state.track]);
   const [showMap, setShowMap] = useState(true); // map on by default
 
   const { data: refActivityData } = useQuery({
@@ -204,9 +207,11 @@ export default function RecordActivity() {
           <StatCard label="Distancia"    value={`${state.distanceKm.toFixed(2)} km`} />
           <StatCard label="Tiempo"       value={formatElapsed(state.elapsed)} />
           <StatCard label="Ritmo promedio" value={`${formatPace(state.paceMinKm)} /km`} />
-          <StatCard label="Desnivel+"    value={state.elevationGainM > 0 ? `+${Math.round(state.elevationGainM)} m` : '-- m'} />
+          <StatCard label="Desnivel+"    value={state.elevationGainM > 0 ? `+${Math.round(state.elevationGainM)} m` : '-- m'}
+            onClick={hasElevation ? () => setShowElevation(true) : undefined} />
           {state.currentAltitudeM != null && (
-            <StatCard label="Altitud máx." value={`${Math.round(state.currentAltitudeM)} m`} />
+            <StatCard label="Altitud" value={`${Math.round(state.currentAltitudeM)} m`}
+              onClick={hasElevation ? () => setShowElevation(true) : undefined} />
           )}
           <StatCard label="Puntos GPS"   value={String(state.track.length)} />
         </div>
@@ -230,6 +235,12 @@ export default function RecordActivity() {
           {saveMutation.isPending ? 'Guardando...' : 'Guardar actividad'}
         </button>
         {saveMutation.isError && <p className="text-red-400 text-sm text-center mt-3">Error al guardar. Intenta de nuevo.</p>}
+
+        {showElevation && (
+          <Suspense fallback={null}>
+            <ElevationChartModal track={state.track} onClose={() => setShowElevation(false)} />
+          </Suspense>
+        )}
       </div>
     );
   }
@@ -481,15 +492,20 @@ export default function RecordActivity() {
             {
               v: state.elevationGainM > 0 ? `+${Math.round(state.elevationGainM)} m` : '--',
               l: 'desnivel+', icon: <TrendingUp size={11} />, c: 'text-emerald-400',
+              onTap: hasElevation ? () => setShowElevation(true) : undefined,
             },
             {
               v: state.currentAltitudeM != null ? `${Math.round(state.currentAltitudeM)} m` : '--',
               l: 'altitud', icon: <Mountain size={11} />, c: state.currentAltitudeM != null ? 'text-sky-400' : 'text-gray-600',
+              onTap: hasElevation ? () => setShowElevation(true) : undefined,
             },
-          ].map(({ v, l, icon, c }, i) => (
-            <div key={i} className="bg-dark-800 rounded-2xl p-4 text-center border border-dark-700">
+          ].map(({ v, l, icon, c, onTap }, i) => (
+            <div key={i} onClick={onTap}
+              className={`bg-dark-800 rounded-2xl p-4 text-center border border-dark-700 ${onTap ? 'cursor-pointer hover:border-blue-500/50 active:scale-[0.98] transition-all' : ''}`}>
               <div className={`text-3xl font-bold ${c ?? 'text-white'}`}>{v}</div>
-              <div className="text-xs text-gray-500 mt-0.5 flex items-center justify-center gap-1">{icon}{l}</div>
+              <div className="text-xs text-gray-500 mt-0.5 flex items-center justify-center gap-1">
+                {icon}{l}{onTap && <BarChart3 size={10} className="text-blue-400" />}
+              </div>
             </div>
           ))}
         </div>
@@ -527,6 +543,12 @@ export default function RecordActivity() {
           </>
         )}
       </div>
+
+      {showElevation && (
+        <Suspense fallback={null}>
+          <ElevationChartModal track={state.track} onClose={() => setShowElevation(false)} />
+        </Suspense>
+      )}
     </div>
   );
 }
@@ -564,11 +586,19 @@ function MetricCell({ value, label, icon, highlight, color }: {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function StatCard({ label, value, onClick }: { label: string; value: string; onClick?: () => void }) {
   return (
-    <div className="bg-dark-800 border border-dark-700 rounded-2xl p-4 text-center">
+    <div
+      onClick={onClick}
+      className={`bg-dark-800 border border-dark-700 rounded-2xl p-4 text-center ${
+        onClick ? 'cursor-pointer hover:border-blue-500/50 active:scale-[0.98] transition-all relative' : ''
+      }`}
+    >
       <div className="text-2xl font-bold text-white">{value}</div>
-      <div className="text-xs text-gray-500 mt-0.5">{label}</div>
+      <div className="text-xs text-gray-500 mt-0.5 flex items-center justify-center gap-1">
+        {label}
+        {onClick && <BarChart3 size={11} className="text-blue-400" />}
+      </div>
     </div>
   );
 }

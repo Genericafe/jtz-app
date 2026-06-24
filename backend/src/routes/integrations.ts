@@ -277,7 +277,7 @@ router.post('/activities', async (req: AuthRequest, res: Response) => {
   // Estimate calories from the runner's weight when the client didn't send a
   // value (e.g. the in-app recorder). Stays undefined if no weight is set.
   const caloriasKcal = d.caloriasKcal
-    ?? estimateCalories(d.tipo, d.distanciaKm, d.duracionMin, (runner as any).peso);
+    ?? estimateCalories(d.tipo, d.distanciaKm, d.duracionMin, (runner as any).peso, d.elevacionM);
 
   try {
     const log = await (prisma as any).activityLog.create({

@@ -73,8 +73,10 @@ export function useActivityRecorder() {
   const lastPointRef    = useRef<TrackPoint | null>(null);
   const lastAltitudeRef = useRef<number | null>(null);
   const recentDistRef   = useRef<{ time: number; dist: number }[]>([]);
+  const smoothPaceRef   = useRef<number | null>(null); // EMA of current pace
   const hasCompassRef   = useRef(false);
   const lastCompassRef  = useRef(0);
+  const wakeLockRef     = useRef<any>(null); // WakeLockSentinel — keeps the screen on
   const isNative      = Capacitor.isNativePlatform();
 
   // ── Device compass (magnetometer) ──────────────────────────────────────────
@@ -113,8 +115,33 @@ export function useActivityRecorder() {
     window.removeEventListener('deviceorientation', orientationHandler as EventListener, true);
   };
 
+  // ── Screen Wake Lock ───────────────────────────────────────────────────────
+  // Mobile browsers suspend JS + GPS when the screen turns off, which silently
+  // stops tracking. The Wake Lock API keeps the screen on while recording. It is
+  // auto-released whenever the page is hidden, so we re-acquire on `visibilitychange`.
+  // (This is a web-only mitigation; the native app uses a background service.)
+  const requestWakeLock = async () => {
+    if (isNative) return;
+    try {
+      const wl = (navigator as any).wakeLock;
+      if (!wl?.request) return;
+      wakeLockRef.current = await wl.request('screen');
+    } catch { /* denied / not supported — degrade gracefully */ }
+  };
+
+  const releaseWakeLock = async () => {
+    try { await wakeLockRef.current?.release?.(); } catch { /* ignore */ }
+    wakeLockRef.current = null;
+  };
+
+  const visibilityHandler = useRef(() => {
+    // Re-acquire the lock when the user returns to the tab mid-recording.
+    if (document.visibilityState === 'visible' && timerRef.current) requestWakeLock();
+  }).current;
+
   const clearTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
   };
 
   const clearWatch = async () => {
@@ -141,8 +168,22 @@ export function useActivityRecorder() {
         recentDistRef.current = window;
         const recentDist = window.reduce((a, b) => a + b.dist, 0);
         const recentSecs = window.length > 0 ? (now - window[0].time) / 1000 : 0;
-        const currentPaceMinKm =
-          recentDist > 0.01 && recentSecs > 5 ? recentSecs / 60 / recentDist : null;
+
+        // Raw current pace from the rolling window. Phone GPS is noisy, so we
+        // require a bit more distance/time before trusting it, then smooth it
+        // with an exponential moving average so the number stops jumping around.
+        const rawPace =
+          recentDist > 0.02 && recentSecs > 8 ? recentSecs / 60 / recentDist : null;
+        let currentPaceMinKm = s.currentPaceMinKm;
+        if (rawPace != null) {
+          const prev = smoothPaceRef.current;
+          smoothPaceRef.current = prev == null ? rawPace : prev * 0.7 + rawPace * 0.3;
+          currentPaceMinKm = smoothPaceRef.current;
+        } else if (recentDist < 0.005) {
+          // Genuinely standing still → clear it rather than holding a stale pace.
+          smoothPaceRef.current = null;
+          currentPaceMinKm = null;
+        }
 
         return { ...s, elapsed, paceMinKm, currentPaceMinKm };
       });
@@ -293,12 +334,15 @@ export function useActivityRecorder() {
     setState(s => ({ ...s, status: 'running', error: null }));
     startTimer();
     enableCompass();
+    requestWakeLock();
+    document.addEventListener('visibilitychange', visibilityHandler);
     await startGpsWatch();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pause = useCallback(async () => {
     clearTimer();
     await clearWatch();
+    releaseWakeLock();
     if (isNative) Haptics.impact({ style: ImpactStyle.Medium });
     setState(s => ({ ...s, status: 'paused' }));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -307,6 +351,8 @@ export function useActivityRecorder() {
     setState(s => ({ ...s, status: 'running' }));
     startTimer();
     enableCompass();
+    requestWakeLock();
+    document.addEventListener('visibilitychange', visibilityHandler);
     await startGpsWatch();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -314,6 +360,8 @@ export function useActivityRecorder() {
     clearTimer();
     await clearWatch();
     disableCompass();
+    releaseWakeLock();
+    document.removeEventListener('visibilitychange', visibilityHandler);
     if (isNative) Haptics.impact({ style: ImpactStyle.Heavy });
     setState(s => ({ ...s, status: 'finished' }));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -322,7 +370,10 @@ export function useActivityRecorder() {
     lastPointRef.current = null;
     lastAltitudeRef.current = null;
     recentDistRef.current = [];
+    smoothPaceRef.current = null;
     hasCompassRef.current = false;
+    releaseWakeLock();
+    document.removeEventListener('visibilitychange', visibilityHandler);
     setState({
       status: 'idle', elapsed: 0, distanceKm: 0,
       paceMinKm: null, currentPaceMinKm: null,
@@ -340,6 +391,8 @@ export function useActivityRecorder() {
     clearTimer();
     clearWatch();
     disableCompass();
+    releaseWakeLock();
+    document.removeEventListener('visibilitychange', visibilityHandler);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { state, start, pause, resume, finish, reset, getGpx };

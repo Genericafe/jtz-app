@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, memo } from 'react';
 import maplibregl from 'maplibre-gl';
+import { LocateFixed } from 'lucide-react';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 export interface MapPoint { lat: number; lng: number; accuracy?: number }
@@ -66,6 +67,16 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
   const lastTrackDrawRef = useRef(0);
   const lastFollowRef    = useRef(0);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [following, setFollowing] = useState(true);
+
+  // Re-enable camera follow and snap back to the current position. Shown as a
+  // floating button whenever the user has panned away from auto-follow.
+  const recenter = () => {
+    autoFollowRef.current = true;
+    setFollowing(true);
+    const map = mapRef.current;
+    if (map && currentPos) map.easeTo({ center: [currentPos.lng, currentPos.lat], duration: 400 });
+  };
 
   // ── Map initialisation (runs once) ────────────────────────────────────────
   useEffect(() => {
@@ -89,7 +100,7 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
-    map.on('dragstart', () => { autoFollowRef.current = false; });
+    map.on('dragstart', () => { autoFollowRef.current = false; setFollowing(false); });
 
     // Center on real GPS when no reference route available
     if (!referenceRoute?.length && !currentPos && navigator.geolocation) {
@@ -313,6 +324,23 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
           <p style={{ fontSize: 13 }}>Cargando mapa…</p>
           <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
         </div>
+      )}
+
+      {/* Recenter button — appears once the user pans away from auto-follow */}
+      {mapLoaded && !following && (
+        <button
+          onClick={recenter}
+          aria-label="Centrar en mi posición"
+          style={{
+            position: 'absolute', right: 12, bottom: 90, width: 44, height: 44,
+            borderRadius: '50%', border: '1px solid rgba(255,255,255,0.15)',
+            background: 'rgba(17,19,21,0.92)', color: '#3b82f6',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.4)', cursor: 'pointer',
+          }}
+        >
+          <LocateFixed size={22} />
+        </button>
       )}
     </div>
   );
