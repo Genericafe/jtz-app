@@ -66,6 +66,9 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
   const posMarkerRef    = useRef<maplibregl.Marker | null>(null);
   const lastTrackDrawRef = useRef(0);
   const lastFollowRef    = useRef(0);
+  const followTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentPosRef    = useRef(currentPos);
+  currentPosRef.current  = currentPos;
   const [mapLoaded, setMapLoaded] = useState(false);
   const [following, setFollowing] = useState(true);
 
@@ -100,7 +103,23 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
-    map.on('dragstart', () => { autoFollowRef.current = false; setFollowing(false); });
+    // Panning disables auto-follow so the user can look around — but only
+    // temporarily: re-enable it a few seconds after they stop, so the map goes
+    // back to tracking the cursor on its own (no need to hunt for a button).
+    map.on('dragstart', () => {
+      autoFollowRef.current = false;
+      setFollowing(false);
+      if (followTimerRef.current) clearTimeout(followTimerRef.current);
+    });
+    map.on('dragend', () => {
+      if (followTimerRef.current) clearTimeout(followTimerRef.current);
+      followTimerRef.current = setTimeout(() => {
+        autoFollowRef.current = true;
+        setFollowing(true);
+        const pos = currentPosRef.current;
+        if (mapRef.current && pos) mapRef.current.easeTo({ center: [pos.lng, pos.lat], duration: 500 });
+      }, 5000);
+    });
 
     // Center on real GPS when no reference route available
     if (!referenceRoute?.length && !currentPos && navigator.geolocation) {
@@ -220,6 +239,7 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
     mapRef.current = map;
     return () => {
       readyRef.current = false;
+      if (followTimerRef.current) clearTimeout(followTimerRef.current);
       startMarkerRef.current?.remove();
       endMarkerRef.current?.remove();
       posMarkerRef.current?.remove();
