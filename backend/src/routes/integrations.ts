@@ -11,6 +11,7 @@ import {
 } from '../services/strava';
 import { estimateCalories } from '../services/calories';
 import { awardBadges } from '../services/badges';
+import { firstGpxCoord, reverseCity } from '../services/geocode';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -317,6 +318,23 @@ router.post('/activities', async (req: AuthRequest, res: Response) => {
           );
         })
         .catch(() => {});
+
+      // Detect the start city (for the "ciudades" badge) and re-evaluate badges
+      // if it unlocks one. awardBadges de-duplicates, so this can't double-award.
+      const coord = firstGpxCoord(d.gpxContent);
+      if (coord) {
+        reverseCity(coord.lat, coord.lon)
+          .then(async city => {
+            if (!city) return;
+            await (prisma as any).activityLog.update({ where: { id: log.id }, data: { ciudad: city } });
+            const newBadges = await awardBadges(runner.id, prisma);
+            for (const b of newBadges) {
+              sendToUser(req.userId!, `${b.icon} ¡Insignia desbloqueada!`,
+                `${b.nombre} — ${b.descripcion}`, { type: 'badge', badgeId: b.id });
+            }
+          })
+          .catch(() => {});
+      }
     }
 
     return res.status(201).json(log);
