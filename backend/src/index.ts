@@ -25,6 +25,7 @@ import integrationsRoutes from './routes/integrations';
 import routeRoutes from './routes/routes';
 import notificationRoutes from './routes/notifications';
 import groupRoutes from './routes/groups';
+import gamificationRoutes from './routes/gamification';
 
 dotenv.config();
 
@@ -78,6 +79,7 @@ app.use('/api/integrations', integrationsRoutes);
 app.use('/api/routes', routeRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/groups', groupRoutes);
+app.use('/api/gamification', gamificationRoutes);
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', app: 'JTZ API' }));
 

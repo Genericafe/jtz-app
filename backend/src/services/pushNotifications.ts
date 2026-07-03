@@ -56,6 +56,16 @@ export async function sendToUser(
   }
 }
 
+export async function sendToCoaches(
+  title: string,
+  body: string,
+  data: Record<string, string> = {},
+) {
+  if (!isReady()) return;
+  const coaches = await prisma.user.findMany({ where: { role: 'coach' }, select: { id: true } });
+  await Promise.all(coaches.map(c => sendToUser(c.id, title, body, data)));
+}
+
 export async function sendToAllRunners(
   title: string,
   body: string,

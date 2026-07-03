@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { z } from 'zod';
-import { sendToUser } from '../services/pushNotifications';
+import { sendToUser, sendToCoaches } from '../services/pushNotifications';
 import {
   getValidStravaToken,
   fetchRecentStravaActivities,
@@ -10,6 +10,7 @@ import {
   resolveStravaActivityId,
 } from '../services/strava';
 import { estimateCalories } from '../services/calories';
+import { awardBadges } from '../services/badges';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -290,6 +291,34 @@ router.post('/activities', async (req: AuthRequest, res: Response) => {
         fecha: d.fecha ? new Date(d.fecha) : new Date(),
       },
     });
+
+    // Award any newly-earned badges from this activity and notify the runner.
+    awardBadges(runner.id, prisma)
+      .then(newBadges => {
+        for (const b of newBadges) {
+          sendToUser(req.userId!, `${b.icon} ¡Insignia desbloqueada!`,
+            `${b.nombre} — ${b.descripcion}`, { type: 'badge', badgeId: b.id });
+        }
+      })
+      .catch(() => {});
+
+    // Notify coaches when a runner uploads/records a training with GPS data, so
+    // they can follow up. Fire-and-forget; a coach logging their own run is skipped.
+    if (d.gpxContent) {
+      prisma.user.findUnique({ where: { id: req.userId! }, select: { role: true } })
+        .then(u => {
+          if (u?.role !== 'runner') return;
+          const nombre = `${runner.nombre} ${runner.apellido}`.trim();
+          const km = d.distanciaKm != null ? ` · ${d.distanciaKm.toFixed(1)} km` : '';
+          return sendToCoaches(
+            '🏃 Nuevo entrenamiento',
+            `${nombre} subió ${log.nombre ?? d.tipo}${km}`,
+            { type: 'activity', activityId: String(log.id), runnerId: String(runner.id) },
+          );
+        })
+        .catch(() => {});
+    }
+
     return res.status(201).json(log);
   } catch (err: any) {
     console.error('[activity log create]', err?.message ?? err);

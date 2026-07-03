@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Users, ClipboardList, Calendar,
-  CreditCard, ShoppingBag, MessageSquare, LogOut, Zap, User, Settings, MessageCircle, X, Activity,
+  CreditCard, ShoppingBag, MessageSquare, LogOut, Zap, User, Settings, MessageCircle, X, Activity, Trophy, Medal,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useQuery } from '@tanstack/react-query';
@@ -18,6 +18,7 @@ const coachNav = [
   { to: '/comunicacion', label: 'Comunicación',     icon: MessageSquare },
   { to: '/chat',         label: 'Chat privado',     icon: MessageCircle },
   { to: '/actividades',  label: 'Actividades',      icon: Activity },
+  { to: '/competencias', label: 'Competencias',     icon: Medal },
   { to: '/perfil',       label: 'Mi perfil',        icon: User },
   { to: '/configuracion', label: 'Configuración',   icon: Settings },
 ];
@@ -26,6 +27,8 @@ const runnerNav = [
   { to: '/',              label: 'Mi inicio',       icon: LayoutDashboard },
   { to: '/planes',        label: 'Mis planes',      icon: ClipboardList },
   { to: '/actividades',   label: 'Actividades',     icon: Activity },
+  { to: '/logros',        label: 'Logros',          icon: Trophy },
+  { to: '/competencias',  label: 'Competencias',    icon: Medal },
   { to: '/eventos',       label: 'Eventos',         icon: Calendar },
   { to: '/pagos',         label: 'Mis pagos',       icon: CreditCard },
   { to: '/tienda',        label: 'Tienda',          icon: ShoppingBag },

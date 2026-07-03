@@ -180,4 +180,14 @@ export const integrationsApi = {
   deleteActivity:     (id: number)   => api.delete(`/integrations/activities/${id}`),
 };
 
+export const gamificationApi = {
+  badges:       ()                => api.get('/gamification/badges'),
+  runnerBadges: (runnerId: number) => api.get(`/gamification/badges/${runnerId}`),
+  ranking:      (params: { scope: string; groupId?: number; metric?: string }) =>
+    api.get('/gamification/ranking', { params }),
+  challenges:   ()                => api.get('/gamification/challenges'),
+  createChallenge: (d: object)    => api.post('/gamification/challenges', d),
+  deleteChallenge: (id: number)   => api.delete(`/gamification/challenges/${id}`),
+};
+
 export default api;

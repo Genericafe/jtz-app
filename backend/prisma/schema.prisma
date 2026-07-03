@@ -75,6 +75,7 @@ model Runner {
   communicationLogs  CommunicationLog[]
   activityLogs       ActivityLog[]
   groupMemberships   RunnerGroupMember[]
+  badges             RunnerBadge[]
 }
 
 model RunnerGroup {
@@ -87,6 +88,27 @@ model RunnerGroup {
 
   members         RunnerGroupMember[]
   planAssignments TrainingPlanAssignment[]
+  challenges      Challenge[]
+}
+
+// Retos/competencias creados por el coach. Los participantes son, de forma
+// automática, todos los corredores dentro del alcance (club o grupo); la tabla
+// de posiciones se calcula al vuelo desde ActivityLog en el rango de fechas.
+model Challenge {
+  id          Int          @id @default(autoincrement())
+  nombre      String
+  descripcion String?
+  metrica     String       @default("km")   // "km" | "elevacion" | "actividades"
+  meta        Float?                          // objetivo opcional (ej. 100 km)
+  fechaInicio DateTime
+  fechaFin    DateTime
+  scope       String       @default("club")  // "club" | "group"
+  groupId     Int?
+  group       RunnerGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  createdBy   Int?                            // coach userId
+  createdAt   DateTime     @default(now())
+
+  @@index([scope, groupId])
 }
 
 model RunnerGroupMember {
@@ -128,10 +150,24 @@ model ActivityLog {
   potenciaPromedio30s Int?
   gpxContent    String?      @db.Text
   gpxNombre     String?
+  ciudad        String?      // ciudad del punto de inicio (reverse geocoding) — insignia de ciudades
   notas         String?
   confirmadoPorCoach Boolean  @default(false)
   confirmedAt   DateTime?
   createdAt     DateTime     @default(now())
+}
+
+// Insignias ganadas por corredor. Las definiciones (umbrales, nombre, icono)
+// viven en código (services/badges.ts); aquí solo se guarda cuál ganó cada quien.
+model RunnerBadge {
+  id        Int      @id @default(autoincrement())
+  runnerId  Int
+  runner    Runner   @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  badgeId   String   // id de la definición, ej. "km_100", "ciudad_5", "single_21k"
+  earnedAt  DateTime @default(now())
+
+  @@unique([runnerId, badgeId])
+  @@index([runnerId])
 }
 
 model CommunicationLog {

@@ -23,6 +23,8 @@ import PaymentSuccess from './pages/PaymentSuccess';
 import Chat from './pages/Chat';
 import RecordActivity from './pages/RecordActivity';
 import ActivitiesHub from './pages/ActivitiesHub';
+import Badges from './pages/Badges';
+import Competitions from './pages/Competitions';
 import { initPush } from './services/pushService';
 
 // Initializes push notifications once user is logged in (needs navigate hook)
@@ -65,6 +67,8 @@ export default function App() {
             <Route path="/chat" element={<Chat />} />
             <Route path="/chat/:runnerId" element={<Chat />} />
             <Route path="/actividades" element={<ActivitiesHub />} />
+            <Route path="/logros" element={<Badges />} />
+            <Route path="/competencias" element={<Competitions />} />
             {/* Rutas merged into Actividades — keep the old path working */}
             <Route path="/rutas" element={<Navigate to="/actividades?tab=rutas" replace />} />
           </Route>
