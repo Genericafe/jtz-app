@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Trophy } from 'lucide-react';
+import { Trophy, Smartphone } from 'lucide-react';
 
 export default function Login() {
   const { login } = useAuth();
@@ -90,6 +90,18 @@ export default function Login() {
             </p>
           </div>
         </form>
+
+        <a
+          href="/JTZ-app.apk"
+          download
+          className="mt-4 flex items-center justify-center gap-2 w-full py-3 rounded-xl border border-brand-500/30 bg-brand-500/10 text-brand-300 hover:bg-brand-500/20 transition-colors text-sm font-semibold"
+        >
+          <Smartphone size={16} />
+          Descargar app para Android
+        </a>
+        <p className="text-center text-xs text-gray-600 mt-2">
+          Para instalarla, activa "Instalar de fuentes desconocidas" en tu teléfono.
+        </p>
       </div>
     </div>
   );
