@@ -178,7 +178,7 @@ export default function Layout() {
             <div className="w-7 h-7 rounded-xl bg-hero flex items-center justify-center shadow-glow-sm">
               <Zap size={13} className="text-white" fill="white" />
             </div>
-            <span className="font-black text-white tracking-tight">JTZ</span>
+            <span className="heading-display text-xl leading-none text-white">JTZ</span>
             <span className="text-xs text-gray-500 hidden sm:block">Running Club</span>
           </div>
         </div>

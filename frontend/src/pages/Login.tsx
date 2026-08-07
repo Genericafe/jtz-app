@@ -27,14 +27,22 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-surface-900 flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
+    <div className="relative min-h-screen bg-surface-900 flex items-center justify-center px-4 overflow-hidden">
+      {/* Cinematic backdrop: topographic texture + azure glow */}
+      <div className="absolute inset-0 topo-bg opacity-60" />
+      <div className="absolute inset-0 bg-glow-green" />
+      <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[420px] h-[420px] rounded-full bg-brand-500/20 blur-[120px]" />
+
+      <div className="relative w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-hero mb-4 shadow-glow">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-hero mb-5 shadow-glow">
             <Trophy size={32} className="text-white" />
           </div>
-          <h1 className="text-3xl font-black gradient-text">JTZ</h1>
-          <p className="text-gray-500 mt-1">Running Club · México</p>
+          <h1 className="heading-display text-6xl leading-none gradient-text">JTZ</h1>
+          <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.35em] text-brand-300">
+            Trail · Ruta · Comunidad
+          </p>
+          <p className="text-gray-500 text-sm mt-2">Running Club · México</p>
         </div>
 
         <form onSubmit={handleSubmit} className="card p-8 space-y-5">

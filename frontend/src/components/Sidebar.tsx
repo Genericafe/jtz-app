@@ -118,7 +118,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             <Zap size={20} className="text-white" fill="white" />
           </div>
           <div>
-            <p className="text-xl font-black tracking-tight gradient-text">JTZ</p>
+            <p className="heading-display text-2xl leading-none gradient-text">JTZ</p>
             <p className="text-xs text-gray-500 -mt-0.5">Running Club</p>
           </div>
         </div>

@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -9,6 +11,11 @@
     @apply bg-surface-900 text-white;
     font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
+  }
+  /* UTMB-style athletic headings: condensed Oswald across the app */
+  h1, h2, h3 {
+    font-family: 'Oswald', 'Inter', ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: 0.01em;
   }
   ::-webkit-scrollbar { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -39,12 +46,19 @@
   .gradient-text {
     @apply bg-clip-text text-transparent bg-hero;
   }
+  /* Condensed uppercase display heading — UTMB editorial look */
+  .heading-display {
+    font-family: 'Oswald', 'Inter', sans-serif;
+    @apply font-bold uppercase tracking-wide;
+  }
 }
 
 @layer utilities {
   .border-glass { border-color: rgba(255,255,255,0.06); }
   .bg-glass { background: rgba(255,255,255,0.03); }
   .text-balance { text-wrap: balance; }
+  /* Topographic contour texture overlay for hero/section backgrounds */
+  .topo-bg { background-image: theme('backgroundImage.topo'); background-size: 400px 400px; }
 }
 
 /* Fix browser autofill overriding background to white */
@@ -53,11 +67,11 @@ input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
 input:-webkit-autofill:active {
   -webkit-text-fill-color: #ffffff !important;
-  -webkit-box-shadow: 0 0 0px 1000px #191c22 inset !important;
+  -webkit-box-shadow: 0 0 0px 1000px #1a2338 inset !important;
   transition: background-color 5000s ease-in-out 0s;
 }
 
 select option {
-  background-color: #191c22;
+  background-color: #1a2338;
   color: #ffffff;
 }
