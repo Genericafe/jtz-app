@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, memo } from 'react';
 import maplibregl from 'maplibre-gl';
-import { LocateFixed } from 'lucide-react';
+import { LocateFixed, Navigation2, Layers, Plus, Minus, AlertTriangle } from 'lucide-react';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 export interface MapPoint { lat: number; lng: number; accuracy?: number }
@@ -14,31 +14,55 @@ interface Props {
 }
 
 const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY ?? '';
-const STYLE_URL = `https://api.maptiler.com/maps/streets-v2-dark/style.json?key=${MAPTILER_KEY}`;
+const STYLES = {
+  outdoor:   { label: 'Outdoor',  url: `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${MAPTILER_KEY}` },
+  satellite: { label: 'Satélite', url: `https://api.maptiler.com/maps/hybrid/style.json?key=${MAPTILER_KEY}` },
+  dark:      { label: 'Oscuro',   url: `https://api.maptiler.com/maps/streets-v2-dark/style.json?key=${MAPTILER_KEY}` },
+} as const;
+type StyleKey = keyof typeof STYLES;
+const STYLE_ORDER: StyleKey[] = ['outdoor', 'satellite', 'dark'];
+
+const NAV_ZOOM = 16.8;
+const NAV_PITCH = 55;
+const OFF_ROUTE_M = 30;
 
 const lineFeature = (points: MapPoint[]) => ({
   type: 'Feature' as const,
   geometry: { type: 'LineString' as const, coordinates: points.map(p => [p.lng, p.lat]) },
   properties: {},
 });
-
 const emptyLine = () => ({
   type: 'Feature' as const,
   geometry: { type: 'LineString' as const, coordinates: [] as number[][] },
   properties: {},
 });
-
 const pointFeature = (p: MapPoint) => ({
   type: 'Feature' as const,
   geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] },
   properties: {},
 });
-
 const emptyPoint = () => ({
   type: 'Feature' as const,
   geometry: { type: 'Point' as const, coordinates: [0, 0] },
   properties: { hidden: true },
 });
+
+// ── Geo helpers ──────────────────────────────────────────────────────────────
+function haversine(a: MapPoint, b: MapPoint): number {
+  const R = 6371000, toR = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * toR, dLng = (b.lng - a.lng) * toR;
+  const la1 = a.lat * toR, la2 = b.lat * toR;
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+function bearingOf(a: MapPoint, b: MapPoint): number {
+  const toR = Math.PI / 180, toD = 180 / Math.PI;
+  const dLng = (b.lng - a.lng) * toR;
+  const la1 = a.lat * toR, la2 = b.lat * toR;
+  const y = Math.sin(dLng) * Math.cos(la2);
+  const x = Math.cos(la1) * Math.sin(la2) - Math.sin(la1) * Math.cos(la2) * Math.cos(dLng);
+  return (Math.atan2(y, x) * toD + 360) % 360;
+}
 
 /** Closest point index on the route ahead of current position */
 function closestAheadIdx(route: MapPoint[], pos: MapPoint, pastIdx: number): number {
@@ -49,8 +73,29 @@ function closestAheadIdx(route: MapPoint[], pos: MapPoint, pastIdx: number): num
     const d = dx * dx + dy * dy;
     if (d < minDist) { minDist = d; best = i; }
   }
-  // Pick a point slightly ahead so the marker is in front of the user
   return Math.min(best + 5, route.length - 1);
+}
+
+interface Guidance { offRoute: boolean; remainingKm: number; turnDist: number | null }
+
+/** Route progress: distance to nearest point (off-route check), remaining
+ *  distance along the route, and distance to the next significant turn. */
+function computeGuidance(route: MapPoint[], pos: MapPoint, idx: number): Guidance {
+  let nearest = Infinity;
+  for (let i = Math.max(0, idx - 8); i < Math.min(route.length, idx + 8); i++) {
+    nearest = Math.min(nearest, haversine(pos, route[i]));
+  }
+  let remaining = haversine(pos, route[idx]);
+  for (let i = idx; i < route.length - 1; i++) remaining += haversine(route[i], route[i + 1]);
+
+  let turnDist: number | null = null, acc = 0;
+  for (let i = idx; i < route.length - 2 && acc < 1500; i++) {
+    acc += haversine(route[i], route[i + 1]);
+    let diff = Math.abs(bearingOf(route[i + 1], route[i + 2]) - bearingOf(route[i], route[i + 1]));
+    if (diff > 180) diff = 360 - diff;
+    if (diff > 35) { turnDist = acc; break; }
+  }
+  return { offRoute: nearest > OFF_ROUTE_M, remainingKm: remaining / 1000, turnDist };
 }
 
 const LiveTrackingMap = memo(function LiveTrackingMap({
@@ -61,217 +106,210 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
   const autoFollowRef   = useRef(true);
   const readyRef        = useRef(false);
   const routeIdxRef     = useRef(0);
+  const posMarkerRef    = useRef<maplibregl.Marker | null>(null);
   const startMarkerRef  = useRef<maplibregl.Marker | null>(null);
   const endMarkerRef    = useRef<maplibregl.Marker | null>(null);
-  const posMarkerRef    = useRef<maplibregl.Marker | null>(null);
   const lastTrackDrawRef = useRef(0);
   const lastFollowRef    = useRef(0);
   const followTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const currentPosRef    = useRef(currentPos);
-  currentPosRef.current  = currentPos;
+
+  // Latest data mirrored in refs so style re-installs / camera logic can read it.
+  const trackRef   = useRef(track);        trackRef.current = track;
+  const routeRef   = useRef(referenceRoute); routeRef.current = referenceRoute;
+  const currentPosRef = useRef(currentPos); currentPosRef.current = currentPos;
+  const headingRef = useRef(heading);      headingRef.current = heading;
+  const navModeRef = useRef(true);
+
   const [mapLoaded, setMapLoaded] = useState(false);
   const [following, setFollowing] = useState(true);
+  const [navMode, setNavMode]     = useState(true);
+  const [styleKey, setStyleKey]   = useState<StyleKey>('outdoor');
+  const [guidance, setGuidance]   = useState<Guidance | null>(null);
 
-  // Re-enable camera follow and snap back to the current position. Shown as a
-  // floating button whenever the user has panned away from auto-follow.
+  // ── Install our sources/layers/markers on top of the base style. Re-run after
+  //    a style switch (setStyle wipes custom layers; DOM markers survive). ──────
+  const installOverlays = (map: maplibregl.Map) => {
+    if (map.getSource('ref-route')) return; // already installed for this style
+    const route = routeRef.current;
+
+    map.addSource('ref-route', {
+      type: 'geojson',
+      data: (route && route.length >= 2 ? lineFeature(route) : emptyLine()) as any,
+    });
+    map.addLayer({
+      id: 'ref-route-casing', type: 'line', source: 'ref-route',
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': '#1d4ed8', 'line-width': 11, 'line-opacity': 0.35, 'line-blur': 4 },
+    });
+    map.addLayer({
+      id: 'ref-route-line', type: 'line', source: 'ref-route',
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': '#60a5fa', 'line-width': 6, 'line-opacity': 0.97 },
+    });
+
+    map.addSource('next-point', { type: 'geojson', data: emptyPoint() as any });
+    map.addLayer({
+      id: 'next-point-glow', type: 'circle', source: 'next-point',
+      filter: ['!=', ['get', 'hidden'], true],
+      paint: { 'circle-radius': 22, 'circle-color': '#60a5fa', 'circle-opacity': 0.2, 'circle-blur': 1 },
+    });
+    map.addLayer({
+      id: 'next-point-dot', type: 'circle', source: 'next-point',
+      filter: ['!=', ['get', 'hidden'], true],
+      paint: { 'circle-radius': 8, 'circle-color': '#93c5fd', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 },
+    });
+
+    map.addSource('live-track', {
+      type: 'geojson',
+      data: (trackRef.current.length >= 2 ? lineFeature(trackRef.current) : emptyLine()) as any,
+    });
+    map.addLayer({
+      id: 'live-track-casing', type: 'line', source: 'live-track',
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': '#14532d', 'line-width': 11, 'line-opacity': 0.45 },
+    });
+    map.addLayer({
+      id: 'live-track-line', type: 'line', source: 'live-track',
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': '#22c55e', 'line-width': 6, 'line-opacity': 1 },
+    });
+
+    const t = trackRef.current;
+    const pos = currentPosRef.current ?? (t.length ? t[t.length - 1] : null);
+    map.addSource('current-pos', {
+      type: 'geojson',
+      data: (pos ? pointFeature(pos) : emptyPoint()) as any,
+    });
+    map.addLayer({
+      id: 'pos-accuracy', type: 'circle', source: 'current-pos',
+      paint: { 'circle-radius': 28, 'circle-color': '#3b82f6', 'circle-opacity': 0.1 },
+    });
+
+    // Start/end flags + position marker are DOM markers → add once, they survive
+    // style switches.
+    if (route && route.length >= 2 && !startMarkerRef.current) {
+      const { start, end } = makeRouteMarkers(route);
+      startMarkerRef.current = start.addTo(map);
+      endMarkerRef.current   = end.addTo(map);
+    }
+    if (pos && !posMarkerRef.current) {
+      posMarkerRef.current = new maplibregl.Marker({ element: makeHeadingEl(), rotationAlignment: 'map' })
+        .setLngLat([pos.lng, pos.lat]).addTo(map);
+    }
+  };
+
   const recenter = () => {
     autoFollowRef.current = true;
     setFollowing(true);
-    const map = mapRef.current;
-    if (map && currentPos) map.easeTo({ center: [currentPos.lng, currentPos.lat], duration: 400 });
+    const map = mapRef.current, pos = currentPosRef.current;
+    if (map && pos) {
+      map.easeTo({
+        center: [pos.lng, pos.lat],
+        bearing: navModeRef.current ? (headingRef.current ?? map.getBearing()) : 0,
+        pitch: navModeRef.current ? NAV_PITCH : 0,
+        zoom: navModeRef.current ? NAV_ZOOM : map.getZoom(),
+        duration: 500,
+      });
+    }
   };
 
-  // ── Map initialisation (runs once) ────────────────────────────────────────
+  const toggleNav = () => {
+    const on = !navMode;
+    setNavMode(on); navModeRef.current = on;
+    autoFollowRef.current = true; setFollowing(true);
+    const map = mapRef.current, pos = currentPosRef.current;
+    if (!map) return;
+    map.easeTo({
+      center: pos ? [pos.lng, pos.lat] : map.getCenter(),
+      bearing: on ? (headingRef.current ?? 0) : 0,
+      pitch: on ? NAV_PITCH : 0,
+      zoom: on ? NAV_ZOOM : Math.min(map.getZoom(), 15.5),
+      duration: 600,
+    });
+  };
+
+  const cycleStyle = () => {
+    const next = STYLE_ORDER[(STYLE_ORDER.indexOf(styleKey) + 1) % STYLE_ORDER.length];
+    setStyleKey(next);
+    const map = mapRef.current;
+    if (!map) return;
+    map.setStyle(STYLES[next].url);
+    map.once('styledata', () => installOverlays(map));
+  };
+
+  const zoomBy = (d: number) => mapRef.current?.easeTo({ zoom: (mapRef.current.getZoom() ?? 15) + d, duration: 250 });
+
+  // ── Map init (once) ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
     const startCenter: [number, number] =
-      referenceRoute && referenceRoute.length > 0
-        ? [referenceRoute[0].lng, referenceRoute[0].lat]
-        : currentPos
-          ? [currentPos.lng, currentPos.lat]
-          : [-99.133, 19.432];
+      referenceRoute?.length ? [referenceRoute[0].lng, referenceRoute[0].lat]
+      : currentPos ? [currentPos.lng, currentPos.lat]
+      : [-99.133, 19.432];
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: STYLE_URL,
+      style: STYLES.outdoor.url,
       center: startCenter,
-      zoom: 15,
+      zoom: NAV_ZOOM,
+      pitch: NAV_PITCH,
       attributionControl: false,
       pitchWithRotate: false,
     });
-
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
-    // Panning disables auto-follow so the user can look around — but only
-    // temporarily: re-enable it a few seconds after they stop, so the map goes
-    // back to tracking the cursor on its own (no need to hunt for a button).
+
+    // Panning temporarily disables follow; re-enable a few seconds after release.
     map.on('dragstart', () => {
-      autoFollowRef.current = false;
-      setFollowing(false);
+      autoFollowRef.current = false; setFollowing(false);
       if (followTimerRef.current) clearTimeout(followTimerRef.current);
     });
     map.on('dragend', () => {
       if (followTimerRef.current) clearTimeout(followTimerRef.current);
-      followTimerRef.current = setTimeout(() => {
-        autoFollowRef.current = true;
-        setFollowing(true);
-        const pos = currentPosRef.current;
-        if (mapRef.current && pos) mapRef.current.easeTo({ center: [pos.lng, pos.lat], duration: 500 });
-      }, 5000);
+      followTimerRef.current = setTimeout(recenter, 5000);
     });
-
-    // Center on real GPS when no reference route available
-    if (!referenceRoute?.length && !currentPos && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          if (!mapRef.current) return;
-          mapRef.current.setCenter([pos.coords.longitude, pos.coords.latitude]);
-        },
-        () => {},
-        { timeout: 8000, maximumAge: 60000 },
-      );
-    }
 
     map.on('load', () => {
       readyRef.current = true;
       setMapLoaded(true);
-
-      // ── Reference route ──────────────────────────────────────────────────
-      map.addSource('ref-route', {
-        type: 'geojson',
-        data: (referenceRoute && referenceRoute.length >= 2
-          ? lineFeature(referenceRoute) : emptyLine()) as any,
-      });
-      // Outer glow/casing
-      map.addLayer({
-        id: 'ref-route-casing',
-        type: 'line',
-        source: 'ref-route',
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': '#1d4ed8', 'line-width': 10, 'line-opacity': 0.35, 'line-blur': 4 },
-      });
-      // Main route line
-      map.addLayer({
-        id: 'ref-route-line',
-        type: 'line',
-        source: 'ref-route',
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': '#60a5fa', 'line-width': 5, 'line-opacity': 0.95 },
-      });
-
-      // Next-waypoint pulsing marker
-      map.addSource('next-point', { type: 'geojson', data: emptyPoint() as any });
-      map.addLayer({
-        id: 'next-point-glow',
-        type: 'circle',
-        source: 'next-point',
-        filter: ['!=', ['get', 'hidden'], true],
-        paint: { 'circle-radius': 22, 'circle-color': '#60a5fa', 'circle-opacity': 0.2, 'circle-blur': 1 },
-      });
-      map.addLayer({
-        id: 'next-point-dot',
-        type: 'circle',
-        source: 'next-point',
-        filter: ['!=', ['get', 'hidden'], true],
-        paint: {
-          'circle-radius': 8, 'circle-color': '#93c5fd',
-          'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2,
-        },
-      });
-
-      // Place start/end markers if route already loaded
-      if (referenceRoute && referenceRoute.length >= 2) {
-        placeRouteMarkers(map, referenceRoute);
-        fitRoute(map, referenceRoute);
-      }
-
-      // ── Live track ───────────────────────────────────────────────────────
-      map.addSource('live-track', {
-        type: 'geojson',
-        data: (track.length >= 2 ? lineFeature(track) : emptyLine()) as any,
-      });
-      map.addLayer({
-        id: 'live-track-casing',
-        type: 'line',
-        source: 'live-track',
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': '#14532d', 'line-width': 10, 'line-opacity': 0.4 },
-      });
-      map.addLayer({
-        id: 'live-track-line',
-        type: 'line',
-        source: 'live-track',
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': '#22c55e', 'line-width': 5, 'line-opacity': 1 },
-      });
-
-      // ── Current position ─────────────────────────────────────────────────
-      const initPos = currentPos ?? (track.length > 0 ? track[track.length - 1] : null);
-      map.addSource('current-pos', {
-        type: 'geojson',
-        data: (initPos ? pointFeature(initPos) : {
-          type: 'Feature', geometry: { type: 'Point', coordinates: startCenter }, properties: {},
-        }) as any,
-      });
-      map.addLayer({
-        id: 'pos-accuracy',
-        type: 'circle',
-        source: 'current-pos',
-        paint: { 'circle-radius': 28, 'circle-color': '#3b82f6', 'circle-opacity': 0.1 },
-      });
-      map.addLayer({
-        id: 'pos-glow',
-        type: 'circle',
-        source: 'current-pos',
-        paint: { 'circle-radius': 16, 'circle-color': '#3b82f6', 'circle-opacity': 0.2 },
-      });
-      // The solid dot + heading cone is a DOM marker (rotates with the compass).
-      const initPos2 = currentPos ?? (track.length > 0 ? track[track.length - 1] : null);
-      if (initPos2) {
-        posMarkerRef.current = new maplibregl.Marker({
-          element: makeHeadingEl(),
-          rotationAlignment: 'map',
-        }).setLngLat([initPos2.lng, initPos2.lat]).addTo(map);
-      }
+      installOverlays(map);
+      if (routeRef.current && routeRef.current.length >= 2) fitRoute(map, routeRef.current);
     });
 
     mapRef.current = map;
     return () => {
       readyRef.current = false;
       if (followTimerRef.current) clearTimeout(followTimerRef.current);
+      posMarkerRef.current?.remove();
       startMarkerRef.current?.remove();
       endMarkerRef.current?.remove();
-      posMarkerRef.current?.remove();
-      posMarkerRef.current = null;
+      posMarkerRef.current = startMarkerRef.current = endMarkerRef.current = null;
       map.remove();
       mapRef.current = null;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Update reference route when data arrives (async query) ────────────────
+  // ── Reference route arrives (async) ────────────────────────────────────────
   useEffect(() => {
     if (!readyRef.current || !mapRef.current) return;
     const map = mapRef.current;
     const source = map.getSource('ref-route') as maplibregl.GeoJSONSource | undefined;
     if (!source) return;
-
     if (referenceRoute && referenceRoute.length >= 2) {
       source.setData(lineFeature(referenceRoute) as any);
-      startMarkerRef.current?.remove();
-      endMarkerRef.current?.remove();
-      placeRouteMarkers(map, referenceRoute);
-      fitRoute(map, referenceRoute);
+      startMarkerRef.current?.remove(); endMarkerRef.current?.remove();
+      const { start, end } = makeRouteMarkers(referenceRoute);
+      startMarkerRef.current = start.addTo(map);
+      endMarkerRef.current   = end.addTo(map);
+      if (!navMode) fitRoute(map, referenceRoute);
     } else {
       source.setData(emptyLine() as any);
-      startMarkerRef.current?.remove();
-      endMarkerRef.current?.remove();
+      startMarkerRef.current?.remove(); endMarkerRef.current?.remove();
+      startMarkerRef.current = endMarkerRef.current = null;
     }
   }, [referenceRoute]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Update live track (throttled) ──────────────────────────────────────────
-  // Rebuilding the whole polyline on every GPS point is O(n) and gets heavy on
-  // long runs. Redraw at most ~once/sec; the line lags by <1s, imperceptible.
+  // ── Live track (throttled redraw) ──────────────────────────────────────────
   useEffect(() => {
     if (!readyRef.current || !mapRef.current || track.length < 2) return;
     const now = Date.now();
@@ -281,7 +319,7 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
       ?.setData(lineFeature(track) as any);
   }, [track]);
 
-  // ── Update current position + next-waypoint ────────────────────────────────
+  // ── Current position + camera + route guidance ─────────────────────────────
   useEffect(() => {
     if (!currentPos || !mapRef.current || !readyRef.current) return;
     const map = mapRef.current;
@@ -289,53 +327,51 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
     (map.getSource('current-pos') as maplibregl.GeoJSONSource | undefined)
       ?.setData(pointFeature(currentPos) as any);
 
-    // Move + rotate the heading cone marker (north-up map, rotating arrow).
     if (!posMarkerRef.current) {
-      posMarkerRef.current = new maplibregl.Marker({
-        element: makeHeadingEl(),
-        rotationAlignment: 'map',
-      }).setLngLat([currentPos.lng, currentPos.lat]).addTo(map);
+      posMarkerRef.current = new maplibregl.Marker({ element: makeHeadingEl(), rotationAlignment: 'map' })
+        .setLngLat([currentPos.lng, currentPos.lat]).addTo(map);
     }
     posMarkerRef.current.setLngLat([currentPos.lng, currentPos.lat]);
     const beam = posMarkerRef.current.getElement().querySelector('.jtz-beam') as HTMLElement | null;
     if (heading != null) {
       posMarkerRef.current.setRotation(heading);
       if (beam) beam.style.opacity = '1';
-    } else if (beam) {
-      beam.style.opacity = '0'; // no heading yet → just the dot
-    }
+    } else if (beam) { beam.style.opacity = '0'; }
 
+    // Camera follow (throttled). Nav mode rotates the map to the heading + tilts.
     if (autoFollowRef.current) {
-      // Throttle camera moves so we're not animating continuously (saves CPU/GPU
-      // and keeps it smooth on phones). Snap if the point is far off-screen.
       const now = Date.now();
-      const center = map.getCenter();
-      const far = Math.abs(center.lng - currentPos.lng) > 0.004 || Math.abs(center.lat - currentPos.lat) > 0.004;
-      if (far) {
-        map.jumpTo({ center: [currentPos.lng, currentPos.lat] });
-        lastFollowRef.current = now;
-      } else if (now - lastFollowRef.current > 1200) {
-        map.easeTo({ center: [currentPos.lng, currentPos.lat], duration: 500 });
+      const c = map.getCenter();
+      const far = Math.abs(c.lng - currentPos.lng) > 0.004 || Math.abs(c.lat - currentPos.lat) > 0.004;
+      if (far || now - lastFollowRef.current > 700) {
+        const opts: maplibregl.EaseToOptions = { center: [currentPos.lng, currentPos.lat], duration: far ? 0 : 600 };
+        if (navModeRef.current && heading != null) { opts.bearing = heading; opts.pitch = NAV_PITCH; }
+        map.easeTo(opts);
         lastFollowRef.current = now;
       }
     }
 
-    // Update next-waypoint marker
+    // Route guidance (next-point marker + HUD)
     if (referenceRoute && referenceRoute.length >= 2) {
       routeIdxRef.current = closestAheadIdx(referenceRoute, currentPos, routeIdxRef.current);
       const next = referenceRoute[routeIdxRef.current];
       (map.getSource('next-point') as maplibregl.GeoJSONSource | undefined)
-        ?.setData({
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: [next.lng, next.lat] },
-          properties: {},
-        } as any);
+        ?.setData(pointFeature(next) as any);
+      setGuidance(computeGuidance(referenceRoute, currentPos, routeIdxRef.current));
     }
   }, [currentPos]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const btn: React.CSSProperties = {
+    width: 52, height: 52, borderRadius: 16, border: '1px solid rgba(255,255,255,0.14)',
+    background: 'rgba(17,19,21,0.92)', color: '#e5e7eb', display: 'flex',
+    alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+    boxShadow: '0 2px 12px rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)',
+  };
 
   return (
     <div className={className} style={{ position: 'relative', width: '100%', height: '100%', background: '#0f1115' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+
       {!mapLoaded && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center', gap: 12, background: '#0f1115', color: '#9ca3af' }}>
@@ -346,21 +382,57 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
         </div>
       )}
 
-      {/* Recenter button — appears once the user pans away from auto-follow */}
-      {mapLoaded && !following && (
-        <button
-          onClick={recenter}
-          aria-label="Centrar en mi posición"
-          style={{
-            position: 'absolute', right: 12, bottom: 90, width: 44, height: 44,
-            borderRadius: '50%', border: '1px solid rgba(255,255,255,0.15)',
-            background: 'rgba(17,19,21,0.92)', color: '#3b82f6',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 2px 10px rgba(0,0,0,0.4)', cursor: 'pointer',
-          }}
-        >
-          <LocateFixed size={22} />
-        </button>
+      {/* ── Route guidance HUD (only with a reference route) ── */}
+      {mapLoaded && guidance && (
+        <div style={{
+          position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
+          maxWidth: '90%', padding: '8px 16px', borderRadius: 14,
+          background: guidance.offRoute ? 'rgba(220,38,38,0.95)' : 'rgba(17,19,21,0.92)',
+          border: `1px solid ${guidance.offRoute ? '#fca5a5' : 'rgba(255,255,255,0.14)'}`,
+          color: '#fff', display: 'flex', alignItems: 'center', gap: 8,
+          boxShadow: '0 2px 14px rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', whiteSpace: 'nowrap',
+        }}>
+          {guidance.offRoute ? (
+            <><AlertTriangle size={16} /> <span style={{ fontWeight: 700, fontSize: 14 }}>Fuera de ruta — vuelve al camino</span></>
+          ) : (
+            <span style={{ fontSize: 14, fontWeight: 600 }}>
+              🏁 Faltan {guidance.remainingKm.toFixed(2)} km
+              {guidance.turnDist != null && (
+                <span style={{ color: '#93c5fd' }}>{'  ·  '}Vuelta en {Math.round(guidance.turnDist)} m</span>
+              )}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* ── Controls (big, touch-friendly) ── */}
+      {mapLoaded && (
+        <div style={{ position: 'absolute', right: 12, bottom: 96, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button onClick={toggleNav} aria-label="Modo navegación"
+            style={{ ...btn, color: navMode ? '#22c55e' : '#e5e7eb',
+              borderColor: navMode ? 'rgba(34,197,94,0.5)' : 'rgba(255,255,255,0.14)' }}>
+            <Navigation2 size={24} style={{ fill: navMode ? '#22c55e' : 'none' }} />
+          </button>
+          <button onClick={cycleStyle} aria-label={`Estilo: ${STYLES[styleKey].label}`} style={btn}>
+            <Layers size={22} />
+          </button>
+          <button onClick={() => zoomBy(1)} aria-label="Acercar" style={btn}><Plus size={24} /></button>
+          <button onClick={() => zoomBy(-1)} aria-label="Alejar" style={btn}><Minus size={24} /></button>
+          {!following && (
+            <button onClick={recenter} aria-label="Centrar en mi posición" style={{ ...btn, color: '#3b82f6' }}>
+              <LocateFixed size={24} />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Style name flash */}
+      {mapLoaded && (
+        <div style={{ position: 'absolute', left: 12, bottom: 96, padding: '6px 12px', borderRadius: 12,
+          background: 'rgba(17,19,21,0.85)', border: '1px solid rgba(255,255,255,0.12)', color: '#9ca3af',
+          fontSize: 12, fontWeight: 600, backdropFilter: 'blur(6px)' }}>
+          {STYLES[styleKey].label}
+        </div>
       )}
     </div>
   );
@@ -368,52 +440,39 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
 
 export default LiveTrackingMap;
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-// Google-Maps-style position marker: a solid blue dot with a directional cone
-// ("beam") pointing in the direction of travel / compass heading. The beam is
-// rotated by maplibregl's setRotation; opacity is toggled when no heading.
+// ── Marker helpers ───────────────────────────────────────────────────────────
 function makeHeadingEl(): HTMLDivElement {
   const el = document.createElement('div');
-  el.style.width = '0';
-  el.style.height = '0';
+  el.style.width = '0'; el.style.height = '0';
   el.innerHTML = `
     <div style="position:relative;width:0;height:0;">
       <div class="jtz-beam" style="
-        position:absolute;left:-15px;top:-34px;width:30px;height:34px;opacity:0;
-        background:linear-gradient(to top, rgba(59,130,246,0.6), rgba(59,130,246,0));
+        position:absolute;left:-17px;top:-38px;width:34px;height:38px;opacity:0;
+        background:linear-gradient(to top, rgba(59,130,246,0.65), rgba(59,130,246,0));
         clip-path:polygon(50% 0, 100% 100%, 0 100%);
         transition:opacity .3s ease;pointer-events:none;"></div>
       <div style="
-        position:absolute;left:-9px;top:-9px;width:18px;height:18px;border-radius:50%;
-        background:#3b82f6;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.45);"></div>
+        position:absolute;left:-10px;top:-10px;width:20px;height:20px;border-radius:50%;
+        background:#3b82f6;border:3px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.5);"></div>
     </div>`;
   return el;
 }
 
-function placeRouteMarkers(map: maplibregl.Map, route: MapPoint[]) {
-  // Start — green flag
+function makeRouteMarkers(route: MapPoint[]): { start: maplibregl.Marker; end: maplibregl.Marker } {
   const startEl = document.createElement('div');
   startEl.innerHTML = `<div style="width:32px;height:32px;background:#22c55e;border:3px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.4);font-size:14px;">▶</div>`;
-  new maplibregl.Marker({ element: startEl })
-    .setLngLat([route[0].lng, route[0].lat])
-    .addTo(map);
-
-  // End — red flag
   const endEl = document.createElement('div');
   endEl.innerHTML = `<div style="width:32px;height:32px;background:#ef4444;border:3px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.4);font-size:14px;">⬛</div>`;
-  new maplibregl.Marker({ element: endEl })
-    .setLngLat([route[route.length - 1].lng, route[route.length - 1].lat])
-    .addTo(map);
+  return {
+    start: new maplibregl.Marker({ element: startEl }).setLngLat([route[0].lng, route[0].lat]),
+    end:   new maplibregl.Marker({ element: endEl }).setLngLat([route[route.length - 1].lng, route[route.length - 1].lat]),
+  };
 }
 
 function fitRoute(map: maplibregl.Map, route: MapPoint[]) {
   const bounds = route.reduce(
     (b, p) => b.extend([p.lng, p.lat] as [number, number]),
-    new maplibregl.LngLatBounds(
-      [route[0].lng, route[0].lat],
-      [route[0].lng, route[0].lat],
-    ),
+    new maplibregl.LngLatBounds([route[0].lng, route[0].lat], [route[0].lng, route[0].lat]),
   );
   map.fitBounds(bounds, { padding: 60, maxZoom: 17, duration: 800 });
 }
