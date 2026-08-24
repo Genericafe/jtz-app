@@ -267,6 +267,29 @@ export async function sendBulkUpdate(opts: {
   }
 }
 
+export async function sendPasswordReset(opts: {
+  to: string; nombre: string; resetUrl: string; coachUserId?: number;
+}): Promise<void> {
+  const { send, from } = await getSender(opts.coachUserId);
+  await send({
+    from,
+    to: opts.to,
+    subject: '🔑 Restablece tu contraseña — JTZ Running Club',
+    html: baseTemplate(`
+      <div class="header"><h1>🔑 Restablecer contraseña</h1><p>JTZ Running Club</p></div>
+      <div class="body">
+        <p>¡Hola, <strong style="color:white">${opts.nombre}</strong>! 👋</p>
+        <p>Recibimos una solicitud para restablecer tu contraseña. Haz clic en el botón para crear una nueva:</p>
+        <div style="text-align:center;margin:28px 0">
+          <a href="${opts.resetUrl}" style="display:inline-block;background:#1f6bff;color:white;text-decoration:none;padding:14px 30px;border-radius:12px;font-weight:600;font-size:15px">Restablecer contraseña</a>
+        </div>
+        <p style="color:#94a3b8;font-size:13px">Este enlace vence en 1 hora. Si no solicitaste esto, ignora este correo — tu contraseña no cambiará.</p>
+        <p style="color:#64748b;font-size:12px;word-break:break-all">O copia este enlace en tu navegador:<br>${opts.resetUrl}</p>
+      </div>
+    `),
+  });
+}
+
 export async function sendGpxToRunner(opts: {
   to: string; nombre: string; eventName: string;
   gpxContent: string; gpxNombre: string; coachUserId?: number;

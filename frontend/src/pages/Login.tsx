@@ -89,6 +89,9 @@ export default function Login() {
           </button>
 
           <div className="text-center space-y-2 pt-1">
+            <Link to="/recuperar" className="text-sm text-brand-400 hover:text-brand-300 font-medium">
+              ¿Olvidaste tu contraseña?
+            </Link>
             <p className="text-xs text-gray-600">Demo: coach@jtz.mx / coach123</p>
             <p className="text-sm text-gray-400">
               ¿Eres nuevo en el equipo?{' '}

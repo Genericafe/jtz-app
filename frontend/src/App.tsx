@@ -5,6 +5,8 @@ import { useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import Runners from './pages/Runners';
 import TrainingPlans from './pages/TrainingPlans';
@@ -48,6 +50,8 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/registro" element={<Register />} />
+          <Route path="/recuperar" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/pago-exitoso" element={<PaymentSuccess />} />
           <Route path="/evento/:id" element={<EventLanding />} />
           <Route element={<Layout />}>
