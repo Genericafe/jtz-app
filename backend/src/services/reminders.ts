@@ -55,19 +55,20 @@ export async function computeCoachReminders(prisma: PrismaClient): Promise<Remin
     const soon = !overdue && venc && venc <= inPago;
     const nombre = nameOf.get(p.runnerId) ?? 'Corredor';
     const monto = `${p.monto} ${p.moneda}`;
+    const pagoLink = `/corredores/${p.runnerId}?tab=Pagos`;
     if (overdue) {
       reminders.push({
         id: `pago-${p.id}`, type: 'pago', severity: 'alta', runnerId: p.runnerId, runnerNombre: nombre,
         titulo: `Pago vencido · ${nombre}`,
         detalle: `${p.concepto} — ${monto}${venc ? ` · venció ${fmt(venc)}` : ''}`,
-        fecha: venc ? venc.toISOString() : null, link: '/pagos',
+        fecha: venc ? venc.toISOString() : null, link: pagoLink,
       });
     } else if (soon) {
       reminders.push({
         id: `pago-${p.id}`, type: 'pago', severity: 'media', runnerId: p.runnerId, runnerNombre: nombre,
         titulo: `Pago por vencer · ${nombre}`,
         detalle: `${p.concepto} — ${monto} · vence ${fmt(venc!)}`,
-        fecha: venc!.toISOString(), link: '/pagos',
+        fecha: venc!.toISOString(), link: pagoLink,
       });
     }
   }
@@ -85,7 +86,7 @@ export async function computeCoachReminders(prisma: PrismaClient): Promise<Remin
       id: `plan-${a.id}`, type: 'plan', severity: expired ? 'alta' : 'media', runnerId: a.runnerId, runnerNombre: nombre,
       titulo: expired ? `Plan vencido · ${nombre}` : `Plan por renovar · ${nombre}`,
       detalle: `${a.plan?.nombre ?? 'Plan'} — ${expired ? 'terminó' : 'termina'} ${fmt(fin)}`,
-      fecha: fin.toISOString(), link: '/planes',
+      fecha: fin.toISOString(), link: `/corredores/${a.runnerId}?tab=Plan`,
     });
   }
 

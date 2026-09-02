@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { runnersApi } from '../services/api';
 import { CommunicationLog, Payment, EventRegistration } from '../types';
@@ -36,7 +36,10 @@ export default function RunnerProfile() {
   const navigate = useNavigate();
   const { isCoach } = useAuth();
   const qc = useQueryClient();
-  const [activeTab, setActiveTab] = useState<Tab>('Resumen');
+  const [searchParams] = useSearchParams();
+  const initialTab = (tabs as readonly string[]).includes(searchParams.get('tab') ?? '')
+    ? (searchParams.get('tab') as Tab) : 'Resumen';
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [logForm, setLogForm] = useState({ tipo: 'whatsapp', direccion: 'entrante', mensaje: '' });
   const [showLogForm, setShowLogForm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
