@@ -79,6 +79,43 @@ model Runner {
   activityLogs       ActivityLog[]
   groupMemberships   RunnerGroupMember[]
   badges             RunnerBadge[]
+  liveSession        LiveSession?
+  liveAudios         LiveAudio[]
+}
+
+// Live activity session — one active per runner. The runner pings its position
+// every few seconds while recording; the coach polls it to follow along.
+model LiveSession {
+  id          Int       @id @default(autoincrement())
+  runnerId    Int       @unique
+  runner      Runner    @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  activo      Boolean   @default(true)
+  tipo        String    @default("correr")
+  startedAt   DateTime  @default(now())
+  endedAt     DateTime?
+  lastLat     Float?
+  lastLng     Float?
+  lastUpdate  DateTime  @default(now())
+  distanciaKm Float     @default(0)
+  trail       String?   @db.Text // JSON: [[lng,lat],…] recent path
+  audios      LiveAudio[]
+
+  @@index([activo])
+}
+
+// A short voice note the coach sends to a runner mid-activity.
+model LiveAudio {
+  id         Int          @id @default(autoincrement())
+  runnerId   Int
+  runner     Runner       @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  sessionId  Int?
+  session    LiveSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  data       String       @db.Text // data URL (base64 audio)
+  fromCoach  Int?
+  createdAt  DateTime     @default(now())
+  played     Boolean      @default(false)
+
+  @@index([runnerId, played])
 }
 
 model RunnerGroup {

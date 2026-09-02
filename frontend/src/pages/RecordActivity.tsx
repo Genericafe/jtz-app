@@ -5,7 +5,7 @@ import {
   Play, Pause, Square, MapPin, Heart, Clock, ChevronLeft,
   CheckCircle, Map, Navigation, Zap, TrendingUp, Mountain, BarChart3,
 } from 'lucide-react';
-import { integrationsApi, routesApi } from '../services/api';
+import { integrationsApi, routesApi, liveApi } from '../services/api';
 import { useActivityRecorder, formatPace, formatElapsed, bearingDeg } from '../hooks/useActivityRecorder';
 import { parseGpx } from '../utils/gpxParser';
 import type { MapPoint } from '../components/LiveTrackingMap';
@@ -216,6 +216,55 @@ export default function RecordActivity() {
     return () => clearTimeout(t);
   }, [encMsg]);
 
+  // ── Live session: notify coach + stream position + receive coach voice notes ──
+  const liveStartedRef = useRef(false);
+  const lastPingRef = useRef(0);
+  const [coachAudio, setCoachAudio] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (state.status === 'running' && !liveStartedRef.current) {
+      liveStartedRef.current = true;
+      liveApi.start(tipo).catch(() => {});
+    }
+    if ((state.status === 'finished' || state.status === 'idle') && liveStartedRef.current) {
+      liveStartedRef.current = false;
+      liveApi.stop().catch(() => {});
+    }
+  }, [state.status]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // End the live session if the runner leaves the screen mid-activity.
+  useEffect(() => () => { if (liveStartedRef.current) liveApi.stop().catch(() => {}); }, []);
+
+  // Stream position to the coach ~every 5 s.
+  useEffect(() => {
+    if (state.status !== 'running' || !currentPos) return;
+    const now = Date.now();
+    if (now - lastPingRef.current < 4500) return;
+    lastPingRef.current = now;
+    liveApi.ping({ lat: currentPos.lat, lng: currentPos.lng, distanciaKm: state.distanceKm }).catch(() => {});
+  }, [currentPos, state.status]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Poll for the coach's voice notes and play them.
+  useEffect(() => {
+    if (state.status !== 'running') return;
+    const iv = setInterval(async () => {
+      try {
+        const { data } = await liveApi.getAudio();
+        for (const a of data as { data: string }[]) {
+          setCoachAudio(a.data);
+          try { await new Audio(a.data).play(); } catch { /* autoplay blocked → tap the toast */ }
+        }
+      } catch { /* ignore */ }
+    }, 5000);
+    return () => clearInterval(iv);
+  }, [state.status]);
+
+  useEffect(() => {
+    if (!coachAudio) return;
+    const t = setTimeout(() => setCoachAudio(null), 8000);
+    return () => clearTimeout(t);
+  }, [coachAudio]);
+
   const totalRouteKm = useMemo(() => {
     if (referenceRoute.length < 2) return 0;
     return referenceRoute.reduce((acc, _, i, arr) => i === 0 ? 0 : acc + haversineM(arr[i - 1], arr[i]), 0) / 1000;
@@ -355,6 +404,15 @@ export default function RecordActivity() {
             <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 px-4 py-2.5 rounded-2xl bg-brand-500/90 backdrop-blur-md text-white text-sm font-bold shadow-glow animate-slide-up whitespace-nowrap">
               {encMsg}
             </div>
+          )}
+          {/* Coach voice note toast (tap to (re)play) */}
+          {coachAudio && (
+            <button
+              onClick={() => { new Audio(coachAudio).play().catch(() => {}); }}
+              className="absolute top-28 left-1/2 -translate-x-1/2 z-30 px-4 py-2.5 rounded-2xl bg-orange-500/95 backdrop-blur-md text-white text-sm font-bold shadow-lg animate-slide-up flex items-center gap-2 whitespace-nowrap"
+            >
+              🎙️ Mensaje del coach — toca para oír
+            </button>
           )}
           <Suspense fallback={
             <div className="w-full h-full bg-dark-800 flex items-center justify-center">

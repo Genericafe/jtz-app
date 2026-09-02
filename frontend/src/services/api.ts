@@ -191,6 +191,16 @@ export const trainingApi = {
   overview: () => api.get('/training/overview'),
 };
 
+export const liveApi = {
+  start:     (tipo: string) => api.post('/live/start', { tipo }),
+  ping:      (d: { lat: number; lng: number; distanciaKm?: number }) => api.post('/live/ping', d),
+  stop:      () => api.post('/live/stop'),
+  active:    () => api.get('/live/active'),
+  session:   (runnerId: number) => api.get(`/live/session/${runnerId}`),
+  sendAudio: (runnerId: number, data: string) => api.post(`/live/audio/${runnerId}`, { data }),
+  getAudio:  () => api.get('/live/audio'),
+};
+
 export const gamificationApi = {
   badges:       ()                => api.get('/gamification/badges'),
   runnerBadges: (runnerId: number) => api.get(`/gamification/badges/${runnerId}`),

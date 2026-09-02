@@ -44,6 +44,7 @@ export async function initPush(navigate: NavFn) {
     if (data.type === 'announcement') navigate('/');
     if (data.type === 'reminders')    navigate('/notificaciones');
     if (data.type === 'badge')        navigate('/logros');
+    if (data.type === 'live')         navigate('/en-vivo');
   });
 }
 

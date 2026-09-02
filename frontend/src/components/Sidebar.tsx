@@ -1,16 +1,17 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Users, ClipboardList, Calendar,
-  CreditCard, ShoppingBag, MessageSquare, LogOut, Zap, User, Settings, MessageCircle, X, Activity, Trophy, Medal, Bell, TrendingUp,
+  CreditCard, ShoppingBag, MessageSquare, LogOut, Zap, User, Settings, MessageCircle, X, Activity, Trophy, Medal, Bell, TrendingUp, Radio,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useQuery } from '@tanstack/react-query';
-import { runnersApi, chatApi, remindersApi } from '../services/api';
+import { runnersApi, chatApi, remindersApi, liveApi } from '../services/api';
 import { useAccountLock, LOCK_ALLOWED } from '../hooks/useAccountLock';
 
 const coachNav = [
   { to: '/',             label: 'Inicio',          icon: LayoutDashboard },
   { to: '/notificaciones', label: 'Notificaciones', icon: Bell },
+  { to: '/en-vivo',      label: 'En vivo',          icon: Radio },
   { to: '/corredores',   label: 'Corredores',       icon: Users },
   { to: '/planes',       label: 'Entrenamientos',   icon: ClipboardList },
   { to: '/rendimiento',  label: 'Rendimiento',      icon: TrendingUp },
@@ -116,6 +117,16 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   });
   const reminderCount = remindersData?.resumen?.total ?? 0;
 
+  // Runners currently live
+  const { data: liveActive } = useQuery<{ runnerId: number }[]>({
+    queryKey: ['live-active-count'],
+    queryFn: () => liveApi.active().then((r) => r.data),
+    refetchInterval: 8000,
+    enabled: isCoach,
+    staleTime: 0,
+  });
+  const liveCount = liveActive?.length ?? 0;
+
   return (
     <aside className={`
       fixed top-0 left-0 z-40 h-screen
@@ -167,7 +178,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 </span>
                 <span>{label}</span>
                 {(() => {
-                  const count = to === '/chat' ? chatUnread : to === '/notificaciones' ? reminderCount : 0;
+                  const count = to === '/chat' ? chatUnread : to === '/notificaciones' ? reminderCount : to === '/en-vivo' ? liveCount : 0;
                   return count > 0 ? (
                     <span className="ml-auto min-w-[20px] h-5 rounded-full bg-brand-500 text-white text-[10px] font-bold flex items-center justify-center px-1.5 shadow-glow-sm">
                       {count > 99 ? '99+' : count}
