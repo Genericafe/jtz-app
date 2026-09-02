@@ -1,15 +1,16 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Users, ClipboardList, Calendar,
-  CreditCard, ShoppingBag, MessageSquare, LogOut, Zap, User, Settings, MessageCircle, X, Activity, Trophy, Medal,
+  CreditCard, ShoppingBag, MessageSquare, LogOut, Zap, User, Settings, MessageCircle, X, Activity, Trophy, Medal, Bell,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useQuery } from '@tanstack/react-query';
-import { runnersApi, chatApi } from '../services/api';
+import { runnersApi, chatApi, remindersApi } from '../services/api';
 import { useAccountLock, LOCK_ALLOWED } from '../hooks/useAccountLock';
 
 const coachNav = [
   { to: '/',             label: 'Inicio',          icon: LayoutDashboard },
+  { to: '/notificaciones', label: 'Notificaciones', icon: Bell },
   { to: '/corredores',   label: 'Corredores',       icon: Users },
   { to: '/planes',       label: 'Entrenamientos',   icon: ClipboardList },
   { to: '/eventos',      label: 'Eventos',          icon: Calendar },
@@ -103,6 +104,16 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     ? (conversations ?? []).reduce((sum, c) => sum + (c.unreadCount ?? 0), 0)
     : (runnerMessages ?? []).filter((m) => !m.fromMe && !m.leido).length;
 
+  // Coach reminders (pending payments / plans / follow-ups)
+  const { data: remindersData } = useQuery<{ resumen: { total: number } }>({
+    queryKey: ['reminders'],
+    queryFn: () => remindersApi.list().then((r) => r.data),
+    refetchInterval: 5 * 60 * 1000,
+    enabled: isCoach,
+    staleTime: 0,
+  });
+  const reminderCount = remindersData?.resumen?.total ?? 0;
+
   return (
     <aside className={`
       fixed top-0 left-0 z-40 h-screen
@@ -153,13 +164,16 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   <Icon size={18} />
                 </span>
                 <span>{label}</span>
-                {to === '/chat' && chatUnread > 0 ? (
-                  <span className="ml-auto min-w-[20px] h-5 rounded-full bg-brand-500 text-white text-[10px] font-bold flex items-center justify-center px-1.5 shadow-glow-sm">
-                    {chatUnread > 99 ? '99+' : chatUnread}
-                  </span>
-                ) : (
-                  isActive && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-brand-400" />
-                )}
+                {(() => {
+                  const count = to === '/chat' ? chatUnread : to === '/notificaciones' ? reminderCount : 0;
+                  return count > 0 ? (
+                    <span className="ml-auto min-w-[20px] h-5 rounded-full bg-brand-500 text-white text-[10px] font-bold flex items-center justify-center px-1.5 shadow-glow-sm">
+                      {count > 99 ? '99+' : count}
+                    </span>
+                  ) : (
+                    isActive && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-brand-400" />
+                  );
+                })()}
               </>
             )}
           </NavLink>

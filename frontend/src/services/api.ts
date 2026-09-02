@@ -182,6 +182,10 @@ export const integrationsApi = {
   deleteActivity:     (id: number)   => api.delete(`/integrations/activities/${id}`),
 };
 
+export const remindersApi = {
+  list: () => api.get('/reminders'),
+};
+
 export const gamificationApi = {
   badges:       ()                => api.get('/gamification/badges'),
   runnerBadges: (runnerId: number) => api.get(`/gamification/badges/${runnerId}`),

@@ -26,6 +26,7 @@ import routeRoutes from './routes/routes';
 import notificationRoutes from './routes/notifications';
 import groupRoutes from './routes/groups';
 import gamificationRoutes from './routes/gamification';
+import remindersRoutes from './routes/reminders';
 
 dotenv.config();
 
@@ -80,8 +81,45 @@ app.use('/api/routes', routeRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/gamification', gamificationRoutes);
+app.use('/api/reminders', remindersRoutes);
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', app: 'JTZ API' }));
+
+// ── Daily reminder digest → push to coaches ──────────────────────────────────
+// Sends one summary push per day (once per calendar day, in the morning window),
+// so coaches get a nudge about pending payments/plans/follow-ups on their phone.
+import { PrismaClient as _Prisma } from '@prisma/client';
+import { computeCoachReminders, summarize } from './services/reminders';
+import { sendToCoaches } from './services/pushNotifications';
+
+const _digestPrisma = new _Prisma();
+let lastDigestDay = '';
+
+async function runReminderDigest() {
+  try {
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    if (today === lastDigestDay) return;
+    // Morning window in Mexico City (UTC-6): ~8am–11am → 14:00–17:00 UTC
+    const hourUtc = now.getUTCHours();
+    if (hourUtc < 14 || hourUtc > 17) return;
+
+    const reminders = await computeCoachReminders(_digestPrisma);
+    lastDigestDay = today; // mark done for today regardless (avoid retry spam)
+    if (reminders.length === 0) return;
+
+    const s = summarize(reminders);
+    const parts: string[] = [];
+    if (s.pago) parts.push(`${s.pago} pago${s.pago > 1 ? 's' : ''}`);
+    if (s.plan) parts.push(`${s.plan} plan${s.plan > 1 ? 'es' : ''}`);
+    if (s.seguimiento) parts.push(`${s.seguimiento} seguimiento${s.seguimiento > 1 ? 's' : ''}`);
+    await sendToCoaches('📋 Pendientes de hoy', `Tienes ${parts.join(', ')} por revisar.`, { type: 'reminders' });
+  } catch (err) {
+    console.error('[digest] error', err);
+  }
+}
+setInterval(runReminderDigest, 60 * 60 * 1000); // check hourly
+runReminderDigest();
 
 app.listen(PORT, () => {
   console.log(`JTZ API corriendo en http://localhost:${PORT}`);

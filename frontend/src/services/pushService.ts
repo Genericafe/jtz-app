@@ -42,6 +42,8 @@ export async function initPush(navigate: NavFn) {
     if (data.type === 'chat')         navigate('/chat');
     if (data.type === 'activity')     navigate('/actividades');
     if (data.type === 'announcement') navigate('/');
+    if (data.type === 'reminders')    navigate('/notificaciones');
+    if (data.type === 'badge')        navigate('/logros');
   });
 }
 
