@@ -1,0 +1,4 @@
+<properties>
+    <!-- Token de sesión JTZ, configurado desde Garmin Connect Mobile -->
+    <property id="jtzToken" type="string"></property>
+</properties>

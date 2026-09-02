@@ -1,0 +1,5 @@
+<strings>
+    <string id="AppName">JTZ</string>
+    <string id="SettingTokenTitle">Token JTZ (Bearer)</string>
+    <string id="SettingTokenPrompt">Pega tu token de sesión de JTZ</string>
+</strings>

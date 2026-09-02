@@ -1,0 +1,5 @@
+<drawables>
+    <!-- Debes agregar el archivo launcher_icon.png en esta carpeta.
+         Tamaño recomendado ~40x40 px (varía por modelo). -->
+    <bitmap id="LauncherIcon" filename="launcher_icon.png" />
+</drawables>

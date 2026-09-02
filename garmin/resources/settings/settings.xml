@@ -1,0 +1,6 @@
+<settings>
+    <!-- Aparece en Garmin Connect Mobile → JTZ → Ajustes -->
+    <setting propertyKey="@Properties.jtzToken" title="@Strings.SettingTokenTitle" prompt="@Strings.SettingTokenPrompt">
+        <settingConfig type="alphaNumeric" />
+    </setting>
+</settings>
