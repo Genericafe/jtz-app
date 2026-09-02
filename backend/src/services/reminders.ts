@@ -85,8 +85,9 @@ export async function computeCoachReminders(prisma: PrismaClient): Promise<Remin
     reminders.push({
       id: `plan-${a.id}`, type: 'plan', severity: expired ? 'alta' : 'media', runnerId: a.runnerId, runnerNombre: nombre,
       titulo: expired ? `Plan vencido · ${nombre}` : `Plan por renovar · ${nombre}`,
-      detalle: `${a.plan?.nombre ?? 'Plan'} — ${expired ? 'terminó' : 'termina'} ${fmt(fin)}`,
-      fecha: fin.toISOString(), link: `/corredores/${a.runnerId}?tab=Plan`,
+      detalle: `${a.plan?.nombre ?? 'Plan'} — ${expired ? 'terminó' : 'termina'} ${fmt(fin)} · renovar`,
+      // Renewing a plan means a charge in this club → open the runner's Pagos tab.
+      fecha: fin.toISOString(), link: `/corredores/${a.runnerId}?tab=Pagos`,
     });
   }
 
