@@ -28,6 +28,7 @@ import ActivitiesHub from './pages/ActivitiesHub';
 import Badges from './pages/Badges';
 import Competitions from './pages/Competitions';
 import Notifications from './pages/Notifications';
+import Performance from './pages/Performance';
 import { initPush } from './services/pushService';
 
 // Initializes push notifications once user is logged in (needs navigate hook)
@@ -75,6 +76,7 @@ export default function App() {
             <Route path="/logros" element={<Badges />} />
             <Route path="/competencias" element={<Competitions />} />
             <Route path="/notificaciones" element={<Notifications />} />
+            <Route path="/rendimiento" element={<Performance />} />
             {/* Rutas merged into Actividades — keep the old path working */}
             <Route path="/rutas" element={<Navigate to="/actividades?tab=rutas" replace />} />
           </Route>

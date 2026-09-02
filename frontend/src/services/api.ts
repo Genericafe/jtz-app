@@ -186,6 +186,11 @@ export const remindersApi = {
   list: () => api.get('/reminders'),
 };
 
+export const trainingApi = {
+  pmc: (params?: { runnerId?: number; days?: number }) => api.get('/training/pmc', { params }),
+  overview: () => api.get('/training/overview'),
+};
+
 export const gamificationApi = {
   badges:       ()                => api.get('/gamification/badges'),
   runnerBadges: (runnerId: number) => api.get(`/gamification/badges/${runnerId}`),

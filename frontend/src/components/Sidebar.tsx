@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Users, ClipboardList, Calendar,
-  CreditCard, ShoppingBag, MessageSquare, LogOut, Zap, User, Settings, MessageCircle, X, Activity, Trophy, Medal, Bell,
+  CreditCard, ShoppingBag, MessageSquare, LogOut, Zap, User, Settings, MessageCircle, X, Activity, Trophy, Medal, Bell, TrendingUp,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useQuery } from '@tanstack/react-query';
@@ -13,6 +13,7 @@ const coachNav = [
   { to: '/notificaciones', label: 'Notificaciones', icon: Bell },
   { to: '/corredores',   label: 'Corredores',       icon: Users },
   { to: '/planes',       label: 'Entrenamientos',   icon: ClipboardList },
+  { to: '/rendimiento',  label: 'Rendimiento',      icon: TrendingUp },
   { to: '/eventos',      label: 'Eventos',          icon: Calendar },
   { to: '/pagos',        label: 'Pagos',            icon: CreditCard },
   { to: '/tienda',       label: 'Tienda',           icon: ShoppingBag },
@@ -28,6 +29,7 @@ const runnerNav = [
   { to: '/',              label: 'Mi inicio',       icon: LayoutDashboard },
   { to: '/planes',        label: 'Mis planes',      icon: ClipboardList },
   { to: '/actividades',   label: 'Actividades',     icon: Activity },
+  { to: '/rendimiento',   label: 'Rendimiento',     icon: TrendingUp },
   { to: '/logros',        label: 'Logros',          icon: Trophy },
   { to: '/competencias',  label: 'Competencias',    icon: Medal },
   { to: '/eventos',       label: 'Eventos',         icon: Calendar },
