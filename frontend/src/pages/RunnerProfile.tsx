@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import PmcPanel from '../components/PmcPanel';
+import AnalyticsPanel from '../components/AnalyticsPanel';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { runnersApi } from '../services/api';
 import { CommunicationLog, Payment, EventRegistration } from '../types';
@@ -28,7 +30,7 @@ const logTipoConfig: Record<string, { icon: string; label: string; color: string
   presencial: { icon: '🤝', label: 'Presencial', color: 'text-purple-400' },
 };
 
-const tabs = ['Resumen', 'Actividades', 'Plan', 'Eventos', 'Pagos', 'Mensajes'] as const;
+const tabs = ['Resumen', 'Actividades', 'Rendimiento', 'Plan', 'Eventos', 'Pagos', 'Mensajes'] as const;
 type Tab = typeof tabs[number];
 
 export default function RunnerProfile() {
@@ -40,6 +42,7 @@ export default function RunnerProfile() {
   const initialTab = (tabs as readonly string[]).includes(searchParams.get('tab') ?? '')
     ? (searchParams.get('tab') as Tab) : 'Resumen';
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
+  const [perfTab, setPerfTab] = useState<'forma' | 'analitica'>('forma');
   const [logForm, setLogForm] = useState({ tipo: 'whatsapp', direccion: 'entrante', mensaje: '' });
   const [showLogForm, setShowLogForm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -332,6 +335,22 @@ export default function RunnerProfile() {
       )}
 
       {/* Tab: Plan */}
+      {activeTab === 'Rendimiento' && (
+        <div>
+          <div className="flex gap-2 mb-5">
+            {([['forma', 'Forma'], ['analitica', 'Analítica']] as const).map(([tid, label]) => (
+              <button key={tid} onClick={() => setPerfTab(tid)}
+                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${perfTab === tid ? 'bg-brand-500 text-white' : 'bg-surface-700 text-gray-400 hover:text-white'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {perfTab === 'forma'
+            ? <PmcPanel runnerId={Number(id)} />
+            : <AnalyticsPanel runnerId={Number(id)} />}
+        </div>
+      )}
+
       {activeTab === 'Plan' && (
         <div className="animate-slide-up">
           {activePlan ? (
