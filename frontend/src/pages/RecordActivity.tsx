@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, lazy, Suspense } from 'react';
+import { useState, useMemo, useRef, useEffect, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -58,7 +58,7 @@ export default function RecordActivity() {
   const referenceRoute = useMemo<MapPoint[]>(() => {
     const gpx = refActivityData?.data?.gpxContent ?? savedRouteData?.data?.gpxContent;
     if (!gpx) return [];
-    try { return parseGpx(gpx).trackPoints.map(p => ({ lat: p.lat, lng: p.lng })); }
+    try { return parseGpx(gpx).trackPoints.map(p => ({ lat: p.lat, lng: p.lng, ele: p.ele })); }
     catch { return []; }
   }, [refActivityData, savedRouteData]);
 
@@ -123,7 +123,46 @@ export default function RecordActivity() {
       aheadIdx++;
     }
     const absBearing = bearingDeg(currentPos, referenceRoute[aheadIdx]);
-    return { minDist, remM, absBearing };
+
+    // ── Next discrete turn: distance + direction (left/right) ──
+    let turnDistM: number | null = null;
+    let turnDir: 'left' | 'right' | null = null;
+    let turnSharp = false;
+    if (minIdx < n - 2) {
+      const curB = bearingDeg(referenceRoute[minIdx], referenceRoute[minIdx + 1]);
+      let d = 0;
+      for (let i = minIdx + 1; i < n - 1 && d < 400; i++) {
+        d += haversineM(referenceRoute[i - 1], referenceRoute[i]);
+        const segB = bearingDeg(referenceRoute[i], referenceRoute[i + 1]);
+        const diff = ((segB - curB + 540) % 360) - 180; // signed −180..180
+        if (Math.abs(diff) > 35) {
+          turnDistM = d; turnDir = diff > 0 ? 'right' : 'left'; turnSharp = Math.abs(diff) > 80;
+          break;
+        }
+      }
+    }
+
+    // ── Upcoming climb (needs elevation): nearest ≥8 m rise within 400 m ──
+    let climb: { aheadM: number; gainM: number; gradientPct: number } | null = null;
+    if (referenceRoute[minIdx]?.ele != null) {
+      let cd = 0;
+      for (let i = minIdx; i < n - 1 && cd < 400; i++) {
+        let wd = 0, j = i;
+        const e0 = referenceRoute[i].ele!;
+        while (j < n - 1 && wd < 150) { wd += haversineM(referenceRoute[j], referenceRoute[j + 1]); j++; }
+        const eEnd = referenceRoute[j].ele;
+        if (eEnd != null && wd > 20) {
+          const gain = eEnd - e0;
+          if (gain >= 8) {
+            climb = { aheadM: Math.round(cd), gainM: Math.round(gain), gradientPct: Math.round((gain / wd) * 100) };
+            break;
+          }
+        }
+        cd += haversineM(referenceRoute[i], referenceRoute[i + 1]);
+      }
+    }
+
+    return { minDist, remM, absBearing, turnDistM, turnDir, turnSharp, climb };
   }, [currentPos, referenceRoute, routeCum]);
 
   const navInfo = useMemo(() => {
@@ -147,6 +186,8 @@ export default function RecordActivity() {
       offRouteM: minDist, remainingKm: remM / 1000,
       relBearing, absBearing, signed, turn,
       offRoute: minDist > 50, atFinish: remM < 20, hasHeading,
+      turnDistM: routeNav.turnDistM, turnDir: routeNav.turnDir, turnSharp: routeNav.turnSharp,
+      climb: routeNav.climb,
     };
   }, [routeNav, state.headingDeg]);
 
@@ -155,6 +196,25 @@ export default function RecordActivity() {
   // route from a desktop with no compass — fall back to the bearing toward the
   // next point on the route, so the cone still clearly points "this way".
   const mapHeading = state.headingDeg ?? routeNav?.absBearing ?? null;
+
+  // ── Encouragement: a motivational toast at each completed km ──
+  const [encMsg, setEncMsg] = useState<string | null>(null);
+  const lastKmRef = useRef(0);
+  useEffect(() => {
+    if (state.status !== 'running') return;
+    const km = Math.floor(state.distanceKm);
+    if (km < lastKmRef.current) lastKmRef.current = km; // reset on a new activity
+    if (km >= 1 && km > lastKmRef.current) {
+      lastKmRef.current = km;
+      const cheers = ['¡Sigue así! 💪', '¡Buen ritmo! 🔥', '¡Lo haces genial! 🚀', '¡No aflojes! ⚡', '¡Cada paso cuenta! 👏', '¡Vas increíble! 🌟'];
+      setEncMsg(`¡${km} km! ${cheers[Math.floor(Math.random() * cheers.length)]}`);
+    }
+  }, [state.distanceKm, state.status]);
+  useEffect(() => {
+    if (!encMsg) return;
+    const t = setTimeout(() => setEncMsg(null), 4500);
+    return () => clearTimeout(t);
+  }, [encMsg]);
 
   const totalRouteKm = useMemo(() => {
     if (referenceRoute.length < 2) return 0;
@@ -289,7 +349,13 @@ export default function RecordActivity() {
         </div>
 
         {/* ── Full-screen map ── */}
-        <div className="flex-1 min-h-0">
+        <div className="flex-1 min-h-0 relative">
+          {/* Encouragement toast */}
+          {encMsg && (
+            <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 px-4 py-2.5 rounded-2xl bg-brand-500/90 backdrop-blur-md text-white text-sm font-bold shadow-glow animate-slide-up whitespace-nowrap">
+              {encMsg}
+            </div>
+          )}
           <Suspense fallback={
             <div className="w-full h-full bg-dark-800 flex items-center justify-center">
               <div className="w-8 h-8 border-2 border-brand-400 border-t-transparent rounded-full animate-spin" />
@@ -331,6 +397,13 @@ export default function RecordActivity() {
                       : ''}
                     {navInfo.remainingKm.toFixed(2)} km restantes
                   </div>
+                  {navInfo.climb && (
+                    <div className="text-xs text-orange-300 mt-1 flex items-center gap-1 font-medium">
+                      <Mountain size={12} className="flex-shrink-0" />
+                      Subida +{navInfo.climb.gainM} m ({navInfo.climb.gradientPct}%)
+                      {navInfo.climb.aheadM > 20 ? ` en ${navInfo.climb.aheadM} m` : ' — ¡dale con todo! 🔥'}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -556,6 +629,7 @@ export default function RecordActivity() {
 type NavGuide = {
   offRoute: boolean; atFinish: boolean; hasHeading: boolean;
   turn: 'straight' | 'slight-left' | 'slight-right' | 'left' | 'right' | 'uturn';
+  turnDistM?: number | null; turnDir?: 'left' | 'right' | null; turnSharp?: boolean;
 };
 
 // Maps the nav state to a spoken-style instruction, color and a tone.
@@ -563,6 +637,18 @@ function navGuide(n: NavGuide): { text: string; color: string; tone: 'ok' | 'tur
   if (n.atFinish)  return { text: '¡Llegaste al final!', color: 'text-green-400', tone: 'ok' };
   if (n.offRoute)  return { text: 'Vuelve a la ruta', color: 'text-red-400', tone: 'bad' };
   if (!n.hasHeading) return { text: 'Empieza a moverte para guiarte', color: 'text-gray-300', tone: 'turn' };
+
+  // Distance-based instruction for the next real turn ("En 120 m gira a la derecha")
+  if (n.turnDistM != null && n.turnDir && n.turnDistM <= 250) {
+    const dir = n.turnDir === 'right' ? 'derecha' : 'izquierda';
+    const verb = n.turnSharp ? 'giro cerrado' : 'gira';
+    if (n.turnDistM <= 25) {
+      return { text: `${n.turnSharp ? 'Giro cerrado' : 'Gira'} a la ${dir} ahora`, color: 'text-yellow-400', tone: 'turn' };
+    }
+    const dist = Math.round(n.turnDistM / 10) * 10;
+    return { text: `En ${dist} m, ${verb} a la ${dir}`, color: 'text-yellow-400', tone: 'turn' };
+  }
+
   switch (n.turn) {
     case 'straight':     return { text: 'Sigue recto', color: 'text-green-400', tone: 'ok' };
     case 'slight-left':  return { text: 'Ligera izquierda', color: 'text-green-400', tone: 'ok' };

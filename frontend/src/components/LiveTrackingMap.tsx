@@ -3,7 +3,7 @@ import maplibregl from 'maplibre-gl';
 import { LocateFixed, Navigation2, Layers, Plus, Minus, AlertTriangle } from 'lucide-react';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
-export interface MapPoint { lat: number; lng: number; accuracy?: number }
+export interface MapPoint { lat: number; lng: number; accuracy?: number; ele?: number }
 
 interface Props {
   track: MapPoint[];
@@ -332,11 +332,17 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
         .setLngLat([currentPos.lng, currentPos.lat]).addTo(map);
     }
     posMarkerRef.current.setLngLat([currentPos.lng, currentPos.lat]);
-    const beam = posMarkerRef.current.getElement().querySelector('.jtz-beam') as HTMLElement | null;
+    const el = posMarkerRef.current.getElement();
+    const beam = el.querySelector('.jtz-beam') as HTMLElement | null;
+    const arrow = el.querySelector('.jtz-arrow') as HTMLElement | null;
     if (heading != null) {
       posMarkerRef.current.setRotation(heading);
       if (beam) beam.style.opacity = '1';
-    } else if (beam) { beam.style.opacity = '0'; }
+      if (arrow) arrow.style.opacity = '1';
+    } else {
+      if (beam) beam.style.opacity = '0';
+      if (arrow) arrow.style.opacity = '0';
+    }
 
     // Camera follow (throttled). Nav mode rotates the map to the heading + tilts.
     if (autoFollowRef.current) {
@@ -447,10 +453,15 @@ function makeHeadingEl(): HTMLDivElement {
   el.innerHTML = `
     <div style="position:relative;width:0;height:0;">
       <div class="jtz-beam" style="
-        position:absolute;left:-17px;top:-38px;width:34px;height:38px;opacity:0;
-        background:linear-gradient(to top, rgba(59,130,246,0.65), rgba(59,130,246,0));
+        position:absolute;left:-19px;top:-42px;width:38px;height:42px;opacity:0;
+        background:linear-gradient(to top, rgba(59,130,246,0.5), rgba(59,130,246,0));
         clip-path:polygon(50% 0, 100% 100%, 0 100%);
         transition:opacity .3s ease;pointer-events:none;"></div>
+      <!-- Solid direction arrow (chevron) pointing where you're heading -->
+      <div class="jtz-arrow" style="
+        position:absolute;left:-9px;top:-26px;width:18px;height:16px;opacity:0;
+        background:#3b82f6;clip-path:polygon(50% 0, 100% 100%, 50% 78%, 0 100%);
+        filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));transition:opacity .3s ease;pointer-events:none;"></div>
       <div style="
         position:absolute;left:-10px;top:-10px;width:20px;height:20px;border-radius:50%;
         background:#3b82f6;border:3px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.5);"></div>
