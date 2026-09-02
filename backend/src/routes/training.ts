@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { pmcForRunner } from '../services/trainingLoad';
+import { computeAnalytics } from '../services/analytics';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -32,6 +33,26 @@ router.get('/pmc', async (req: AuthRequest, res: Response) => {
 
   const pmc = await pmcForRunner(prisma, runnerId!, days);
   return res.json(pmc);
+});
+
+// GET /training/analytics?runnerId=&weeks=12 — volume, splits, zones, totals
+router.get('/analytics', async (req: AuthRequest, res: Response) => {
+  const weeks = Math.min(52, Math.max(4, Number(req.query.weeks) || 12));
+  let runnerId = req.query.runnerId ? Number(req.query.runnerId) : null;
+
+  if (runnerId) {
+    if (!(await isCoach(req.userId!))) {
+      const own = await prisma.runner.findUnique({ where: { userId: req.userId! }, select: { id: true } });
+      if (own?.id !== runnerId) return res.status(403).json({ error: 'No autorizado' });
+    }
+  } else {
+    const own = await prisma.runner.findUnique({ where: { userId: req.userId! }, select: { id: true } });
+    if (!own) return res.json({ totals: null, weekly: [], byType: [], hrZones: [] });
+    runnerId = own.id;
+  }
+
+  const data = await computeAnalytics(prisma, runnerId!, weeks);
+  return res.json(data);
 });
 
 // GET /training/overview — coach: current fitness/fatigue/form of every runner
