@@ -70,7 +70,7 @@ export default function ActivityShareCard({ activity, onClose }: {
     ctx.fillStyle = '#22c55e';
     ctx.font = '700 40px Inter, system-ui, sans-serif';
     ctx.textBaseline = 'alphabetic';
-    ctx.fillText('⚡ JTZ RUNNING CLUB', 64, 96);
+    ctx.fillText('⚡ JTZ TRAIL', 64, 96);
 
     // ── Bottom block ──
     const emoji = TIPO_EMOJI[activity.tipo] ?? '🏃';

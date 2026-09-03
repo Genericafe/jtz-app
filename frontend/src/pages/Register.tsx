@@ -82,7 +82,7 @@ export default function Register() {
             <Trophy size={32} className="text-white" />
           </div>
           <h1 className="text-3xl font-black gradient-text">Únete al equipo</h1>
-          <p className="text-gray-500 mt-1">JTZ Running Club · México</p>
+          <p className="text-gray-500 mt-1">JTZ Trail · México</p>
         </div>
 
         {/* Step indicator */}

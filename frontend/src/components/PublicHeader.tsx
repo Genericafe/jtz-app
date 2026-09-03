@@ -18,7 +18,7 @@ export default function PublicHeader({ active }: { active?: string }) {
           </div>
           <div>
             <p className="heading-display text-xl leading-none gradient-text">JTZ</p>
-            <p className="text-[10px] text-gray-500 -mt-0.5">Running Club</p>
+            <p className="text-[10px] text-gray-500 -mt-0.5">Trail</p>
           </div>
         </Link>
         <nav className="flex items-center gap-0.5 sm:gap-1">

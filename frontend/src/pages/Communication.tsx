@@ -68,7 +68,7 @@ function PostCard({ ann, onDelete, onEdit, isCoach }: {
             <Heart size={15} fill={liked ? 'currentColor' : 'none'} /> <span>{likes + (liked ? 1 : 0)}</span>
           </button>
           <span className="text-xs text-gray-600">·</span>
-          <span className="text-xs text-gray-600">JTZ Running Club</span>
+          <span className="text-xs text-gray-600">JTZ Trail</span>
         </div>
       </div>
     </div>

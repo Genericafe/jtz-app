@@ -98,7 +98,7 @@ export const COMUNICADO_TIPOS: ComunicadoTipo[] = [
     label: 'Bienvenida',
     descripcion: 'Recibir nuevos integrantes al equipo JTZ',
     placeholder: 'Ej: Nos alegra mucho que hayas decidido unirte a JTZ. Somos un equipo de corredores con diferentes niveles y el objetivo común de mejorar. El primer entrenamiento es el sábado...',
-    asunto: '🤝 ¡Bienvenido/a a JTZ Running Club!',
+    asunto: '🤝 ¡Bienvenido/a a JTZ Trail!',
     apertura: '¡Es un placer enorme darte la bienvenida a la familia JTZ!',
     contextoCoaching: 'En JTZ creemos que cada corredor/a tiene un potencial único que vale la pena descubrir. Mi trabajo como coach no es empujarte a límites irreales — es acompañarte a descubrir lo que realmente eres capaz de lograr, respetando tu cuerpo, tu tiempo y tus objetivos personales.',
     llamadaAccion: 'En los próximos días recibirás información sobre tu plan de entrenamiento personalizado. Mientras tanto, si tienes preguntas sobre logística, niveles o cualquier duda, escríbeme directamente — estoy aquí para eso.',

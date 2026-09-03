@@ -52,7 +52,7 @@ function buildGpx(track: TrackPoint[], name: string): string {
     )
     .join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="JTZ Running Club">
+<gpx version="1.1" creator="JTZ Trail">
   <trk><name>${name}</name><trkseg>
 ${pts}
   </trkseg></trk>
@@ -261,7 +261,7 @@ export function useActivityRecorder() {
         const id = await BackgroundGeolocation.addWatcher(
           {
             backgroundMessage: 'Grabando tu actividad. Toca para volver a la app.',
-            backgroundTitle:   'JTZ Running Club',
+            backgroundTitle:   'JTZ Trail',
             requestPermissions: true,
             stale: false,
             distanceFilter: 5,

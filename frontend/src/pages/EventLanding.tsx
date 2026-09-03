@@ -200,7 +200,7 @@ export default function EventLanding() {
           <p className="text-sm text-gray-300">📩 Te enviamos la confirmación y los detalles a tu correo.</p>
           <p className="text-xs text-gray-500 mt-1">Si no lo ves, revisa tu carpeta de spam.</p>
           <div className="inline-flex items-center gap-2 mt-4 text-brand-400 font-bold text-sm">
-            <Zap size={14} /> JTZ Running Club
+            <Zap size={14} /> JTZ Trail
           </div>
         </div>
       </div>
@@ -224,7 +224,7 @@ export default function EventLanding() {
 
         <div className="relative z-10 w-full max-w-5xl mx-auto px-6 pb-12 pt-24">
           <div className="flex items-center gap-2.5 mb-5">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/70">JTZ Running Club</span>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/70">JTZ Trail</span>
             <span className="w-1 h-1 rounded-full bg-white/40" />
             <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.15em] text-white/70">
               <span className={`w-1.5 h-1.5 rounded-full ${isPast ? 'bg-gray-400' : 'bg-green-400'}`} /> {isPast ? 'Finalizado' : 'Inscripciones abiertas'}
@@ -436,7 +436,7 @@ export default function EventLanding() {
         <div className="mt-10 text-center">
           <div className="inline-flex items-center gap-2 text-gray-500 text-sm">
             <Zap size={14} className="text-brand-400" />
-            <span><strong className="text-gray-300">JTZ Running Club</strong> · Coach Jotaze · México</span>
+            <span><strong className="text-gray-300">JTZ Trail</strong> · Coach Jotaze · México</span>
           </div>
         </div>
       </div>

@@ -72,7 +72,7 @@ export default function PublicEvents() {
       <PublicHeader active="/carreras" />
       <div className="max-w-5xl mx-auto px-4 py-8">
         <h1 className="heading-display text-3xl text-white mb-1">Carreras y eventos</h1>
-        <p className="text-gray-400 text-sm mb-6">Inscríbete en línea a las carreras, trails y encuentros del JTZ Running Club</p>
+        <p className="text-gray-400 text-sm mb-6">Inscríbete en línea a las carreras, trails y encuentros del JTZ Trail</p>
 
         <div className="flex gap-2 mb-6 flex-wrap">
           {FILTERS.map(([key, label]) => (

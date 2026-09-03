@@ -46,16 +46,28 @@ export default function PublicLanding() {
     <div className="bg-surface-900 text-white">
       <PublicHeader active="/inicio" />
 
-      {/* ── HERO — full-screen photo ── */}
+      {/* ── HERO — cinematic photo/video ── */}
       <section className="relative min-h-[92vh] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-brand-900 via-surface-900 to-black topo-bg" />
+        {/* Photo with slow Ken Burns motion (feels like video even without a clip) */}
         <img src={site?.heroImagen || '/fotos/hero.jpg'} alt="" onError={hideOnError}
-          className="absolute inset-0 w-full h-full object-cover" />
+          className="kenburns absolute inset-0 w-full h-full object-cover" />
+        {/* Optional video background: drop /fotos/hero.mp4 and it plays automatically on top of the photo.
+            Without a poster, if the clip is missing the video stays transparent and the photo above shows through. */}
+        <video
+          className="absolute inset-0 w-full h-full object-cover"
+          autoPlay muted loop playsInline
+        >
+          <source src="/fotos/hero.mp4" type="video/mp4" />
+        </video>
         <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/30 to-surface-900" />
 
         <div className="relative z-10 text-center px-4 max-w-4xl">
           <p className="text-xs sm:text-sm font-semibold uppercase tracking-[0.4em] text-brand-300 mb-5 animate-fade-in">Trail · Ruta · Comunidad</p>
-          <h1 className="heading-display text-6xl sm:text-8xl leading-[0.9] text-white drop-shadow-2xl">JTZ RUNNING CLUB</h1>
+          <h1 className="heading-display text-6xl sm:text-8xl leading-[0.9] text-white drop-shadow-2xl">
+            <span className="word-mask"><span className="word-rise" style={{ animationDelay: '.15s' }}>JTZ</span></span>{' '}
+            <span className="word-mask"><span className="word-rise" style={{ animationDelay: '.32s' }}>TRAIL</span></span>
+          </h1>
           <p className="text-white/90 text-lg sm:text-2xl max-w-2xl mx-auto mt-6 leading-relaxed">
             Corre. Sube. Vuela. Un club de trail y ruta en Ensenada que suma kilómetros juntos.
           </p>
@@ -73,6 +85,19 @@ export default function PublicLanding() {
           <ChevronDown size={26} />
         </div>
       </section>
+
+      {/* ── Moving headline marquee ── */}
+      <div className="marquee border-y border-white/[0.08] bg-surface-800 py-4">
+        <div className="marquee-track">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <span key={i} className="heading-display text-2xl sm:text-3xl text-white/90 uppercase tracking-tight">
+              {['Trail', 'Ruta', 'Montaña', 'Comunidad', 'Ensenada', 'JTZ Trail'].map((w) => (
+                <span key={w} className="mx-6">{w} <span className="text-brand-500">•</span></span>
+              ))}
+            </span>
+          ))}
+        </div>
+      </div>
 
       {/* ── Features ── */}
       <section className="max-w-5xl mx-auto px-4 py-16 sm:py-20">
@@ -227,7 +252,7 @@ export default function PublicLanding() {
       {/* ── Footer ── */}
       <footer className="border-t border-white/[0.06] mt-8">
         <div className="max-w-5xl mx-auto px-4 py-8 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="text-sm text-gray-500">JTZ Running Club · Ensenada, Baja California</p>
+          <p className="text-sm text-gray-500">JTZ Trail · Ensenada, Baja California</p>
           <div className="flex gap-4 text-sm">
             <Link to="/carreras" className="text-gray-400 hover:text-white">Carreras</Link>
             <Link to="/seguir" className="text-gray-400 hover:text-white">Seguir en vivo</Link>

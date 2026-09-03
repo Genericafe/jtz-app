@@ -42,7 +42,7 @@ export default function Login() {
           <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.35em] text-brand-300">
             Trail · Ruta · Comunidad
           </p>
-          <p className="text-gray-500 text-sm mt-2">Running Club · México</p>
+          <p className="text-gray-500 text-sm mt-2">Trail · México</p>
         </div>
 
         <form onSubmit={handleSubmit} className="card p-8 space-y-5">

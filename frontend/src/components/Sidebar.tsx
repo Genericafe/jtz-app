@@ -144,7 +144,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           </div>
           <div>
             <p className="heading-display text-2xl leading-none gradient-text">JTZ</p>
-            <p className="text-xs text-gray-500 -mt-0.5">Running Club</p>
+            <p className="text-xs text-gray-500 -mt-0.5">Trail</p>
           </div>
         </div>
         {/* Close button — mobile only */}

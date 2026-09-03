@@ -57,7 +57,7 @@ Asegúrate de tener todo listo:
 
 ¡Nos vemos en la salida! 💪
 
-— Coach JTZ Running Club`,
+— Coach JTZ Trail`,
       };
     },
   },
@@ -88,7 +88,7 @@ Si tienes alguna duda, contáctanos con anticipación.
 
 ¡Ya falta poco! 🔥
 
-— Coach JTZ Running Club`,
+— Coach JTZ Trail`,
     }),
   },
   {
@@ -119,7 +119,7 @@ Nuestros consejos finales:
 
 ¡El equipo JTZ corre contigo! 💚
 
-— Coach JTZ Running Club`,
+— Coach JTZ Trail`,
       };
     },
   },
@@ -155,7 +155,7 @@ Cualquier pregunta, escríbenos.
 
 ¡Nos vemos en la meta! 🏁
 
-— Coach JTZ Running Club`,
+— Coach JTZ Trail`,
     }),
   },
   {
@@ -189,7 +189,7 @@ Cualquier pregunta, escríbenos.
 
 ¡El equipo JTZ está orgulloso de ti! 🌟
 
-— Coach JTZ Running Club`,
+— Coach JTZ Trail`,
     }),
   },
   {
@@ -213,12 +213,12 @@ Cada paso que diste en la carrera representa horas de entrenamiento, sacrificio 
   • Esta semana: sueño y alimentación nutritiva
   • Próxima semana: regresar al entrenamiento suave
 
-📸 Comparte tus fotos y etiqueta a JTZ Running Club — ¡queremos celebrar contigo!
+📸 Comparte tus fotos y etiqueta a JTZ Trail — ¡queremos celebrar contigo!
 
 Ya pensamos en el próximo reto. ¡Estén atentos a nuestros próximos eventos!
 
 Con orgullo de todo el equipo,
-— Coach JTZ Running Club 💚`,
+— Coach JTZ Trail 💚`,
     }),
   },
 ];

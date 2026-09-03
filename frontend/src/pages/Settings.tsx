@@ -64,7 +64,7 @@ export default function Settings() {
   const [showPass, setShowPass] = useState(false);
   const [form, setForm] = useState({
     provider: 'outlook' as string,
-    fromName: 'JTZ Running Club',
+    fromName: 'JTZ Trail',
     fromEmail: '',
     smtpHost: 'smtp.office365.com',
     smtpPort: 587,
@@ -312,7 +312,7 @@ export default function Settings() {
               <div>
                 <label className="block text-xs font-semibold text-gray-400 mb-1.5">Nombre del remitente</label>
                 <input value={form.fromName} onChange={e => setForm({ ...form, fromName: e.target.value })}
-                  placeholder="JTZ Running Club" required className="input w-full text-sm" />
+                  placeholder="JTZ Trail" required className="input w-full text-sm" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-400 mb-1.5">

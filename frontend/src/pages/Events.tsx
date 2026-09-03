@@ -441,7 +441,7 @@ function ShareModal({ ev, onClose }: { ev: Event; onClose: () => void }) {
   const linkFor = (source: string) =>
     `${baseUrl}?utm_source=${source}&utm_medium=social&utm_campaign=evento_${ev.id}`;
 
-  const buildPromo = (link: string) => `${emoji} ¡EVENTO JTZ RUNNING CLUB!
+  const buildPromo = (link: string) => `${emoji} ¡EVENTO JTZ TRAIL!
 
 📌 ${ev.nombre}
 📅 ${fecha}

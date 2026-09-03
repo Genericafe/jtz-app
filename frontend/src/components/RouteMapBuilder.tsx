@@ -30,7 +30,7 @@ function coordsToGpx(coords: [number, number][], name: string): string {
     .map(([lng, lat]) => `    <trkpt lat="${lat}" lon="${lng}"><time>${new Date().toISOString()}</time></trkpt>`)
     .join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="JTZ Running Club">
+<gpx version="1.1" creator="JTZ Trail">
   <trk><name>${name}</name><trkseg>\n${pts}\n  </trkseg></trk>
 </gpx>`;
 }

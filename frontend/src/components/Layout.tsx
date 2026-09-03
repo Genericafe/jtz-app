@@ -180,7 +180,7 @@ export default function Layout() {
               <Zap size={13} className="text-white" fill="white" />
             </div>
             <span className="heading-display text-xl leading-none text-white">JTZ</span>
-            <span className="text-xs text-gray-500 hidden sm:block">Running Club</span>
+            <span className="text-xs text-gray-500 hidden sm:block">Trail</span>
           </div>
         </div>
 
