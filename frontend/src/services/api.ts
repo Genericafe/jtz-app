@@ -137,6 +137,7 @@ export const publicApi = {
   liveSession: (runnerId: number) => api.get(`/public/live/${runnerId}`),
   registerFree: (id: number, data: object) => api.post(`/public/events/${id}/register`, data),
   checkout: (id: number, data: object) => api.post(`/public/events/${id}/checkout`, data),
+  storeCheckout: (data: { items: { productId: number; cantidad: number }[]; email?: string }) => api.post('/public/store/checkout', data),
   verifySession: (sessionId: string) => api.get(`/public/verify/${sessionId}`),
   site: () => api.get('/public/site'),
 };

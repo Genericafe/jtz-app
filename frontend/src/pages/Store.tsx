@@ -528,7 +528,7 @@ export default function Store() {
             {pendingDeliveries.map(o => (
               <div key={o.id} className="flex items-center gap-4 p-3 bg-surface-700 rounded-xl border border-white/[0.06]">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-white">{o.runner?.nombre} {o.runner?.apellido}</p>
+                  <p className="text-sm font-semibold text-white">{o.runner ? `${o.runner.nombre} ${o.runner.apellido}` : ((o as any).guestNombre || (o as any).guestEmail || 'Invitado')}</p>
                   <p className="text-xs text-gray-400 mt-0.5">
                     {o.items?.map(i => `${i.product?.nombre} ×${i.cantidad}`).join(', ')} · ${o.total.toLocaleString('es-MX')} MXN
                   </p>
@@ -736,7 +736,7 @@ export default function Store() {
                           </div>
                         </td>
                       )}
-                      {isCoach && <td className="px-5 py-3 font-medium text-white">{o.runner?.nombre} {o.runner?.apellido}</td>}
+                      {isCoach && <td className="px-5 py-3 font-medium text-white">{o.runner ? `${o.runner.nombre} ${o.runner.apellido}` : ((o as any).guestNombre || (o as any).guestEmail || 'Invitado')}</td>}
                       <td className="px-5 py-3 text-gray-400">
                         {o.items?.map(i => `${i.product?.nombre} ×${i.cantidad}`).join(', ') ?? `${o.items?.length ?? 0} art.`}
                       </td>

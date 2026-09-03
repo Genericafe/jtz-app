@@ -268,6 +268,109 @@ router.post('/events/:id/checkout', async (req: Request, res: Response) => {
   }
 });
 
+// ── Public store — guest checkout (compra SIN cuenta) ────────────────────────
+const storeCheckoutSchema = z.object({
+  items: z.array(z.object({ productId: z.number().int(), cantidad: z.number().int().positive() })).min(1),
+  email: z.string().email().optional(),
+});
+
+// Mark an order paid and fill guest details + shipping from the Stripe session.
+async function fulfillOrder(session: Stripe.Checkout.Session) {
+  const orderId = session.metadata?.orderId;
+  if (!orderId) return;
+  const existing = await prisma.order.findUnique({ where: { id: Number(orderId) }, include: { items: true } });
+  if (!existing || existing.estado === 'pagado') return;
+
+  const cd = session.customer_details;
+  const ship = (session as any).shipping_details ?? (session as any).shipping ?? null;
+  const addr = ship?.address ?? cd?.address ?? null;
+  const direccion = addr ? [addr.line1, addr.line2, addr.postal_code, addr.state].filter(Boolean).join(', ') : null;
+
+  await prisma.order.update({
+    where: { id: Number(orderId) },
+    data: {
+      estado: 'pagado',
+      stripeSessionId: session.id,
+      guestNombre:   ship?.name ?? cd?.name ?? existing.guestNombre,
+      guestEmail:    cd?.email ?? existing.guestEmail,
+      guestTelefono: cd?.phone ?? existing.guestTelefono,
+      guestDireccion: direccion ?? existing.guestDireccion,
+      guestCiudad:   addr?.city ?? existing.guestCiudad,
+    },
+  });
+
+  // Discount stock for each purchased item
+  for (const it of existing.items) {
+    await prisma.product.update({
+      where: { id: it.productId },
+      data: { stock: { decrement: it.cantidad } },
+    }).catch(() => {});
+  }
+}
+
+router.post('/store/checkout', async (req: Request, res: Response) => {
+  const parse = storeCheckoutSchema.safeParse(req.body);
+  if (!parse.success) return res.status(400).json({ error: 'Datos inválidos' });
+
+  const ids = parse.data.items.map(i => i.productId);
+  const products = await prisma.product.findMany({ where: { id: { in: ids }, activo: true } });
+  if (products.length === 0) return res.status(400).json({ error: 'No hay productos válidos en el carrito' });
+
+  // Build line items + total from SERVER-SIDE prices (never trust the client)
+  const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
+  const orderItems: { productId: number; cantidad: number; precioUnit: number }[] = [];
+  let total = 0;
+  for (const item of parse.data.items) {
+    const p = products.find(pr => pr.id === item.productId);
+    if (!p) continue;
+    if (p.stock <= 0) return res.status(400).json({ error: `"${p.nombre}" está agotado` });
+    const qty = Math.min(item.cantidad, p.stock);
+    total += p.precio * qty;
+    orderItems.push({ productId: p.id, cantidad: qty, precioUnit: p.precio });
+    lineItems.push({
+      price_data: {
+        currency: 'mxn',
+        product_data: {
+          name: p.nombre,
+          description: [p.talla ? `Talla ${p.talla}` : null, p.color].filter(Boolean).join(' · ') || undefined,
+          images: p.imagen && p.imagen.startsWith('http') ? [p.imagen] : undefined,
+        },
+        unit_amount: Math.round(p.precio * 100),
+      },
+      quantity: qty,
+    });
+  }
+  if (orderItems.length === 0) return res.status(400).json({ error: 'No hay productos válidos en el carrito' });
+
+  const order = await prisma.order.create({
+    data: { total, estado: 'pendiente', guestEmail: parse.data.email, items: { create: orderItems } },
+  });
+
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  if (!stripeKey || stripeKey.includes('REEMPLAZA') || stripeKey.length < 20) {
+    return res.status(503).json({ error: 'El pago con tarjeta no está disponible en este momento. Contacta al coach.' });
+  }
+
+  try {
+    const stripe = new Stripe(stripeKey, { apiVersion: '2024-04-10' as Stripe.LatestApiVersion });
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: lineItems,
+      customer_email: parse.data.email,
+      phone_number_collection: { enabled: true },
+      shipping_address_collection: { allowed_countries: ['MX', 'US'] },
+      metadata: { orderId: order.id.toString() },
+      success_url: `${process.env.FRONTEND_URL}/tienda-publica?success=1&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.FRONTEND_URL}/tienda-publica?cancelled=1`,
+    });
+    await prisma.order.update({ where: { id: order.id }, data: { stripeSessionId: session.id } });
+    return res.json({ url: session.url });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error al procesar el pago';
+    return res.status(500).json({ error: `Error al crear la sesión de pago: ${msg}` });
+  }
+});
+
 // Stripe webhook — confirm lead payment
 router.post('/webhook/stripe', async (req: Request, res: Response) => {
   const sig = req.headers['stripe-signature'];
@@ -283,6 +386,10 @@ router.post('/webhook/stripe', async (req: Request, res: Response) => {
 
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session;
+    // Store order (guest checkout)
+    if (session.metadata?.orderId) {
+      await fulfillOrder(session).catch(console.error);
+    }
     const leadId = session.metadata?.leadId;
     if (leadId) {
       const lead = await prisma.eventLead.update({
@@ -323,6 +430,13 @@ router.get('/verify/:sessionId', async (req: Request, res: Response) => {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-04-10' as Stripe.LatestApiVersion });
   try {
     const session = await stripe.checkout.sessions.retrieve(req.params.sessionId);
+
+    // Store order (guest checkout)
+    if (session.payment_status === 'paid' && session.metadata?.orderId) {
+      await fulfillOrder(session).catch(console.error);
+      return res.json({ ok: true, tipo: 'pedido' });
+    }
+
     if (session.payment_status === 'paid' && session.metadata?.leadId) {
       const lead = await prisma.eventLead.update({
         where: { id: Number(session.metadata.leadId) },

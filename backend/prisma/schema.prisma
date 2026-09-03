@@ -396,12 +396,18 @@ model Product {
 
 model Order {
   id              Int      @id @default(autoincrement())
-  runnerId        Int
-  runner          Runner   @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  runnerId        Int?
+  runner          Runner?  @relation(fields: [runnerId], references: [id], onDelete: Cascade)
   estado          String   @default("pendiente")
   total           Float
   notas           String?
   stripeSessionId String?
+  // Guest checkout (compra sin cuenta) — datos que recoge Stripe Checkout
+  guestNombre     String?
+  guestEmail      String?
+  guestTelefono   String?
+  guestDireccion  String?
+  guestCiudad     String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
