@@ -69,7 +69,7 @@ export default function PublicLanding() {
             <span className="word-mask"><span className="word-rise" style={{ animationDelay: '.32s' }}>TRAIL</span></span>
           </h1>
           <p className="text-white/90 text-lg sm:text-2xl max-w-2xl mx-auto mt-6 leading-relaxed">
-            Corre. Sube. Vuela. Un club de trail y ruta que suma kilómetros juntos.
+            Corre. Sube. Vuela. Una comunidad que suma kilómetros juntos — en la ciudad, en el trail y donde sea.
           </p>
           <div className="flex flex-wrap gap-3 justify-center mt-9">
             <Link to="/carreras" className="btn-primary px-7 py-3.5 text-sm font-bold flex items-center gap-2 shadow-glow">

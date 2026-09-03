@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ShoppingBag, Tag, Plus, Minus, X, Loader2, CheckCircle2 } from 'lucide-react';
+import { ShoppingBag, Plus, Minus, X, Loader2, CheckCircle2 } from 'lucide-react';
 import { publicApi } from '../services/api';
 import PublicHeader from '../components/PublicHeader';
 
@@ -86,39 +86,48 @@ export default function PublicStore() {
         ) : products.length === 0 ? (
           <div className="text-center py-20"><ShoppingBag size={40} className="text-gray-600 mx-auto mb-3" /><p className="text-gray-500">Aún no hay productos disponibles</p></div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-8 sm:gap-x-6 sm:gap-y-10">
             {products.map(p => {
               const inCart = cart[p.id] ?? 0;
               const agotado = p.stock <= 0;
               return (
-                <div key={p.id} className="card overflow-hidden group flex flex-col">
-                  <div className="relative aspect-square bg-surface-700">
+                <div key={p.id} className="group">
+                  {/* Product image — large, editorial (day1-style) */}
+                  <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-gradient-to-br from-surface-700 to-surface-800">
                     {p.imagen
-                      ? <img src={p.imagen} alt={p.nombre} className="w-full h-full object-cover" />
-                      : <div className="w-full h-full flex items-center justify-center"><ShoppingBag size={40} className="text-gray-600" /></div>}
-                    {agotado && <div className="absolute inset-0 bg-black/60 flex items-center justify-center"><span className="text-xs font-bold text-white bg-red-500/80 px-2 py-1 rounded">Agotado</span></div>}
+                      ? <img src={p.imagen} alt={p.nombre} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" />
+                      : <div className="w-full h-full flex items-center justify-center">
+                          <span className="heading-display text-4xl font-bold text-white/10 tracking-tight">JTZ</span>
+                        </div>}
+                    {agotado && <div className="absolute inset-0 bg-black/55 flex items-center justify-center"><span className="text-xs font-bold text-white bg-red-500/80 px-3 py-1 rounded-full">Agotado</span></div>}
+
+                    {/* Add-to-cart — visible on mobile, on hover for desktop */}
+                    {!agotado && (
+                      <div className="absolute inset-x-2.5 bottom-2.5 transition-all duration-300 opacity-100 translate-y-0 sm:opacity-0 sm:translate-y-3 sm:group-hover:opacity-100 sm:group-hover:translate-y-0">
+                        {inCart === 0 ? (
+                          <button onClick={() => add(p.id, p.stock)}
+                            className="w-full py-2.5 rounded-xl text-xs font-bold bg-white text-black hover:bg-white/90 transition-colors active:scale-95 shadow-lg">
+                            Agregar
+                          </button>
+                        ) : (
+                          <div className="flex items-center justify-between bg-white text-black rounded-xl shadow-lg">
+                            <button onClick={() => sub(p.id)} className="p-2.5 hover:text-brand-600"><Minus size={15} /></button>
+                            <span className="text-sm font-bold">{inCart}</span>
+                            <button onClick={() => add(p.id, p.stock)} disabled={inCart >= p.stock} className="p-2.5 hover:text-brand-600 disabled:opacity-40"><Plus size={15} /></button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div className="p-3 flex flex-col flex-1">
-                    <p className="text-[10px] uppercase tracking-wide text-gray-500 flex items-center gap-1"><Tag size={10} /> {p.tipo}</p>
-                    <h3 className="text-sm font-bold text-white leading-tight mt-0.5 line-clamp-2">{p.nombre}</h3>
-                    <div className="flex items-center gap-2 mt-1 text-[11px] text-gray-500">
+
+                  {/* Name + price below the image */}
+                  <div className="mt-3">
+                    <h3 className="text-sm font-semibold text-white leading-tight line-clamp-1">{p.nombre}</h3>
+                    <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-500">
                       {p.talla && <span>Talla {p.talla}</span>}
                       {p.color && <span>· {p.color}</span>}
                     </div>
-                    <p className="text-base font-black text-white mt-2">${p.precio.toLocaleString('es-MX')}</p>
-                    <div className="mt-3">
-                      {agotado ? (
-                        <button disabled className="w-full py-2 rounded-xl text-xs font-bold bg-surface-600 text-gray-500 cursor-not-allowed">Agotado</button>
-                      ) : inCart === 0 ? (
-                        <button onClick={() => add(p.id, p.stock)} className="w-full py-2 rounded-xl text-xs font-bold bg-brand-500 hover:bg-brand-600 text-white transition-colors active:scale-95">Agregar</button>
-                      ) : (
-                        <div className="flex items-center justify-between bg-surface-600 rounded-xl">
-                          <button onClick={() => sub(p.id)} className="p-2.5 text-white hover:text-brand-400"><Minus size={14} /></button>
-                          <span className="text-sm font-bold text-white">{inCart}</span>
-                          <button onClick={() => add(p.id, p.stock)} className="p-2.5 text-white hover:text-brand-400 disabled:opacity-40" disabled={inCart >= p.stock}><Plus size={14} /></button>
-                        </div>
-                      )}
-                    </div>
+                    <p className="text-sm font-bold text-gray-200 mt-1.5">${p.precio.toLocaleString('es-MX')} <span className="text-[11px] font-normal text-gray-500">MXN</span></p>
                   </div>
                 </div>
               );
