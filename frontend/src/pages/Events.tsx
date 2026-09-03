@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Plus, MapPin, Users, X, Calendar, Clock, Trophy, Share2, ExternalLink, CreditCard, CheckCircle, User, Trash2, Sparkles, Mail, Edit2, Download, FileSpreadsheet, Upload, Route, Check } from 'lucide-react';
+import { Plus, MapPin, Users, X, Calendar, Clock, Trophy, Share2, ExternalLink, CreditCard, CheckCircle, User, Trash2, Sparkles, Mail, Edit2, Download, FileSpreadsheet, Upload, Route, Check, Search } from 'lucide-react';
 import { eventsApi, publicApi, runnersApi, default as api } from '../services/api';
 import { Event } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -992,10 +992,20 @@ function CoachEventDetailModal({ ev, onClose }: { ev: Event; onClose: () => void
   );
 }
 
-function EventCard({ ev, onRegisterClick, onViewDetail, myRegistrations, isCoach, onShare, onDelete, onEdit, selectable, selected, onToggleSelect }: {
+function EvStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">{label}</p>
+      <p className="text-sm font-bold text-white truncate">{value}</p>
+    </div>
+  );
+}
+
+function EventCard({ ev, onRegisterClick, onViewDetail, onViewRegistrations, myRegistrations, isCoach, onShare, onDelete, onEdit, selectable, selected, onToggleSelect }: {
   ev: Event;
   onRegisterClick?: (ev: Event) => void;
   onViewDetail?: (ev: Event) => void;
+  onViewRegistrations?: (ev: Event) => void;
   myRegistrations?: Set<number>;
   isCoach: boolean;
   onShare: (ev: Event) => void;
@@ -1008,23 +1018,23 @@ function EventCard({ ev, onRegisterClick, onViewDetail, myRegistrations, isCoach
   const cfg = typeConfig[ev.tipo] ?? typeConfig.carrera;
   const isPast = !isAfter(new Date(ev.fecha), new Date());
   const isRegistered = myRegistrations?.has(ev.id);
+  const registros = ev._count?.registros ?? 0;
+  const isFull = ev.cupoMaximo ? registros >= ev.cupoMaximo : false;
 
-  const handleCardClick = () => {
-    if (selectable) { onToggleSelect?.(); return; }
-    if (isCoach) {
-      // navegado desde el botón "Ver inscritos" o clic en card
-    } else if (isRegistered) {
-      onViewDetail?.(ev);
-    } else if (!isPast) {
-      onRegisterClick?.(ev);
-    }
-  };
+  const status = isPast ? { label: 'Finalizado', color: '#6b7280' }
+    : isFull ? { label: 'Cupo lleno', color: '#ef4444' }
+    : { label: 'Inscripciones abiertas', color: '#22c55e' };
+
+  const detailsBtn = 'flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-all active:scale-95';
 
   return (
     <div
-      className={`card overflow-hidden group transition-all duration-200 hover:border-white/[0.12] hover:-translate-y-0.5 relative ${isPast ? 'opacity-60' : ''} ${selectable ? 'cursor-pointer' : !isCoach && !isPast ? 'cursor-pointer' : isCoach ? 'cursor-pointer' : ''} ${selected ? 'ring-2 ring-brand-500 bg-brand-500/5' : ''}`}
-      onClick={handleCardClick}
+      className={`card overflow-hidden group flex flex-col sm:flex-row transition-all duration-200 hover:border-white/[0.14] relative ${isPast ? 'opacity-75' : ''} ${selectable ? 'cursor-pointer' : ''} ${selected ? 'ring-2 ring-brand-500' : ''}`}
+      onClick={() => { if (selectable) onToggleSelect?.(); }}
     >
+      {/* Left accent bar (status color) */}
+      <div className="hidden sm:block w-1.5 flex-shrink-0" style={{ background: status.color }} />
+
       {selectable && (
         <div className="absolute top-3 left-3 z-20">
           <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all shadow-lg ${selected ? 'bg-brand-500 border-brand-500' : 'border-white/70 bg-black/40'}`}>
@@ -1032,96 +1042,91 @@ function EventCard({ ev, onRegisterClick, onViewDetail, myRegistrations, isCoach
           </div>
         </div>
       )}
-      {/* Gradient banner */}
-      <div className={`${cfg.gradient} relative h-32 p-4 flex flex-col justify-between`}>
-        <div className="flex items-start justify-between">
-          <span className="text-3xl">{cfg.emoji}</span>
-          <span className="text-xs bg-black/25 backdrop-blur rounded-full px-2.5 py-1 text-white font-semibold">
-            {cfg.label}
-          </span>
-        </div>
-        <div>
-          <p className="text-white font-bold text-base leading-tight line-clamp-2">{ev.nombre}</p>
-        </div>
-        {/* Date badge */}
-        <div className="absolute top-4 right-4">
-          <div className="bg-black/30 backdrop-blur rounded-xl p-2 text-center min-w-[44px]">
-            <p className="text-xs text-white/70 uppercase leading-none">
-              {formatEvent(ev.fecha, 'MMM')}
-            </p>
-            <p className="text-xl font-black text-white leading-none">
-              {formatEvent(ev.fecha, 'd')}
-            </p>
+
+      {/* Photo / cover */}
+      <div className="relative w-full sm:w-56 md:w-64 flex-shrink-0 h-40 sm:h-auto sm:min-h-[176px]">
+        {ev.imagen ? (
+          <img src={ev.imagen} alt={ev.nombre} className="w-full h-full object-cover" />
+        ) : (
+          <div className={`${cfg.gradient} w-full h-full flex items-center justify-center`}>
+            <span className="text-5xl">{cfg.emoji}</span>
           </div>
+        )}
+        {/* Date badge */}
+        <div className="absolute top-3 left-3 bg-black/55 backdrop-blur rounded-xl px-2.5 py-1.5 text-center">
+          <p className="text-[10px] text-white/80 uppercase leading-none">{formatEvent(ev.fecha, 'MMM')}</p>
+          <p className="text-lg font-black text-white leading-none mt-0.5">{formatEvent(ev.fecha, 'd')}</p>
+        </div>
+        {/* Status ribbon */}
+        <div className="absolute bottom-0 left-0 right-0 px-3 pt-4 pb-1.5"
+          style={{ background: `linear-gradient(to top, ${status.color}f0, transparent)` }}>
+          <span className="flex items-center gap-1.5 text-[11px] font-bold text-white uppercase tracking-wide">
+            <span className="w-2 h-2 rounded-full bg-white" /> {status.label}
+          </span>
         </div>
       </div>
 
-      {/* Card body */}
-      <div className="p-4">
-        <div className="space-y-1.5 mb-3">
-          <div className="flex items-center gap-2 text-xs text-gray-400">
-            <MapPin size={12} className="flex-shrink-0" />
-            <span className="truncate">{ev.lugar}{ev.ciudad ? `, ${ev.ciudad}` : ''}{ev.estado ? `, ${ev.estado}` : ''}</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-gray-400">
-            <Clock size={12} className="flex-shrink-0" />
-            {formatEvent(ev.fecha, "HH:mm 'hrs'")} ·{' '}
-            {isPast
-              ? formatDistanceToNow(new Date(ev.fecha), { locale: es, addSuffix: true })
-              : formatDistanceToNow(new Date(ev.fecha), { locale: es, addSuffix: true })}
-          </div>
-          {ev.distanciaKm && (
-            <div className="flex items-center gap-2 text-xs text-gray-400">
-              <Trophy size={12} className="flex-shrink-0" /> {ev.distanciaKm} km
+      {/* Content */}
+      <div className="flex-1 min-w-0 p-4 sm:p-5 flex flex-col justify-between gap-4">
+        <div>
+          <p className={`text-[11px] font-bold uppercase tracking-wider ${cfg.textColor}`}>{cfg.label}</p>
+          <h3 className="heading-display text-xl sm:text-2xl text-white leading-tight mt-0.5">{ev.nombre}</h3>
+          <div className="flex flex-wrap gap-x-8 gap-y-2.5 mt-3">
+            {ev.distanciaKm ? <EvStat label="Distancia" value={`${ev.distanciaKm} km`} /> : null}
+            <EvStat label="Fecha" value={formatEvent(ev.fecha, "d MMM · HH:mm 'h'")} />
+            <div className="min-w-0 max-w-[220px]">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Ubicación</p>
+              <p className="text-sm font-bold text-white truncate flex items-center gap-1">
+                <MapPin size={12} className="text-gray-500 flex-shrink-0" />
+                {ev.lugar}{ev.ciudad ? `, ${ev.ciudad}` : ''}
+              </p>
             </div>
-          )}
+            {isCoach && <EvStat label="Inscritos" value={`${registros}${ev.cupoMaximo ? `/${ev.cupoMaximo}` : ''}`} />}
+          </div>
         </div>
 
-        <div className="flex items-center justify-between gap-2">
-          {/* Inscritos — solo visible para el coach */}
-          {isCoach ? (
-            <div className="flex items-center gap-1.5">
-              <Users size={12} className="text-gray-500" />
-              <span className="text-xs text-gray-400">
-                {ev._count?.registros ?? 0}{ev.cupoMaximo ? `/${ev.cupoMaximo}` : ''} inscritos
-              </span>
-            </div>
-          ) : (
-            <div />
-          )}
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-white">
-              {ev.precio === 0 ? 'Gratis' : `$${ev.precio.toLocaleString('es-MX')}`}
-            </span>
+        {/* Action row */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <span className="text-base font-black text-white">
+            {ev.precio === 0 ? <span className="text-green-400">Gratis</span> : `$${ev.precio.toLocaleString('es-MX')}`}
+          </span>
+          <div className="flex items-center gap-1.5">
             <button onClick={(e) => { e.stopPropagation(); onShare(ev); }}
-              className="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-surface-500 transition-all" title="Compartir">
-              <Share2 size={13} />
+              className="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-surface-500 transition-all" title="Compartir">
+              <Share2 size={15} />
             </button>
             {isCoach && onEdit && (
               <button onClick={(e) => { e.stopPropagation(); onEdit(ev); }}
-                className="p-1.5 rounded-lg text-gray-500 hover:text-brand-400 hover:bg-brand-500/10 transition-all" title="Editar evento">
-                <Edit2 size={13} />
+                className="p-2 rounded-lg text-gray-500 hover:text-brand-400 hover:bg-brand-500/10 transition-all" title="Editar">
+                <Edit2 size={15} />
               </button>
             )}
             {isCoach && onDelete && (
               <button onClick={(e) => { e.stopPropagation(); if (confirm(`¿Eliminar "${ev.nombre}"?`)) onDelete(ev.id); }}
-                className="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-400/10 transition-all" title="Eliminar evento">
-                <Trash2 size={13} />
+                className="p-2 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-400/10 transition-all" title="Eliminar">
+                <Trash2 size={15} />
               </button>
             )}
-            {!isCoach && !isPast && (
-              isRegistered ? (
-                <button onClick={e => { e.stopPropagation(); onViewDetail?.(ev); }}
-                  className="text-xs px-2.5 py-1 rounded-full bg-green-500/15 text-green-400 font-medium flex items-center gap-1 hover:bg-green-500/25 transition-colors">
-                  <CheckCircle size={11} /> Inscrito · ver detalle
-                </button>
-              ) : (
-                <button onClick={() => onRegisterClick?.(ev)}
-                  className="text-xs px-3 py-1.5 rounded-full bg-brand-500 hover:bg-brand-600 text-white font-semibold transition-colors active:scale-95">
-                  Inscribirme
-                </button>
-              )
+            {isCoach ? (
+              <button onClick={(e) => { e.stopPropagation(); onViewRegistrations?.(ev); }}
+                className={`${detailsBtn} bg-surface-600 hover:bg-surface-500 text-white border border-white/[0.08]`}>
+                <Users size={14} /> Ver inscritos <span className="text-brand-400">({registros})</span>
+              </button>
+            ) : isRegistered ? (
+              <button onClick={(e) => { e.stopPropagation(); onViewDetail?.(ev); }}
+                className={`${detailsBtn} bg-green-500/15 text-green-400 border border-green-500/25 hover:bg-green-500/25`}>
+                <CheckCircle size={14} /> Inscrito · ver detalle
+              </button>
+            ) : !isPast ? (
+              <button onClick={(e) => { e.stopPropagation(); onRegisterClick?.(ev); }}
+                className={`${detailsBtn} bg-brand-500 hover:bg-brand-600 text-white`}>
+                Inscribirme <ExternalLink size={14} />
+              </button>
+            ) : (
+              <button onClick={(e) => { e.stopPropagation(); onViewDetail?.(ev); }}
+                className={`${detailsBtn} bg-surface-600 hover:bg-surface-500 text-gray-300 border border-white/[0.08]`}>
+                Ver detalle →
+              </button>
             )}
           </div>
         </div>
@@ -1140,6 +1145,7 @@ export default function Events() {
   const [registerEvent, setRegisterEvent] = useState<Event | null>(null);
   const [runnerDetailEvent, setRunnerDetailEvent] = useState<Event | null>(null);
   const [filter, setFilter] = useState<'todos' | 'carrera' | 'trail' | 'entrenamiento' | 'social'>('todos');
+  const [search, setSearch] = useState('');
   const [form, setForm] = useState({
     nombre: '', tipo: 'carrera', descripcion: '', fecha: '', lugar: '',
     ciudad: '', estado: '', distanciaKm: '', cupoMaximo: '', precio: '0',
@@ -1197,7 +1203,11 @@ export default function Events() {
       exitSelectionEv();
     } finally { setBulkPending(false); }
   };
-  const shown = filter === 'todos' ? events : events.filter(e => e.tipo === filter);
+  const byType = filter === 'todos' ? events : events.filter(e => e.tipo === filter);
+  const q = search.trim().toLowerCase();
+  const shown = q
+    ? byType.filter(e => `${e.nombre} ${e.lugar ?? ''} ${e.ciudad ?? ''}`.toLowerCase().includes(q))
+    : byType;
   const allSelectedEv = shown.length > 0 && selectedIds.size === shown.length;
   const someSelectedEv = selectedIds.size > 0 && !allSelectedEv;
 
@@ -1273,27 +1283,38 @@ export default function Events() {
         )}
       </div>
 
-      {/* Filter pills */}
-      <div className="flex gap-2 mb-6 flex-wrap">
-        {([
-          { key: 'todos', label: 'Todos' },
-          { key: 'carrera', label: '🏃 Carrera' },
-          { key: 'trail', label: '🏔️ Trail' },
-          { key: 'entrenamiento', label: '💪 Entrenamiento' },
-          { key: 'social', label: '🎉 Social' },
-        ] as const).map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => setFilter(key as typeof filter)}
-            className={`text-sm px-4 py-1.5 rounded-full font-medium transition-all duration-150 ${
-              filter === key
-                ? 'bg-brand-500 text-white shadow-glow-sm'
-                : 'bg-surface-700 text-gray-400 hover:text-white border border-white/[0.06]'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+      {/* Filter bar: type pills + search */}
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
+        <div className="flex gap-2 flex-wrap">
+          {([
+            { key: 'todos', label: 'Todos' },
+            { key: 'carrera', label: '🏃 Carrera' },
+            { key: 'trail', label: '🏔️ Trail' },
+            { key: 'entrenamiento', label: '💪 Entrenamiento' },
+            { key: 'social', label: '🎉 Social' },
+          ] as const).map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setFilter(key as typeof filter)}
+              className={`text-sm px-4 py-1.5 rounded-full font-medium transition-all duration-150 ${
+                filter === key
+                  ? 'bg-brand-500 text-white shadow-glow-sm'
+                  : 'bg-surface-700 text-gray-400 hover:text-white border border-white/[0.06]'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="relative flex-1 min-w-[180px] max-w-xs ml-auto">
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar evento o lugar…"
+            className="input w-full text-sm pl-9"
+          />
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+        </div>
       </div>
 
       {/* Selection bar */}
@@ -1314,23 +1335,9 @@ export default function Events() {
           <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2">
             <Calendar size={12} /> Próximos
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="space-y-4">
             {upcoming.map((ev) => (
-              <div key={ev.id} className="flex flex-col gap-2">
-                <EventCard ev={ev} onRegisterClick={!isCoach ? setRegisterEvent : undefined} onViewDetail={!isCoach ? setRunnerDetailEvent : undefined} myRegistrations={myRegistrations} isCoach={isCoach} onShare={setShareEvent} onDelete={isCoach && !selectionMode ? (id) => deleteMutation.mutate(id) : undefined} onEdit={isCoach && !selectionMode ? openEdit : undefined} selectable={isCoach && selectionMode} selected={selectedIds.has(ev.id)} onToggleSelect={() => handleToggleSelectEv(ev.id)} />
-                {isCoach && (
-                  <div className="flex gap-2">
-                    <button onClick={() => navigate(`/eventos/${ev.id}/inscritos`)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 border border-brand-500/20 transition-all">
-                      <Users size={13} /> Ver inscritos ({ev._count?.registros ?? 0})
-                    </button>
-                    <a href={`/evento/${ev.id}`} target="_blank" rel="noreferrer"
-                      className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-surface-600 hover:bg-surface-500 text-gray-300 border border-white/[0.06] transition-all">
-                      <ExternalLink size={13} />
-                    </a>
-                  </div>
-                )}
-              </div>
+              <EventCard key={ev.id} ev={ev} onRegisterClick={!isCoach ? setRegisterEvent : undefined} onViewDetail={!isCoach ? setRunnerDetailEvent : undefined} onViewRegistrations={(e) => navigate(`/eventos/${e.id}/inscritos`)} myRegistrations={myRegistrations} isCoach={isCoach} onShare={setShareEvent} onDelete={isCoach && !selectionMode ? (id) => deleteMutation.mutate(id) : undefined} onEdit={isCoach && !selectionMode ? openEdit : undefined} selectable={isCoach && selectionMode} selected={selectedIds.has(ev.id)} onToggleSelect={() => handleToggleSelectEv(ev.id)} />
             ))}
           </div>
         </div>
@@ -1339,9 +1346,9 @@ export default function Events() {
       {past.length > 0 && (
         <div>
           <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Anteriores</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-            {past.slice(0, 6).map((ev) => (
-              <EventCard key={ev.id} ev={ev} onViewDetail={!isCoach ? setRunnerDetailEvent : undefined} myRegistrations={myRegistrations} isCoach={isCoach} onShare={setShareEvent} onDelete={isCoach && !selectionMode ? (id) => deleteMutation.mutate(id) : undefined} onEdit={isCoach && !selectionMode ? openEdit : undefined} selectable={isCoach && selectionMode} selected={selectedIds.has(ev.id)} onToggleSelect={() => handleToggleSelectEv(ev.id)} />
+          <div className="space-y-4">
+            {past.slice(0, 8).map((ev) => (
+              <EventCard key={ev.id} ev={ev} onViewDetail={!isCoach ? setRunnerDetailEvent : undefined} onViewRegistrations={(e) => navigate(`/eventos/${e.id}/inscritos`)} myRegistrations={myRegistrations} isCoach={isCoach} onShare={setShareEvent} onDelete={isCoach && !selectionMode ? (id) => deleteMutation.mutate(id) : undefined} onEdit={isCoach && !selectionMode ? openEdit : undefined} selectable={isCoach && selectionMode} selected={selectedIds.has(ev.id)} onToggleSelect={() => handleToggleSelectEv(ev.id)} />
             ))}
           </div>
         </div>
