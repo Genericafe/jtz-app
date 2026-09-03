@@ -5,7 +5,7 @@ const NAV: [string, string][] = [
   ['/inicio', 'Inicio'],
   ['/carreras', 'Carreras'],
   ['/seguir', 'Seguir en vivo'],
-  ['/tienda-publica', 'Tienda'],
+  ['/tienda-publica', 'Merch'],
 ];
 
 export default function PublicHeader({ active }: { active?: string }) {

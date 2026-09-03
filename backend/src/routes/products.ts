@@ -26,6 +26,7 @@ router.post('/', coachOnly, async (req: AuthRequest, res: Response) => {
     stock: z.number().int().default(0),
     talla: z.string().optional(),
     color: z.string().optional(),
+    imagen: z.string().optional(),
   });
 
   const parse = schema.safeParse(req.body);

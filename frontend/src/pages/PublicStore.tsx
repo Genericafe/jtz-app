@@ -61,8 +61,8 @@ export default function PublicStore() {
       <div className="max-w-5xl mx-auto px-4 py-8 pb-32">
         <div className="flex items-end justify-between gap-3 mb-6">
           <div>
-            <h1 className="heading-display text-3xl text-white mb-1">Tienda JTZ Trail</h1>
-            <p className="text-gray-400 text-sm">Producto oficial del club. Compra directo, <span className="text-white font-semibold">sin crear cuenta</span>.</p>
+            <h1 className="heading-display text-3xl text-white mb-1">Merch Oficial JTZ</h1>
+            <p className="text-gray-400 text-sm">Producto oficial del club.</p>
           </div>
           {count > 0 && (
             <button onClick={() => setCartOpen(true)} className="btn-primary px-4 py-2.5 text-sm font-bold flex items-center gap-2 flex-shrink-0">

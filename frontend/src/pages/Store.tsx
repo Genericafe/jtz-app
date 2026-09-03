@@ -140,6 +140,26 @@ function BuyModal({ product, onClose }: { product: Product; onClose: () => void 
   );
 }
 
+// Downscale + JPEG-compress an image file to a data URL so big phone photos
+// don't blow past the request body limit and load fast on the card.
+async function compressImage(file: File, maxW = 1200, quality = 0.82): Promise<string> {
+  const dataUrl = await new Promise<string>((res, rej) => {
+    const r = new FileReader(); r.onload = () => res(r.result as string); r.onerror = rej; r.readAsDataURL(file);
+  });
+  try {
+    const img = new Image();
+    await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = dataUrl; });
+    const scale = Math.min(1, maxW / img.width);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(img.width * scale);
+    canvas.height = Math.round(img.height * scale);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return dataUrl;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', quality);
+  } catch { return dataUrl; }
+}
+
 // ── Coach: product form ─────────────────────────────────────────────────────
 function ProductForm({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
@@ -151,12 +171,11 @@ function ProductForm({ onClose }: { onClose: () => void }) {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); onClose(); },
   });
 
-  const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => setForm(f => ({ ...f, imagen: ev.target?.result as string }));
-    reader.readAsDataURL(file);
+    try { const img = await compressImage(file); setForm(f => ({ ...f, imagen: img })); }
+    finally { e.target.value = ''; }
   };
 
   return (
@@ -259,12 +278,11 @@ function EditProductForm({ product, onClose }: { product: Product; onClose: () =
     },
   });
 
-  const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => setForm(f => ({ ...f, imagen: ev.target?.result as string }));
-    reader.readAsDataURL(file);
+    try { const img = await compressImage(file); setForm(f => ({ ...f, imagen: img })); }
+    finally { e.target.value = ''; }
   };
 
   return (
@@ -449,7 +467,7 @@ export default function Store() {
     <div className="p-4 lg:p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
         <div>
-          <h1 className="text-xl lg:text-2xl font-black text-white">Tienda JTZ</h1>
+          <h1 className="text-xl lg:text-2xl font-black text-white">Merch Oficial JTZ</h1>
           <p className="text-gray-500 text-sm mt-0.5">{isCoach ? 'Inventario y pedidos del equipo' : 'Uniformes y artículos del club'}</p>
         </div>
         {isCoach && (
