@@ -29,7 +29,7 @@ router.post('/login', async (req: Request, res: Response) => {
     return res.status(403).json({ error: 'Tu cuenta está deshabilitada. Contacta a tu coach.' });
   }
 
-  const token = jwt.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET!, { expiresIn: '7d' });
+  const token = jwt.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET!, { expiresIn: '365d' });
   return res.json({ token, user: { id: user.id, email: user.email, role: user.role, runner: user.runner } });
 });
 
@@ -82,7 +82,7 @@ router.post('/register', async (req: Request, res: Response) => {
     include: { runner: true },
   });
 
-  const token = jwt.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET!, { expiresIn: '7d' });
+  const token = jwt.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET!, { expiresIn: '365d' });
   return res.status(201).json({ token, user: { id: user.id, email: user.email, role: user.role, runner: user.runner } });
 });
 
