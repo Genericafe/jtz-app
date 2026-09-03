@@ -69,7 +69,7 @@ export default function PublicLanding() {
             <span className="word-mask"><span className="word-rise" style={{ animationDelay: '.32s' }}>TRAIL</span></span>
           </h1>
           <p className="text-white/90 text-lg sm:text-2xl max-w-2xl mx-auto mt-6 leading-relaxed">
-            Corre. Sube. Vuela. Un club de trail y ruta en Ensenada que suma kilómetros juntos.
+            Corre. Sube. Vuela. Un club de trail y ruta que suma kilómetros juntos.
           </p>
           <div className="flex flex-wrap gap-3 justify-center mt-9">
             <Link to="/carreras" className="btn-primary px-7 py-3.5 text-sm font-bold flex items-center gap-2 shadow-glow">
@@ -91,7 +91,7 @@ export default function PublicLanding() {
         <div className="marquee-track">
           {Array.from({ length: 2 }).map((_, i) => (
             <span key={i} className="heading-display text-2xl sm:text-3xl text-white/90 uppercase tracking-tight">
-              {['Trail', 'Ruta', 'Montaña', 'Comunidad', 'Ensenada', 'JTZ Trail'].map((w) => (
+              {['Trail', 'Ruta', 'Montaña', 'Comunidad', 'Aventura', 'JTZ Trail'].map((w) => (
                 <span key={w} className="mx-6">{w} <span className="text-brand-500">•</span></span>
               ))}
             </span>
@@ -205,31 +205,27 @@ export default function PublicLanding() {
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-brand-300 mb-3">En la montaña</p>
           <h2 className="heading-display text-3xl sm:text-4xl text-white leading-tight mb-6">Cada salida, una historia.</h2>
         </Reveal>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Reveal className="col-span-2 md:col-span-2 row-span-2" delay={0}>
-            <div className="relative rounded-2xl overflow-hidden aspect-[16/10] md:h-full bg-surface-700 group">
-              <img src="/fotos/montana.jpg" alt="Trail en montaña" onError={hideOnError}
-                className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
-            </div>
-          </Reveal>
-          <Reveal className="col-span-1" delay={100}>
-            <div className="relative rounded-2xl overflow-hidden aspect-square bg-surface-700 group">
-              <img src="/fotos/accion.jpg" alt="Corredor JTZ" onError={hideOnError}
-                className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
-            </div>
-          </Reveal>
-          <Reveal className="col-span-1" delay={160}>
-            <div className="relative rounded-2xl overflow-hidden aspect-square bg-surface-700 group">
-              <img src="/fotos/cima.jpg" alt="En la cima" onError={hideOnError}
-                className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
-            </div>
-          </Reveal>
-          <Reveal className="col-span-2" delay={220}>
-            <div className="relative rounded-2xl overflow-hidden aspect-[16/9] bg-surface-700 group">
-              <img src="/fotos/trofeos.jpg" alt="Reconocimientos JTZ Trail" onError={hideOnError}
-                className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
-            </div>
-          </Reveal>
+        {/* Big clean banner (no baked-in text) */}
+        <Reveal>
+          <div className="relative rounded-2xl overflow-hidden aspect-[16/9] sm:aspect-[16/7] bg-surface-700 group">
+            <img src="/fotos/cima.jpg" alt="En la cima" onError={hideOnError}
+              className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+          </div>
+        </Reveal>
+        {/* Three even cards below — no overlap */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+          {[
+            { src: '/fotos/accion.jpg', alt: 'Corredor JTZ' },
+            { src: '/fotos/montana.jpg', alt: 'Trail en montaña' },
+            { src: '/fotos/trofeos.jpg', alt: 'Reconocimientos JTZ Trail' },
+          ].map((g, i) => (
+            <Reveal key={g.src} delay={i * 90}>
+              <div className="relative rounded-2xl overflow-hidden aspect-[4/3] bg-surface-700 group">
+                <img src={g.src} alt={g.alt} onError={hideOnError}
+                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+              </div>
+            </Reveal>
+          ))}
         </div>
       </section>
 
@@ -252,7 +248,7 @@ export default function PublicLanding() {
       {/* ── Footer ── */}
       <footer className="border-t border-white/[0.06] mt-8">
         <div className="max-w-5xl mx-auto px-4 py-8 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="text-sm text-gray-500">JTZ Trail · Ensenada, Baja California</p>
+          <p className="text-sm text-gray-500">JTZ Trail</p>
           <div className="flex gap-4 text-sm">
             <Link to="/carreras" className="text-gray-400 hover:text-white">Carreras</Link>
             <Link to="/seguir" className="text-gray-400 hover:text-white">Seguir en vivo</Link>
