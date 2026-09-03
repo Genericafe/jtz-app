@@ -1,8 +1,0 @@
-Guarda aquí las fotos del club con ESTOS nombres exactos (jpg):
-
-  hero.jpg       -> foto épica de montaña/trail (ej. corredor en la sierra, amanecer)
-  comunidad.jpg  -> foto grupal del club
-  accion.jpg     -> foto de acción de un corredor (perfil/corriendo)
-
-Recomendadas para tamaño/peso: ~1600px de ancho, <500 KB cada una.
-Después de guardarlas, avísame y las subo al sitio.
