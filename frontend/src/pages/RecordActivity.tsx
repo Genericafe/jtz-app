@@ -218,7 +218,19 @@ export default function RecordActivity() {
   // (compass / GPS course). When it's unavailable — e.g. the coach following a
   // route from a desktop with no compass — fall back to the bearing toward the
   // next point on the route, so the cone still clearly points "this way".
-  const mapHeading = state.headingDeg ?? routeNav?.absBearing ?? null;
+  // Direction of travel from the GPS track (fallback when the device has no
+  // compass) — bearing from a point ~12 m back to the latest fix, so it's stable.
+  const moveHeading = useMemo(() => {
+    const t = state.track;
+    if (t.length < 2) return null;
+    const last = t[t.length - 1];
+    for (let i = t.length - 2; i >= 0; i--) {
+      if (haversineM(t[i], last) >= 12) return bearingDeg(t[i], last);
+    }
+    return bearingDeg(t[0], last);
+  }, [state.track]);
+
+  const mapHeading = state.headingDeg ?? moveHeading ?? routeNav?.absBearing ?? null;
 
   // ── Encouragement: a motivational toast at each completed km ──
   const [encMsg, setEncMsg] = useState<string | null>(null);

@@ -29,7 +29,7 @@ const STYLES = {
 type StyleKey = keyof typeof STYLES;
 const STYLE_ORDER: StyleKey[] = ['outdoor', 'satellite', 'dark'];
 
-const NAV_ZOOM = 16.8;
+const NAV_ZOOM = 17.4;
 const NAV_PITCH = 55;
 const OFF_ROUTE_M = 30;
 
@@ -362,6 +362,8 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
       if (far || now - lastFollowRef.current > 700) {
         const opts: maplibregl.EaseToOptions = { center: [currentPos.lng, currentPos.lat], duration: far ? 0 : 600 };
         if (navModeRef.current && heading != null) { opts.bearing = heading; opts.pitch = NAV_PITCH; }
+        // Keep a close, legible zoom so movement is visible (never sit too far out).
+        if (navModeRef.current) opts.zoom = Math.max(map.getZoom(), NAV_ZOOM - 0.4);
         map.easeTo(opts);
         lastFollowRef.current = now;
       }
