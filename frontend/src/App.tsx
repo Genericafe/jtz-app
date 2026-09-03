@@ -29,6 +29,7 @@ import PlanBuilder from './pages/PlanBuilder';
 import PaymentSuccess from './pages/PaymentSuccess';
 import Chat from './pages/Chat';
 import RecordActivity from './pages/RecordActivity';
+import ParticipantRecord from './pages/ParticipantRecord';
 import ActivitiesHub from './pages/ActivitiesHub';
 import Badges from './pages/Badges';
 import Competitions from './pages/Competitions';
@@ -66,6 +67,7 @@ export default function App() {
           <Route path="/carreras" element={<PublicEvents />} />
           <Route path="/tienda-publica" element={<PublicStore />} />
           <Route path="/seguir" element={<PublicSpectator />} />
+          <Route path="/correr/:token" element={<ParticipantRecord />} />
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/corredores" element={<Runners />} />

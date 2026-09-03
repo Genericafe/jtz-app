@@ -205,7 +205,8 @@ router.post('/events/:id/register', async (req: Request, res: Response) => {
     coachUserId: await coachUserId(),
   }).catch(console.error);
 
-  return res.status(201).json({ ok: true, lead });
+  const dorsal = await assignDorsal(event.id, lead.id);
+  return res.status(201).json({ ok: true, lead, dorsal, participantUrl: participantUrl(lead.id, event.id) });
 });
 
 // Paid event — create Stripe checkout
@@ -234,6 +235,8 @@ router.post('/events/:id/checkout', async (req: Request, res: Response) => {
       categoriaId: cat.categoriaId,
     },
   });
+
+  await assignDorsal(event.id, lead.id);
 
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   if (!stripeKey || stripeKey.includes('REEMPLAZA') || stripeKey.length < 20) {
@@ -371,6 +374,123 @@ router.post('/store/checkout', async (req: Request, res: Response) => {
   }
 });
 
+// ── Participantes de carrera: acceso temporal por LINK MÁGICO ────────────────
+const PARTICIPANT_SECRET = () => process.env.JWT_SECRET ?? 'jtz-secret';
+
+function participantToken(leadId: number, eventId: number): string {
+  return jwt.sign({ type: 'participant', leadId, eventId }, PARTICIPANT_SECRET(), { expiresIn: '30d' });
+}
+function participantUrl(leadId: number, eventId: number): string {
+  return `${process.env.FRONTEND_URL}/correr/${participantToken(leadId, eventId)}`;
+}
+function verifyParticipant(token: string): { leadId: number; eventId: number } | null {
+  try {
+    const p = jwt.verify(token, PARTICIPANT_SECRET()) as any;
+    if (p?.type !== 'participant') return null;
+    return { leadId: Number(p.leadId), eventId: Number(p.eventId) };
+  } catch { return null; }
+}
+// Auto-assign the next sequential dorsal for an event (idempotent per lead).
+async function assignDorsal(eventId: number, leadId: number): Promise<number | null> {
+  const lead = await prisma.eventLead.findUnique({ where: { id: leadId } });
+  if (lead?.dorsal) return lead.dorsal;
+  const max = await prisma.eventLead.aggregate({ where: { eventId, dorsal: { not: null } }, _max: { dorsal: true } });
+  const next = (max._max.dorsal ?? 0) + 1;
+  await prisma.eventLead.update({ where: { id: leadId }, data: { dorsal: next } });
+  return next;
+}
+
+// Resolve a magic-link token → event + participant info (for the recording page)
+router.get('/participant/:token', async (req: Request, res: Response) => {
+  const p = verifyParticipant(req.params.token);
+  if (!p) return res.status(403).json({ error: 'Enlace inválido o expirado' });
+  const lead = await prisma.eventLead.findUnique({ where: { id: p.leadId }, include: { event: true } });
+  if (!lead) return res.status(404).json({ error: 'Inscripción no encontrada' });
+  return res.json({
+    eventId: lead.eventId, eventNombre: lead.event.nombre, fecha: lead.event.fecha,
+    lugar: lead.event.lugar, ciudad: lead.event.ciudad, tipo: lead.event.tipo,
+    leadId: lead.id, nombre: `${lead.nombre} ${lead.apellido}`.trim(), dorsal: lead.dorsal,
+  });
+});
+
+// Participant: start / update / stop their live session
+router.post('/participant/:token/start', async (req: Request, res: Response) => {
+  const p = verifyParticipant(req.params.token);
+  if (!p) return res.status(403).json({ error: 'Enlace inválido' });
+  const lead = await prisma.eventLead.findUnique({ where: { id: p.leadId } });
+  if (!lead) return res.status(404).json({ error: 'No encontrado' });
+  const tipo = (req.body?.tipo as string) || 'correr';
+  const nombre = `${lead.nombre} ${lead.apellido}`.trim();
+  const s = await prisma.eventLiveSession.upsert({
+    where: { leadId: lead.id },
+    update: { activo: true, endedAt: null, startedAt: new Date(), lastUpdate: new Date(), distanciaKm: 0, trail: '[]', tipo, nombre, dorsal: lead.dorsal, eventId: lead.eventId },
+    create: { leadId: lead.id, eventId: lead.eventId, nombre, dorsal: lead.dorsal, tipo, trail: '[]' },
+  });
+  return res.json({ ok: true, id: s.id });
+});
+
+router.post('/participant/:token/ping', async (req: Request, res: Response) => {
+  const p = verifyParticipant(req.params.token);
+  if (!p) return res.status(403).json({ error: 'Enlace inválido' });
+  const { lat, lng, trail, distanciaKm } = req.body ?? {};
+  await prisma.eventLiveSession.update({
+    where: { leadId: p.leadId },
+    data: {
+      lastLat: typeof lat === 'number' ? lat : undefined,
+      lastLng: typeof lng === 'number' ? lng : undefined,
+      trail: typeof trail === 'string' ? trail : (Array.isArray(trail) ? JSON.stringify(trail) : undefined),
+      distanciaKm: typeof distanciaKm === 'number' ? distanciaKm : undefined,
+      lastUpdate: new Date(), activo: true,
+    },
+  }).catch(() => {});
+  return res.json({ ok: true });
+});
+
+router.post('/participant/:token/stop', async (req: Request, res: Response) => {
+  const p = verifyParticipant(req.params.token);
+  if (!p) return res.status(403).json({ error: 'Enlace inválido' });
+  await prisma.eventLiveSession.update({ where: { leadId: p.leadId }, data: { activo: false, endedAt: new Date() } }).catch(() => {});
+  return res.json({ ok: true });
+});
+
+// Recover a participant's magic link by email (race-day access without the email)
+router.post('/events/:id/participant-link', async (req: Request, res: Response) => {
+  const email = String(req.body?.email ?? '').trim().toLowerCase();
+  if (!email) return res.status(400).json({ error: 'Correo requerido' });
+  const lead = await prisma.eventLead.findUnique({ where: { eventId_email: { eventId: Number(req.params.id), email } } });
+  if (!lead) return res.status(404).json({ error: 'No encontramos una inscripción con ese correo para este evento.' });
+  const dorsal = await assignDorsal(lead.eventId, lead.id);
+  return res.json({ url: participantUrl(lead.id, lead.eventId), nombre: `${lead.nombre} ${lead.apellido}`.trim(), dorsal });
+});
+
+// Spectator: list participants currently sharing live for this event (search by name/number)
+router.get('/events/:id/live', async (req: Request, res: Response) => {
+  const eventId = Number(req.params.id);
+  const sessions = await prisma.eventLiveSession.findMany({
+    where: { eventId, activo: true }, orderBy: { lastUpdate: 'desc' },
+  });
+  const now = Date.now();
+  return res.json(sessions.map(s => ({
+    leadId: s.leadId, nombre: s.nombre, dorsal: s.dorsal, tipo: s.tipo,
+    distanciaKm: s.distanciaKm, lastUpdate: s.lastUpdate,
+    stale: now - new Date(s.lastUpdate).getTime() > 120_000,
+  })));
+});
+
+// Spectator: one participant's live route
+router.get('/events/:id/live/:leadId', async (req: Request, res: Response) => {
+  const s = await prisma.eventLiveSession.findUnique({ where: { leadId: Number(req.params.leadId) } });
+  if (!s || s.eventId !== Number(req.params.id)) return res.status(404).json({ error: 'No disponible' });
+  let trail: number[][] = [];
+  try { trail = JSON.parse(s.trail ?? '[]'); } catch { trail = []; }
+  return res.json({
+    leadId: s.leadId, nombre: s.nombre, dorsal: s.dorsal, tipo: s.tipo,
+    activo: s.activo, startedAt: s.startedAt, lastUpdate: s.lastUpdate,
+    lat: s.lastLat, lng: s.lastLng, distanciaKm: s.distanciaKm, trail,
+    stale: Date.now() - new Date(s.lastUpdate).getTime() > 120_000,
+  });
+});
+
 // Stripe webhook — confirm lead payment
 router.post('/webhook/stripe', async (req: Request, res: Response) => {
   const sig = req.headers['stripe-signature'];
@@ -466,7 +586,8 @@ router.get('/verify/:sessionId', async (req: Request, res: Response) => {
         tipo: lead.event.tipo,
         coachUserId: await coachUserId(),
       }).catch(console.error);
-      return res.json({ ok: true, lead });
+      const dorsal = await assignDorsal(lead.eventId, lead.id);
+      return res.json({ ok: true, lead, dorsal, participantUrl: participantUrl(lead.id, lead.eventId) });
     }
     return res.json({ ok: false });
   } catch {

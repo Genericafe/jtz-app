@@ -87,10 +87,17 @@ router.post('/events/:id/broadcast', async (req: AuthRequest, res: Response) => 
 
 // Update lead status manually
 router.put('/leads/:id', async (req: AuthRequest, res: Response) => {
+  const data: { estado?: string; dorsal?: number | null } = {};
+  if (typeof req.body.estado === 'string') data.estado = req.body.estado;
+  if (req.body.dorsal !== undefined) data.dorsal = req.body.dorsal === null || req.body.dorsal === '' ? null : Number(req.body.dorsal);
   const lead = await prisma.eventLead.update({
     where: { id: Number(req.params.id) },
-    data: { estado: req.body.estado },
+    data,
   });
+  // Keep the live session's dorsal in sync if it exists
+  if (data.dorsal !== undefined) {
+    await prisma.eventLiveSession.updateMany({ where: { leadId: lead.id }, data: { dorsal: data.dorsal } }).catch(() => {});
+  }
   return res.json(lead);
 });
 

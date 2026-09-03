@@ -140,6 +140,15 @@ export const publicApi = {
   storeCheckout: (data: { items: { productId: number; cantidad: number }[]; email?: string }) => api.post('/public/store/checkout', data),
   verifySession: (sessionId: string) => api.get(`/public/verify/${sessionId}`),
   site: () => api.get('/public/site'),
+  // Race participant (magic-link temporary access)
+  participantInfo: (token: string) => api.get(`/public/participant/${token}`),
+  participantStart: (token: string, data: object) => api.post(`/public/participant/${token}/start`, data),
+  participantPing: (token: string, data: object) => api.post(`/public/participant/${token}/ping`, data),
+  participantStop: (token: string) => api.post(`/public/participant/${token}/stop`, {}),
+  participantLinkByEmail: (eventId: number, email: string) => api.post(`/public/events/${eventId}/participant-link`, { email }),
+  // Spectator: live participants of an event
+  eventLive: (eventId: number) => api.get(`/public/events/${eventId}/live`),
+  eventLiveOne: (eventId: number, leadId: number) => api.get(`/public/events/${eventId}/live/${leadId}`),
 };
 
 export const siteApi = {
@@ -159,6 +168,7 @@ export const leadsApi = {
   exportUrl: (eventId: number) => `/api/coach/events/${eventId}/leads/export`,
   broadcast: (eventId: number, data: object) => api.post(`/coach/events/${eventId}/broadcast`, data),
   updateStatus: (leadId: number, estado: string) => api.put(`/coach/leads/${leadId}`, { estado }),
+  updateDorsal: (leadId: number, dorsal: number | null) => api.put(`/coach/leads/${leadId}`, { dorsal }),
   delete: (leadId: number) => api.delete(`/coach/leads/${leadId}`),
 };
 

@@ -27,6 +27,7 @@ interface Row {
   utmMedium?: string;
   fecha: string;
   leadId?: number;
+  dorsal?: number | null;
 }
 
 const estadoStyle: Record<string, string> = {
@@ -227,7 +228,7 @@ export default function EventLeads() {
       id: number; nombre: string; apellido: string; email: string;
       telefono?: string; ciudad?: string; fechaNacimiento?: string; tallaPlayera?: string;
       estado: string; monto: number; createdAt: string;
-      fuente?: string; utmSource?: string; utmMedium?: string;
+      fuente?: string; utmSource?: string; utmMedium?: string; dorsal?: number | null;
     }) => ({
       key: `lead-${l.id}`,
       nombre: `${l.nombre} ${l.apellido}`,
@@ -243,6 +244,7 @@ export default function EventLeads() {
       utmMedium: l.utmMedium,
       fecha: l.createdAt,
       leadId: l.id,
+      dorsal: l.dorsal ?? null,
     }))),
   ];
 
@@ -312,6 +314,12 @@ export default function EventLeads() {
   const updateStatusMutation = useMutation({
     mutationFn: ({ leadId, estado }: { leadId: number; estado: string }) =>
       leadsApi.updateStatus(leadId, estado),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['event-detail', id] }),
+  });
+
+  const updateDorsalMutation = useMutation({
+    mutationFn: ({ leadId, dorsal }: { leadId: number; dorsal: number | null }) =>
+      leadsApi.updateDorsal(leadId, dorsal),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['event-detail', id] }),
   });
 
@@ -536,7 +544,7 @@ export default function EventLeads() {
               <table className="w-full text-sm">
                 <thead className="bg-surface-800/60 border-b border-white/[0.05]">
                   <tr>
-                    {['Nombre', 'Email', 'Teléfono', 'Talla', 'Fecha Nac.', 'Estado', 'Monto', 'Canal', 'Fecha', ''].map(h => (
+                    {['Nombre', 'N°', 'Email', 'Teléfono', 'Talla', 'Fecha Nac.', 'Estado', 'Monto', 'Canal', 'Fecha', ''].map(h => (
                       <th key={h} className="text-left text-xs font-bold text-gray-500 uppercase tracking-wide px-4 py-3 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -545,6 +553,21 @@ export default function EventLeads() {
                   {uniqueRows.map(row => (
                     <tr key={row.key} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
                       <td className="px-4 py-3 font-medium text-white whitespace-nowrap">{row.nombre}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {row.leadId ? (
+                          <input
+                            type="number" min={1}
+                            defaultValue={row.dorsal ?? ''}
+                            placeholder="—"
+                            onBlur={e => {
+                              const v = e.target.value.trim();
+                              const n = v === '' ? null : Number(v);
+                              if (n !== (row.dorsal ?? null)) updateDorsalMutation.mutate({ leadId: row.leadId!, dorsal: n });
+                            }}
+                            className="w-16 bg-surface-700 border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-white text-center focus:outline-none focus:border-brand-500/60"
+                          />
+                        ) : <span className="text-gray-600 text-xs">—</span>}
+                      </td>
                       <td className="px-4 py-3 text-gray-400 text-xs max-w-[140px] truncate">{row.email || '—'}</td>
                       <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{row.telefono || '—'}</td>
                       <td className="px-4 py-3 text-center">

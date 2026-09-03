@@ -5,8 +5,10 @@ import { Event } from '../types';
 import { isAfter, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { formatEvent } from '../utils/eventDate';
-import { MapPin, Calendar, Trophy, CheckCircle, Clock, Zap, CreditCard, Shirt, ArrowRight } from 'lucide-react';
+import { MapPin, Calendar, Trophy, CheckCircle, Clock, Zap, CreditCard, Shirt, ArrowRight, Radio, Play, Copy, Check } from 'lucide-react';
 import PublicHeader from '../components/PublicHeader';
+import EventLiveTracker from '../components/EventLiveTracker';
+import ParticipantLinkBox from '../components/ParticipantLinkBox';
 
 const typeGradient: Record<string, string> = {
   carrera:       'from-orange-500 via-red-500 to-rose-700',
@@ -90,6 +92,9 @@ export default function EventLanding() {
   const [fnAño, setFnAño] = useState('');
   const [formError, setFormError] = useState('');
   const [catId, setCatId] = useState<number | null>(null);
+  const [participantUrl, setParticipantUrl] = useState<string | null>(null);
+  const [participantDorsal, setParticipantDorsal] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const handleFechaNacimiento = (dia: string, mes: string, año: string) => {
     if (dia && mes && año) {
@@ -120,7 +125,13 @@ export default function EventLanding() {
     if (success && sessionId) {
       setStep('processing');
       publicApi.verifySession(sessionId)
-        .then(r => setStep(r.data.ok ? 'success' : 'error'))
+        .then(r => {
+          if (r.data.ok) {
+            setParticipantUrl(r.data.participantUrl ?? null);
+            setParticipantDorsal(r.data.dorsal ?? null);
+            setStep('success');
+          } else setStep('error');
+        })
         .catch(() => setStep('error'));
     }
     if (searchParams.get('cancelled')) setStep('form');
@@ -144,7 +155,9 @@ export default function EventLanding() {
     try {
       if (effPrice === 0) {
         setCheckoutLoading(true);
-        await publicApi.registerFree(event.id, payload);
+        const r = await publicApi.registerFree(event.id, payload);
+        setParticipantUrl(r.data.participantUrl ?? null);
+        setParticipantDorsal(r.data.dorsal ?? null);
         setStep('success');
       } else {
         setCheckoutLoading(true);
@@ -196,7 +209,31 @@ export default function EventLanding() {
           {formatEvent(event.fecha, "EEEE d 'de' MMMM · HH:mm 'hrs'")}
         </p>
         <p className="text-gray-500 text-sm mt-1">{event.lugar}, {event.ciudad}</p>
-        <div className="mt-8 p-5 bg-surface-700 rounded-2xl border border-white/[0.06]">
+        {participantDorsal != null && (
+          <p className="mt-4 text-sm text-gray-300">Tu número de corredor: <span className="font-black text-white text-lg">#{participantDorsal}</span></p>
+        )}
+
+        {participantUrl && (
+          <div className="mt-6 p-5 bg-brand-500/[0.08] rounded-2xl border border-brand-500/25 text-left">
+            <div className="flex items-center gap-2 mb-2">
+              <Radio size={16} className="text-brand-400" />
+              <p className="text-sm font-bold text-white">Marca tu actividad el día de la carrera</p>
+            </div>
+            <p className="text-xs text-gray-400 mb-3">Con este enlace personal podrás marcar tu recorrido en vivo — sin crear cuenta. Guárdalo (también te lo mostramos por correo). El día del evento, ábrelo y presiona “Iniciar”.</p>
+            <div className="flex gap-2">
+              <a href={participantUrl} className="flex-1 btn-primary py-2.5 text-sm font-bold flex items-center justify-center gap-2">
+                <Play size={14} fill="white" /> Abrir mi enlace
+              </a>
+              <button
+                onClick={() => { navigator.clipboard?.writeText(participantUrl).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}
+                className="px-3 rounded-xl border border-white/15 text-gray-300 hover:text-white hover:bg-surface-600 transition-colors">
+                {copied ? <Check size={16} className="text-green-400" /> : <Copy size={16} />}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-6 p-5 bg-surface-700 rounded-2xl border border-white/[0.06]">
           <p className="text-sm text-gray-300">📩 Te enviamos la confirmación y los detalles a tu correo.</p>
           <p className="text-xs text-gray-500 mt-1">Si no lo ves, revisa tu carpeta de spam.</p>
           <div className="inline-flex items-center gap-2 mt-4 text-brand-400 font-bold text-sm">
@@ -210,10 +247,30 @@ export default function EventLanding() {
   const isPast = !isAfter(new Date(event.fecha), new Date());
   const gradient = typeGradient[event.tipo] ?? typeGradient.carrera;
   const emoji = typeEmoji[event.tipo] ?? '🏃';
+  // "En curso": desde la hora de inicio y hasta 24 h después.
+  const startMs = new Date(event.fecha).getTime();
+  const isLive = Date.now() >= startMs && Date.now() <= startMs + 24 * 3600 * 1000;
 
   return (
     <div className="min-h-screen bg-surface-900">
       <PublicHeader />
+
+      {isLive && (
+        <section className="max-w-3xl mx-auto px-4 pt-6">
+          <div className="card p-5 border border-red-500/25">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+              <h2 className="heading-display text-xl text-white">Seguimiento en vivo</h2>
+              <span className="text-[10px] font-bold uppercase tracking-wide text-red-400 bg-red-500/15 px-2 py-0.5 rounded-full ml-1">En curso</span>
+            </div>
+            <p className="text-gray-400 text-sm mb-4">La carrera está en curso. Busca a un corredor por <strong className="text-gray-300">nombre</strong> o <strong className="text-gray-300">número</strong> y sigue su recorrido en tiempo real.</p>
+            <EventLiveTracker eventId={event.id} />
+            <div className="mt-5 pt-5 border-t border-white/[0.06]">
+              <ParticipantLinkBox eventId={event.id} />
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Hero — full-bleed photo, clean editorial */}
       <div className="relative min-h-[70vh] sm:min-h-[78vh] flex items-end overflow-hidden">

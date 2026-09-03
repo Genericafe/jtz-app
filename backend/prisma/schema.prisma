@@ -305,9 +305,10 @@ model Event {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  registros  EventRegistration[]
-  leads      EventLead[]
-  categorias EventCategory[]
+  registros    EventRegistration[]
+  leads        EventLead[]
+  categorias   EventCategory[]
+  liveSessions EventLiveSession[]
 }
 
 // Configuración del sitio público (singleton, id=1): fotos de la landing.
@@ -444,9 +445,35 @@ model EventLead {
   monto           Float     @default(0)
   categoriaId     Int?
   categoria       String?   // nombre de la categoría elegida (ej. "21K")
+  dorsal          Int?      // número de corredor (auto o asignado por el coach)
   createdAt       DateTime  @default(now())
 
+  liveSession     EventLiveSession?
+
   @@unique([eventId, email])
+}
+
+// Seguimiento en vivo de un participante de carrera (acceso temporal por link mágico,
+// sin cuenta permanente). Separado de LiveSession (que es para corredores del club).
+model EventLiveSession {
+  id          Int       @id @default(autoincrement())
+  eventId     Int
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  leadId      Int       @unique
+  lead        EventLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  nombre      String
+  dorsal      Int?
+  activo      Boolean   @default(true)
+  tipo        String    @default("correr")
+  startedAt   DateTime  @default(now())
+  endedAt     DateTime?
+  lastLat     Float?
+  lastLng     Float?
+  lastUpdate  DateTime  @default(now())
+  distanciaKm Float     @default(0)
+  trail       String?   @db.Text // JSON: [[lng,lat],…]
+
+  @@index([eventId, activo])
 }
 
 model Route {
