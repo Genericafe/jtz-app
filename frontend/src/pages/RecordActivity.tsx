@@ -58,6 +58,8 @@ export default function RecordActivity() {
     setMarker(m);
     try { localStorage.setItem('jtz_marker', m); } catch { /* ignore */ }
   };
+  const [sharePublic, setSharePublic] = useState(false);
+  const sharePublicRef = useRef(sharePublic); sharePublicRef.current = sharePublic;
   const [nombre, setNombre] = useState('');
   const [saved, setSaved] = useState(false);
   const [showElevation, setShowElevation] = useState(false);
@@ -245,7 +247,7 @@ export default function RecordActivity() {
   useEffect(() => {
     if (state.status === 'running' && !liveStartedRef.current) {
       liveStartedRef.current = true;
-      liveApi.start(tipo).catch(() => {});
+      liveApi.start(tipo, sharePublicRef.current).catch(() => {});
     }
     if ((state.status === 'finished' || state.status === 'idle') && liveStartedRef.current) {
       liveStartedRef.current = false;
@@ -516,6 +518,17 @@ export default function RecordActivity() {
                   ))}
                 </div>
               </div>
+              {/* Public live sharing toggle */}
+              <button onClick={() => setSharePublic(v => !v)}
+                className="mt-3 w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-dark-700 text-left">
+                <span className={`w-10 h-6 rounded-full flex-shrink-0 relative transition-colors ${sharePublic ? 'bg-brand-500' : 'bg-dark-600'}`}>
+                  <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${sharePublic ? 'left-[18px]' : 'left-0.5'}`} />
+                </span>
+                <span className="flex-1">
+                  <span className="text-sm text-white font-medium">Compartir mi recorrido en vivo</span>
+                  <span className="block text-[11px] text-gray-500">Familia y espectadores podrán seguirte por tu nombre, sin iniciar sesión</span>
+                </span>
+              </button>
             </div>
           )}
 

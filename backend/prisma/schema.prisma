@@ -90,6 +90,7 @@ model LiveSession {
   runnerId    Int       @unique
   runner      Runner    @relation(fields: [runnerId], references: [id], onDelete: Cascade)
   activo      Boolean   @default(true)
+  publico     Boolean   @default(false) // opt-in: visible para espectadores sin login
   tipo        String    @default("correr")
   startedAt   DateTime  @default(now())
   endedAt     DateTime?

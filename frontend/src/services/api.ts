@@ -133,6 +133,8 @@ export const publicApi = {
   getEvent: (id: number) => api.get(`/public/events/${id}`),
   listEvents: () => api.get('/public/events'),
   listProducts: () => api.get('/public/products'),
+  liveList: () => api.get('/public/live'),
+  liveSession: (runnerId: number) => api.get(`/public/live/${runnerId}`),
   registerFree: (id: number, data: object) => api.post(`/public/events/${id}/register`, data),
   checkout: (id: number, data: object) => api.post(`/public/events/${id}/checkout`, data),
   verifySession: (sessionId: string) => api.get(`/public/verify/${sessionId}`),
@@ -195,7 +197,7 @@ export const trainingApi = {
 };
 
 export const liveApi = {
-  start:     (tipo: string) => api.post('/live/start', { tipo }),
+  start:     (tipo: string, publico = false) => api.post('/live/start', { tipo, publico }),
   ping:      (d: { lat: number; lng: number; distanciaKm?: number }) => api.post('/live/ping', d),
   stop:      () => api.post('/live/stop'),
   active:    () => api.get('/live/active'),

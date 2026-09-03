@@ -22,12 +22,13 @@ router.post('/start', async (req: AuthRequest, res: Response) => {
   const runner = await myRunner(req.userId!);
   if (!runner) return res.status(404).json({ error: 'Perfil no encontrado' });
   const tipo = typeof req.body?.tipo === 'string' ? req.body.tipo : 'correr';
+  const publico = req.body?.publico === true;
 
   const now = new Date();
   await (prisma as any).liveSession.upsert({
     where: { runnerId: runner.id },
-    update: { activo: true, tipo, startedAt: now, endedAt: null, lastUpdate: now, distanciaKm: 0, trail: '[]', lastLat: null, lastLng: null },
-    create: { runnerId: runner.id, tipo, activo: true, trail: '[]' },
+    update: { activo: true, publico, tipo, startedAt: now, endedAt: null, lastUpdate: now, distanciaKm: 0, trail: '[]', lastLat: null, lastLng: null },
+    create: { runnerId: runner.id, tipo, publico, activo: true, trail: '[]' },
   });
 
   const nombre = `${runner.nombre} ${runner.apellido}`.trim();

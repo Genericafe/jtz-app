@@ -4,6 +4,7 @@ import { Zap } from 'lucide-react';
 const NAV: [string, string][] = [
   ['/inicio', 'Inicio'],
   ['/carreras', 'Carreras'],
+  ['/seguir', 'Seguir en vivo'],
   ['/tienda-publica', 'Tienda'],
 ];
 

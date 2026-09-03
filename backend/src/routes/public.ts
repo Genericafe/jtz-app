@@ -74,6 +74,39 @@ router.get('/products', async (_req: Request, res: Response) => {
   return res.json(products);
 });
 
+// ── Public live tracking (spectator) — only sessions the runner made public ───
+// List of runners currently sharing their run publicly (for search).
+router.get('/live', async (_req: Request, res: Response) => {
+  const cutoff = new Date(Date.now() - 90_000);
+  const sessions = await (prisma as any).liveSession.findMany({
+    where: { activo: true, publico: true, lastUpdate: { gte: cutoff } },
+    include: { runner: { select: { id: true, nombre: true, apellido: true } } },
+    orderBy: { lastUpdate: 'desc' },
+  });
+  return res.json(sessions.map((s: any) => ({
+    runnerId: s.runnerId,
+    nombre: `${s.runner.nombre} ${s.runner.apellido}`.trim(),
+    tipo: s.tipo, distanciaKm: s.distanciaKm, lastUpdate: s.lastUpdate,
+  })));
+});
+
+// One public runner's live position + trail (only if they made it public).
+router.get('/live/:runnerId', async (req: Request, res: Response) => {
+  const s = await (prisma as any).liveSession.findUnique({
+    where: { runnerId: Number(req.params.runnerId) },
+    include: { runner: { select: { nombre: true, apellido: true } } },
+  });
+  if (!s || !s.publico) return res.status(404).json({ error: 'No disponible' });
+  let trail: number[][] = [];
+  try { trail = JSON.parse(s.trail ?? '[]'); } catch { trail = []; }
+  return res.json({
+    runnerId: s.runnerId, nombre: `${s.runner.nombre} ${s.runner.apellido}`.trim(),
+    activo: s.activo, tipo: s.tipo, startedAt: s.startedAt, lastUpdate: s.lastUpdate,
+    lat: s.lastLat, lng: s.lastLng, distanciaKm: s.distanciaKm, trail,
+    stale: Date.now() - new Date(s.lastUpdate).getTime() > 90_000,
+  });
+});
+
 // ── Event image — public, real URL for <img> and Open Graph previews ──────────
 router.get('/events/:id/image', async (req: Request, res: Response) => {
   const event = await prisma.event.findUnique({
