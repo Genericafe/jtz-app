@@ -11,6 +11,17 @@ interface Session { runnerId: number; nombre: string; activo: boolean; lat: numb
 
 const sinceMin = (iso: string) => Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
 
+// Bearing (deg) from point a to b — for the runner's direction on the live map.
+function bearing(a: MapPoint, b: MapPoint): number {
+  const toR = Math.PI / 180, toD = 180 / Math.PI;
+  const dLng = (b.lng - a.lng) * toR;
+  const la1 = a.lat * toR, la2 = b.lat * toR;
+  const y = Math.sin(dLng) * Math.cos(la2);
+  const x = Math.cos(la1) * Math.sin(la2) - Math.sin(la1) * Math.cos(la2) * Math.cos(dLng);
+  return (Math.atan2(y, x) * toD + 360) % 360;
+}
+const coachMarker = (() => { try { return localStorage.getItem('jtz_marker') ?? ''; } catch { return ''; } })();
+
 export default function LiveTracking() {
   const [selected, setSelected] = useState<number | null>(null);
 
@@ -35,6 +46,8 @@ export default function LiveTracking() {
   const trail: MapPoint[] = (session?.trail ?? []).map(([lng, lat]) => ({ lat, lng }));
   const pos: MapPoint | undefined = session?.lat != null && session?.lng != null
     ? { lat: session.lat, lng: session.lng } : undefined;
+  // Runner's heading from the last two trail points
+  const liveHeading = trail.length >= 2 ? bearing(trail[trail.length - 2], trail[trail.length - 1]) : null;
 
   // ── Voice recording ──
   const mediaRef = useRef<MediaRecorder | null>(null);
@@ -115,7 +128,7 @@ export default function LiveTracking() {
           <div className="card overflow-hidden mb-4" style={{ height: 380 }}>
             {pos ? (
               <Suspense fallback={<div className="w-full h-full bg-dark-800 flex items-center justify-center text-gray-500 text-sm">Cargando mapa…</div>}>
-                <LiveTrackingMap track={trail} currentPos={pos} heading={null} className="w-full h-full" />
+                <LiveTrackingMap track={trail} currentPos={pos} heading={liveHeading} markerEmoji={coachMarker} className="w-full h-full" />
               </Suspense>
             ) : (
               <div className="w-full h-full flex items-center justify-center text-gray-500 text-sm">Esperando ubicación de {selectedRunner?.nombre ?? 'el corredor'}…</div>

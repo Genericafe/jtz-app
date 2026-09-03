@@ -10,7 +10,14 @@ interface Props {
   referenceRoute?: MapPoint[];
   currentPos?: MapPoint;
   heading?: number | null;
+  markerEmoji?: string;   // custom cursor (emoji); empty = default arrow
   className?: string;
+}
+
+// Cardinal direction (Spanish) from a compass bearing in degrees.
+const CARDINALS = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+function cardinal(deg: number): string {
+  return CARDINALS[Math.round(((deg % 360) + 360) % 360 / 45) % 8];
 }
 
 const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY ?? '';
@@ -99,7 +106,7 @@ function computeGuidance(route: MapPoint[], pos: MapPoint, idx: number): Guidanc
 }
 
 const LiveTrackingMap = memo(function LiveTrackingMap({
-  track, referenceRoute, currentPos, heading, className = '',
+  track, referenceRoute, currentPos, heading, markerEmoji = '', className = '',
 }: Props) {
   const containerRef    = useRef<HTMLDivElement>(null);
   const mapRef          = useRef<maplibregl.Map | null>(null);
@@ -118,6 +125,7 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
   const routeRef   = useRef(referenceRoute); routeRef.current = referenceRoute;
   const currentPosRef = useRef(currentPos); currentPosRef.current = currentPos;
   const headingRef = useRef(heading);      headingRef.current = heading;
+  const markerEmojiRef = useRef(markerEmoji); markerEmojiRef.current = markerEmoji;
   const navModeRef = useRef(true);
 
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -193,8 +201,7 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
       endMarkerRef.current   = end.addTo(map);
     }
     if (pos && !posMarkerRef.current) {
-      posMarkerRef.current = new maplibregl.Marker({ element: makeHeadingEl(), rotationAlignment: 'map' })
-        .setLngLat([pos.lng, pos.lat]).addTo(map);
+      posMarkerRef.current = createPosMarker(map, pos, markerEmojiRef.current);
     }
   };
 
@@ -328,20 +335,23 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
       ?.setData(pointFeature(currentPos) as any);
 
     if (!posMarkerRef.current) {
-      posMarkerRef.current = new maplibregl.Marker({ element: makeHeadingEl(), rotationAlignment: 'map' })
-        .setLngLat([currentPos.lng, currentPos.lat]).addTo(map);
+      posMarkerRef.current = createPosMarker(map, currentPos, markerEmojiRef.current);
     }
     posMarkerRef.current.setLngLat([currentPos.lng, currentPos.lat]);
-    const el = posMarkerRef.current.getElement();
-    const beam = el.querySelector('.jtz-beam') as HTMLElement | null;
-    const arrow = el.querySelector('.jtz-arrow') as HTMLElement | null;
-    if (heading != null) {
-      posMarkerRef.current.setRotation(heading);
-      if (beam) beam.style.opacity = '1';
-      if (arrow) arrow.style.opacity = '1';
-    } else {
-      if (beam) beam.style.opacity = '0';
-      if (arrow) arrow.style.opacity = '0';
+    // Only the arrow cursor rotates; emoji cursors stay upright (direction shown
+    // by the rotating map + compass badge).
+    if (!markerEmojiRef.current) {
+      const el = posMarkerRef.current.getElement();
+      const beam = el.querySelector('.jtz-beam') as HTMLElement | null;
+      const arrow = el.querySelector('.jtz-arrow') as HTMLElement | null;
+      if (heading != null) {
+        posMarkerRef.current.setRotation(heading);
+        if (beam) beam.style.opacity = '1';
+        if (arrow) arrow.style.opacity = '1';
+      } else {
+        if (beam) beam.style.opacity = '0';
+        if (arrow) arrow.style.opacity = '0';
+      }
     }
 
     // Camera follow (throttled). Nav mode rotates the map to the heading + tilts.
@@ -367,6 +377,16 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
     }
   }, [currentPos]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Recreate the position marker when the chosen cursor (emoji) changes.
+  useEffect(() => {
+    if (!mapRef.current || !readyRef.current) return;
+    posMarkerRef.current?.remove();
+    posMarkerRef.current = null;
+    const t = trackRef.current;
+    const pos = currentPosRef.current ?? (t.length ? t[t.length - 1] : null);
+    if (pos) posMarkerRef.current = createPosMarker(mapRef.current, pos, markerEmoji);
+  }, [markerEmoji]);
+
   const btn: React.CSSProperties = {
     width: 52, height: 52, borderRadius: 16, border: '1px solid rgba(255,255,255,0.14)',
     background: 'rgba(17,19,21,0.92)', color: '#e5e7eb', display: 'flex',
@@ -377,6 +397,19 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
   return (
     <div className={className} style={{ position: 'relative', width: '100%', height: '100%', background: '#0f1115' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+
+      {/* Compass — cardinal direction of travel */}
+      {mapLoaded && heading != null && (
+        <div style={{
+          position: 'absolute', top: 12, left: 12, display: 'flex', alignItems: 'center', gap: 6,
+          padding: '6px 12px', borderRadius: 12, background: 'rgba(17,19,21,0.9)',
+          border: '1px solid rgba(255,255,255,0.14)', backdropFilter: 'blur(6px)',
+          color: '#fff', fontWeight: 700, fontSize: 14, boxShadow: '0 2px 10px rgba(0,0,0,0.4)',
+        }}>
+          <span style={{ display: 'inline-block', transform: `rotate(${heading}deg)`, color: '#3b82f6', fontSize: 15 }}>↑</span>
+          {cardinal(heading)} <span style={{ color: '#9ca3af', fontWeight: 500 }}>{Math.round(heading)}°</span>
+        </div>
+      )}
 
       {!mapLoaded && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
@@ -447,9 +480,29 @@ const LiveTrackingMap = memo(function LiveTrackingMap({
 export default LiveTrackingMap;
 
 // ── Marker helpers ───────────────────────────────────────────────────────────
-function makeHeadingEl(): HTMLDivElement {
+
+// Position marker. Arrow cursor rotates with the map; emoji cursors stay upright.
+function createPosMarker(map: maplibregl.Map, pos: MapPoint, emoji: string): maplibregl.Marker {
+  return new maplibregl.Marker({
+    element: makeHeadingEl(emoji),
+    rotationAlignment: emoji ? 'viewport' : 'map',
+  }).setLngLat([pos.lng, pos.lat]).addTo(map);
+}
+
+function makeHeadingEl(emoji: string): HTMLDivElement {
   const el = document.createElement('div');
   el.style.width = '0'; el.style.height = '0';
+  if (emoji) {
+    el.innerHTML = `
+      <div style="position:relative;width:0;height:0;">
+        <div style="position:absolute;left:-13px;top:-13px;width:26px;height:26px;border-radius:50%;
+          background:rgba(59,130,246,0.18);"></div>
+        <div style="position:absolute;left:-19px;top:-19px;width:38px;height:38px;display:flex;
+          align-items:center;justify-content:center;font-size:30px;line-height:1;
+          filter:drop-shadow(0 1px 3px rgba(0,0,0,.65));">${emoji}</div>
+      </div>`;
+    return el;
+  }
   el.innerHTML = `
     <div style="position:relative;width:0;height:0;">
       <div class="jtz-beam" style="

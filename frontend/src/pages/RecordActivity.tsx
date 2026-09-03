@@ -13,6 +13,20 @@ import type { MapPoint } from '../components/LiveTrackingMap';
 const LiveTrackingMap = lazy(() => import('../components/LiveTrackingMap'));
 const ElevationChartModal = lazy(() => import('../components/ElevationChartModal'));
 
+// Cursor options for the map. '' = default arrow.
+const MARKERS: { emoji: string; label: string }[] = [
+  { emoji: '', label: 'Flecha' },
+  { emoji: '🏃', label: 'Corredor' },
+  { emoji: '🏃‍♀️', label: 'Corredora' },
+  { emoji: '🐕', label: 'Perro' },
+  { emoji: '🐈', label: 'Gato' },
+  { emoji: '🚴', label: 'Bici' },
+  { emoji: '🛒', label: 'Carrito' },
+  { emoji: '🪳', label: 'Cucaracha' },
+  { emoji: '🪰', label: 'Mosca' },
+  { emoji: '🦥', label: 'Perezoso' },
+];
+
 const TIPOS = [
   { value: 'correr',   label: 'Correr'   },
   { value: 'trail',    label: 'Trail'    },
@@ -37,6 +51,13 @@ export default function RecordActivity() {
   const qc = useQueryClient();
   const { state, start, pause, resume, finish, reset, getGpx } = useActivityRecorder();
   const [tipo, setTipo] = useState('correr');
+  const [marker, setMarker] = useState<string>(() => {
+    try { return localStorage.getItem('jtz_marker') ?? ''; } catch { return ''; }
+  });
+  const setMarkerPref = (m: string) => {
+    setMarker(m);
+    try { localStorage.setItem('jtz_marker', m); } catch { /* ignore */ }
+  };
   const [nombre, setNombre] = useState('');
   const [saved, setSaved] = useState(false);
   const [showElevation, setShowElevation] = useState(false);
@@ -424,6 +445,7 @@ export default function RecordActivity() {
               referenceRoute={referenceRoute.length > 0 ? referenceRoute : undefined}
               currentPos={currentPos}
               heading={mapHeading}
+              markerEmoji={marker}
               className="w-full h-full"
             />
           </Suspense>
@@ -479,6 +501,20 @@ export default function RecordActivity() {
                     {t.label}
                   </button>
                 ))}
+              </div>
+              {/* Cursor picker */}
+              <div className="mt-3">
+                <p className="text-[11px] text-gray-500 mb-1.5">Tu cursor en el mapa</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {MARKERS.map(m => (
+                    <button key={m.label} onClick={() => setMarkerPref(m.emoji)} title={m.label}
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl transition-all ${
+                        marker === m.emoji ? 'bg-brand-500/25 border border-brand-500/50' : 'bg-dark-700 border border-transparent'
+                      }`}>
+                      {m.emoji || '➤'}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
