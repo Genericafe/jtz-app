@@ -131,6 +131,8 @@ export const groupsApi = {
 
 export const publicApi = {
   getEvent: (id: number) => api.get(`/public/events/${id}`),
+  listEvents: () => api.get('/public/events'),
+  listProducts: () => api.get('/public/products'),
   registerFree: (id: number, data: object) => api.post(`/public/events/${id}/register`, data),
   checkout: (id: number, data: object) => api.post(`/public/events/${id}/checkout`, data),
   verifySession: (sessionId: string) => api.get(`/public/verify/${sessionId}`),

@@ -151,7 +151,8 @@ export default function Layout() {
     setSidebarOpen(false);
   }, [location.pathname]);
 
-  if (!user) return <Navigate to="/login" replace />;
+  // Not logged in → public club landing (with a login button), not a bare form.
+  if (!user) return <Navigate to="/inicio" replace />;
 
   const blockedByLock = locked && !isPathAllowedWhileLocked(location.pathname);
 

@@ -17,6 +17,9 @@ import Communication from './pages/Communication';
 import Profile from './pages/Profile';
 import RunnerProfile from './pages/RunnerProfile';
 import EventLanding from './pages/EventLanding';
+import PublicLanding from './pages/PublicLanding';
+import PublicEvents from './pages/PublicEvents';
+import PublicStore from './pages/PublicStore';
 import EventLeads from './pages/EventLeads';
 import SettingsPage from './pages/Settings';
 import PlanDetail from './pages/PlanDetail';
@@ -57,6 +60,9 @@ export default function App() {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/pago-exitoso" element={<PaymentSuccess />} />
           <Route path="/evento/:id" element={<EventLanding />} />
+          <Route path="/inicio" element={<PublicLanding />} />
+          <Route path="/carreras" element={<PublicEvents />} />
+          <Route path="/tienda-publica" element={<PublicStore />} />
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/corredores" element={<Runners />} />

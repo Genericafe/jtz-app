@@ -55,6 +55,25 @@ router.get('/events/:id', async (req: Request, res: Response) => {
   return res.json(event);
 });
 
+// Public list of active events (no auth) — for the public club site
+router.get('/events', async (_req: Request, res: Response) => {
+  const events = await prisma.event.findMany({
+    where: { activo: true },
+    orderBy: { fecha: 'asc' },
+    include: { _count: { select: { registros: true } } },
+  });
+  return res.json(events);
+});
+
+// Public list of active store products (no auth)
+router.get('/products', async (_req: Request, res: Response) => {
+  const products = await prisma.product.findMany({
+    where: { activo: true },
+    orderBy: { createdAt: 'desc' },
+  });
+  return res.json(products);
+});
+
 // ── Event image — public, real URL for <img> and Open Graph previews ──────────
 router.get('/events/:id/image', async (req: Request, res: Response) => {
   const event = await prisma.event.findUnique({
