@@ -49,7 +49,7 @@ function Row({ ev, past }: { ev: PubEvent; past?: boolean }) {
         <div className="flex items-center justify-between">
           <span className="text-base font-black text-white">{ev.precio === 0 ? <span className="text-green-400">Gratis</span> : `$${ev.precio.toLocaleString('es-MX')}`}</span>
           <span className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold bg-brand-500 group-hover:bg-brand-600 text-white transition-all">
-            {past ? 'Ver' : 'Inscribirme'} <ArrowRight size={14} />
+            Detalles <ArrowRight size={14} />
           </span>
         </div>
       </div>
