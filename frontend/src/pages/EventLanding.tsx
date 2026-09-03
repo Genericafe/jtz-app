@@ -16,6 +16,16 @@ const typeGradient: Record<string, string> = {
 };
 const typeEmoji: Record<string, string> = { carrera: '🏃', trail: '🏔️', entrenamiento: '💪', social: '🎉' };
 
+// Strip hashtags + emojis + extra whitespace for a clean, professional read.
+function cleanText(s: string): string {
+  return s
+    .replace(/#[\wÁÉÍÓÚáéíóúÑñ]+/g, '')
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}\u{1F1E6}-\u{1F1FF}️‍]/gu, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 const TALLAS = ['XS', 'S', 'M', 'L', 'XL', 'XXL'] as const;
 
 function CountdownTimer({ fecha }: { fecha: string }) {
@@ -205,30 +215,29 @@ export default function EventLanding() {
     <div className="min-h-screen bg-surface-900">
       <PublicHeader />
 
-      {/* Hero — full-bleed photo, UTMB style */}
-      <div className="relative min-h-[64vh] sm:min-h-[70vh] flex items-end overflow-hidden">
+      {/* Hero — full-bleed photo, clean editorial */}
+      <div className="relative min-h-[70vh] sm:min-h-[78vh] flex items-end overflow-hidden">
         {event.imagen
           ? <img src={event.imagen} alt={event.nombre} className="absolute inset-0 w-full h-full object-cover" />
-          : <div className={`absolute inset-0 bg-gradient-to-br ${gradient}`}><div className="absolute inset-0 topo-bg opacity-40" /></div>}
-        <div className="absolute inset-0 bg-gradient-to-t from-surface-900 via-surface-900/50 to-black/20" />
+          : <div className="absolute inset-0 bg-surface-800"><div className="absolute inset-0 topo-bg opacity-30" /></div>}
+        <div className="absolute inset-0 bg-gradient-to-t from-surface-900 via-surface-900/45 to-black/25" />
 
-        <div className="relative z-10 w-full max-w-4xl mx-auto px-6 pb-10 pt-24">
-          <div className="flex items-center gap-2.5 mb-4">
-            <span className="inline-flex items-center gap-1.5 bg-black/40 backdrop-blur rounded-full px-3 py-1 text-white/80 text-xs font-semibold uppercase tracking-wide">
-              <Zap size={12} className="text-brand-400" /> JTZ Running Club
-            </span>
-            <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${isPast ? 'bg-gray-500/70 text-white' : 'bg-green-500/90 text-white'}`}>
-              <span className="w-1.5 h-1.5 rounded-full bg-white" /> {isPast ? 'Finalizado' : 'Inscripciones abiertas'}
+        <div className="relative z-10 w-full max-w-5xl mx-auto px-6 pb-12 pt-24">
+          <div className="flex items-center gap-2.5 mb-5">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/70">JTZ Running Club</span>
+            <span className="w-1 h-1 rounded-full bg-white/40" />
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.15em] text-white/70">
+              <span className={`w-1.5 h-1.5 rounded-full ${isPast ? 'bg-gray-400' : 'bg-green-400'}`} /> {isPast ? 'Finalizado' : 'Inscripciones abiertas'}
             </span>
           </div>
-          <h1 className="heading-display text-5xl sm:text-7xl text-white leading-[0.92] drop-shadow-lg">{event.nombre}</h1>
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-5 text-white/90 text-sm sm:text-base font-medium">
-            <span className="flex items-center gap-1.5"><Calendar size={16} className="text-brand-300" /> {formatEvent(event.fecha, "EEEE d 'de' MMMM · HH:mm 'h'")}</span>
-            <span className="flex items-center gap-1.5"><MapPin size={16} className="text-brand-300" /> {event.lugar}, {event.ciudad}</span>
-            {event.distanciaKm ? <span className="flex items-center gap-1.5"><Trophy size={16} className="text-brand-300" /> {event.distanciaKm} km</span> : null}
+          <h1 className="heading-display uppercase text-5xl sm:text-8xl text-white leading-[0.9] tracking-tight">{event.nombre}</h1>
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-2 mt-6 text-white/85 text-sm sm:text-base">
+            <span className="flex items-center gap-2"><Calendar size={16} className="text-white/50" /> {formatEvent(event.fecha, "EEEE d 'de' MMMM · HH:mm 'h'")}</span>
+            <span className="flex items-center gap-2"><MapPin size={16} className="text-white/50" /> {event.lugar}, {event.ciudad}</span>
+            {event.distanciaKm ? <span className="flex items-center gap-2"><Trophy size={16} className="text-white/50" /> {event.distanciaKm} km</span> : null}
           </div>
           {!isPast && (
-            <a href="#inscripcion" className="inline-flex items-center gap-2 mt-7 px-7 py-3.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold text-sm shadow-glow transition-all active:scale-95">
+            <a href="#inscripcion" className="inline-flex items-center gap-2 mt-8 px-8 py-3.5 rounded-full bg-white text-surface-900 font-bold text-sm hover:bg-white/90 transition-all active:scale-95">
               Inscribirme <ArrowRight size={16} />
             </a>
           )}
@@ -237,8 +246,8 @@ export default function EventLanding() {
 
       {/* Countdown strip */}
       {!isPast && (
-        <div className="bg-surface-800 border-y border-white/[0.06]">
-          <div className="max-w-4xl mx-auto px-6 py-5 flex items-center justify-center">
+        <div className="bg-surface-900 border-b border-white/[0.06]">
+          <div className="max-w-5xl mx-auto px-6 py-6 flex items-center justify-center sm:justify-start">
             <CountdownTimer fecha={event.fecha} />
           </div>
         </div>
@@ -246,42 +255,38 @@ export default function EventLanding() {
 
       {/* Event details + form */}
       <div id="inscripcion" className="max-w-2xl mx-auto px-6 py-10 scroll-mt-20">
-        {/* Info pills */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+        {/* Info grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 border-y border-white/[0.08] divide-x divide-white/[0.06] mb-10">
           {[
-            { icon: Calendar, label: 'Fecha', value: formatEvent(event.fecha, "d 'de' MMMM") },
-            { icon: Clock,    label: 'Hora',  value: formatEvent(event.fecha, "HH:mm 'hrs'") },
-            { icon: MapPin,   label: 'Lugar', value: `${event.lugar}, ${event.ciudad}` },
-            { icon: Trophy,   label: 'Distancia', value: event.distanciaKm ? `${event.distanciaKm} km` : 'Por confirmar' },
-          ].map(({ icon: Icon, label, value }) => (
-            <div key={label} className="bg-surface-700 border border-white/[0.06] rounded-2xl p-4 text-center">
-              <Icon size={18} className="text-brand-400 mx-auto mb-1" />
-              <p className="text-xs text-gray-500">{label}</p>
-              <p className="text-sm font-bold text-white mt-0.5 leading-tight">{value}</p>
+            { label: 'Fecha', value: formatEvent(event.fecha, "d 'de' MMM") },
+            { label: 'Hora',  value: formatEvent(event.fecha, "HH:mm 'h'") },
+            { label: 'Lugar', value: `${event.lugar}, ${event.ciudad}` },
+            { label: 'Distancia', value: event.distanciaKm ? `${event.distanciaKm} km` : '—' },
+          ].map(({ label, value }) => (
+            <div key={label} className="py-5 px-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-500">{label}</p>
+              <p className="text-base font-bold text-white mt-1 leading-tight">{value}</p>
             </div>
           ))}
         </div>
 
-        {/* Description (hashtags stripped for a cleaner read) */}
-        {event.descripcion && event.descripcion.replace(/#[\wÁÉÍÓÚáéíóúÑñ]+/g, '').trim().length > 0 && (
-          <div className="mb-8">
-            <h2 className="heading-display text-xl text-white mb-2">Sobre el evento</h2>
-            <p className="text-gray-300 leading-relaxed whitespace-pre-line">
-              {event.descripcion.replace(/#[\wÁÉÍÓÚáéíóúÑñ]+/g, '').replace(/\n{3,}/g, '\n\n').trim()}
-            </p>
+        {/* Description (hashtags + emojis stripped for a cleaner read) */}
+        {event.descripcion && cleanText(event.descripcion).length > 0 && (
+          <div className="mb-10">
+            <h2 className="heading-display text-2xl text-white mb-3">Sobre el evento</h2>
+            <p className="text-gray-300 leading-relaxed whitespace-pre-line text-[15px]">{cleanText(event.descripcion)}</p>
           </div>
         )}
 
         {isPast ? (
-          <div className="bg-surface-700 border border-white/[0.06] rounded-2xl p-8 text-center">
-            <p className="text-4xl mb-3">🏁</p>
+          <div className="border border-white/[0.08] rounded-2xl p-8 text-center">
             <p className="text-white font-bold text-lg">Este evento ya ocurrió</p>
-            <p className="text-gray-400 text-sm mt-1">{formatDistanceToNow(new Date(event.fecha), { locale: es, addSuffix: true })}</p>
+            <p className="text-gray-500 text-sm mt-1">{formatDistanceToNow(new Date(event.fecha), { locale: es, addSuffix: true })}</p>
           </div>
         ) : (
-          <div className="bg-surface-700 border border-white/[0.06] rounded-2xl overflow-hidden">
+          <div className="border border-white/[0.08] rounded-2xl overflow-hidden">
             {/* Form header */}
-            <div className={`bg-gradient-to-r ${gradient} p-5`}>
+            <div className="bg-surface-700 border-b border-white/[0.06] p-6">
               <h2 className="text-xl font-black text-white">
                 {cats.length > 0 && !selectedCat
                   ? 'Elige tu categoría'
@@ -409,7 +414,7 @@ export default function EventLanding() {
 
               <button type="submit"
                 disabled={checkoutLoading || !form.fechaNacimiento || !form.tallaPlayera || (cats.length > 0 && catId == null)}
-                className={`w-full py-4 rounded-xl font-black text-white text-base transition-all active:scale-95 disabled:opacity-50 bg-gradient-to-r ${gradient} shadow-lg hover:shadow-xl`}>
+                className="w-full py-4 rounded-xl font-bold text-white text-base transition-all active:scale-95 disabled:opacity-50 bg-brand-500 hover:bg-brand-600">
                 {checkoutLoading ? 'Un momento...'
                   : cats.length > 0 && catId == null ? 'Elige una categoría'
                   : effPrice === 0

@@ -36,7 +36,7 @@ export default {
       },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui'],
-        display: ['Oswald', 'Inter', 'ui-sans-serif', 'system-ui'],
+        display: ['Space Grotesk', 'Inter', 'ui-sans-serif', 'system-ui'],
       },
       backgroundImage: {
         'carrera':       'linear-gradient(135deg, #f97316 0%, #dc2626 100%)',
