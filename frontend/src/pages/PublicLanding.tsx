@@ -122,7 +122,7 @@ export default function PublicLanding() {
 
       {/* ── Community — editorial photo + text ── */}
       <section className="relative">
-        <div className="max-w-6xl mx-auto px-4 grid md:grid-cols-2 gap-8 items-center py-8">
+        <div className="max-w-6xl mx-auto px-4 grid md:grid-cols-2 gap-10 items-center py-16 sm:py-20">
           <Reveal>
             <div className="relative rounded-3xl overflow-hidden aspect-[4/3] bg-surface-700">
               <div className="absolute inset-0 topo-bg opacity-40 bg-trail" />

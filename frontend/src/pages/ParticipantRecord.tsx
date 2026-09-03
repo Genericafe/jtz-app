@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { useParams } from 'react-router-dom';
-import { Play, Square, MapPin, Clock, Zap, Loader2, AlertCircle } from 'lucide-react';
+import { Play, Square, MapPin, Clock, Loader2, AlertCircle } from 'lucide-react';
 import { publicApi } from '../services/api';
+import BrandMark from '../components/BrandMark';
 import type { MapPoint } from '../components/LiveTrackingMap';
 
 const LiveTrackingMap = lazy(() => import('../components/LiveTrackingMap'));
@@ -124,7 +125,7 @@ export default function ParticipantRecord() {
       {/* Header */}
       <div className="bg-hero topo-bg px-4 pt-6 pb-8 text-center">
         <div className="flex items-center justify-center gap-2 mb-2">
-          <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center"><Zap size={16} className="text-white" fill="white" /></div>
+          <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center"><BrandMark size={17} className="text-white" /></div>
           <span className="heading-display text-lg">JTZ Trail</span>
         </div>
         <p className="text-xs uppercase tracking-[0.3em] text-white/70">{info.eventNombre}</p>

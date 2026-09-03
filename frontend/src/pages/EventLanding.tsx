@@ -9,6 +9,7 @@ import { MapPin, Calendar, Trophy, CheckCircle, Clock, Zap, CreditCard, Shirt, A
 import PublicHeader from '../components/PublicHeader';
 import EventLiveTracker from '../components/EventLiveTracker';
 import ParticipantLinkBox from '../components/ParticipantLinkBox';
+import BrandMark from '../components/BrandMark';
 
 const typeGradient: Record<string, string> = {
   carrera:       'from-orange-500 via-red-500 to-rose-700',
@@ -237,7 +238,7 @@ export default function EventLanding() {
           <p className="text-sm text-gray-300">📩 Te enviamos la confirmación y los detalles a tu correo.</p>
           <p className="text-xs text-gray-500 mt-1">Si no lo ves, revisa tu carpeta de spam.</p>
           <div className="inline-flex items-center gap-2 mt-4 text-brand-400 font-bold text-sm">
-            <Zap size={14} /> JTZ Trail
+            <BrandMark size={14} /> JTZ Trail
           </div>
         </div>
       </div>
@@ -492,7 +493,7 @@ export default function EventLanding() {
         {/* Footer */}
         <div className="mt-10 text-center">
           <div className="inline-flex items-center gap-2 text-gray-500 text-sm">
-            <Zap size={14} className="text-brand-400" />
+            <BrandMark size={14} className="text-brand-400" />
             <span><strong className="text-gray-300">JTZ Trail</strong> · Coach Jotaze · México</span>
           </div>
         </div>

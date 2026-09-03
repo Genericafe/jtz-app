@@ -1,8 +1,9 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Users, ClipboardList, Calendar,
-  CreditCard, ShoppingBag, MessageSquare, LogOut, Zap, User, Settings, MessageCircle, X, Activity, Trophy, Medal, Bell, TrendingUp, Radio, Image as ImageIcon,
+  CreditCard, ShoppingBag, MessageSquare, LogOut, User, Settings, MessageCircle, X, Activity, Trophy, Medal, Bell, TrendingUp, Radio, Image as ImageIcon,
 } from 'lucide-react';
+import BrandMark from './BrandMark';
 import { useAuth } from '../context/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { runnersApi, chatApi, remindersApi, liveApi } from '../services/api';
@@ -140,7 +141,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       <div className="px-5 py-5 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-hero flex items-center justify-center shadow-glow-sm">
-            <Zap size={20} className="text-white" fill="white" />
+            <BrandMark size={22} className="text-white" />
           </div>
           <div>
             <p className="heading-display text-2xl leading-none gradient-text">JTZ</p>

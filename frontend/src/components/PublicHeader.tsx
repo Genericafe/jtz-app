@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Zap } from 'lucide-react';
+import BrandMark from './BrandMark';
 
 const NAV: [string, string][] = [
   ['/inicio', 'Inicio'],
@@ -14,7 +14,7 @@ export default function PublicHeader({ active }: { active?: string }) {
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
         <Link to="/inicio" className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl bg-hero flex items-center justify-center shadow-glow-sm">
-            <Zap size={18} className="text-white" fill="white" />
+            <BrandMark size={19} className="text-white" />
           </div>
           <div>
             <p className="heading-display text-xl leading-none gradient-text">JTZ</p>

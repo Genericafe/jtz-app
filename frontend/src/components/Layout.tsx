@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Outlet, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { MessageCircle, X, Menu, Zap, Lock, CreditCard } from 'lucide-react';
+import { MessageCircle, X, Menu, Lock, CreditCard } from 'lucide-react';
 import Sidebar from './Sidebar';
+import BrandMark from './BrandMark';
 import { useAuth } from '../context/AuthContext';
 import { chatApi } from '../services/api';
 import { useAccountLock, isPathAllowedWhileLocked } from '../hooks/useAccountLock';
@@ -177,7 +178,7 @@ export default function Layout() {
           </button>
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-xl bg-hero flex items-center justify-center shadow-glow-sm">
-              <Zap size={13} className="text-white" fill="white" />
+              <BrandMark size={15} className="text-white" />
             </div>
             <span className="heading-display text-xl leading-none text-white">JTZ</span>
             <span className="text-xs text-gray-500 hidden sm:block">Trail</span>
