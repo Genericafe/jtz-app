@@ -305,8 +305,22 @@ model Event {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  registros EventRegistration[]
-  leads     EventLead[]
+  registros  EventRegistration[]
+  leads      EventLead[]
+  categorias EventCategory[]
+}
+
+// Una categoría/distancia de un evento con su propio precio y cupo.
+// Si un evento no tiene categorías, se usa su distanciaKm/precio simples.
+model EventCategory {
+  id          Int    @id @default(autoincrement())
+  eventId     Int
+  event       Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  nombre      String // ej. "10K", "21K", "50K"
+  distanciaKm Float?
+  precio      Float  @default(0)
+  cupoMaximo  Int?
+  orden       Int    @default(0)
 }
 
 model EventRegistration {
@@ -319,6 +333,7 @@ model EventRegistration {
   pagado          Boolean   @default(false)
   tallaPlayera    String?
   fechaNacimiento DateTime?
+  categoria       String?   // nombre de la categoría elegida
   createdAt       DateTime  @default(now())
 
   @@unique([eventId, runnerId])
@@ -412,6 +427,8 @@ model EventLead {
   estado          String    @default("pendiente") // "pendiente" | "pagado" | "confirmado" | "cancelado"
   stripeSessionId String?
   monto           Float     @default(0)
+  categoriaId     Int?
+  categoria       String?   // nombre de la categoría elegida (ej. "21K")
   createdAt       DateTime  @default(now())
 
   @@unique([eventId, email])

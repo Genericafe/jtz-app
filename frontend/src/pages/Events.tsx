@@ -71,6 +71,41 @@ function EventImageUpload({ value, onChange }: { value: string; onChange: (v: st
   );
 }
 
+type CatRow = { nombre: string; distanciaKm: string; precio: string; cupoMaximo: string };
+
+function CategoriesEditor({ value, onChange }: { value: CatRow[]; onChange: (v: CatRow[]) => void }) {
+  const add = () => onChange([...value, { nombre: '', distanciaKm: '', precio: '0', cupoMaximo: '' }]);
+  const set = (i: number, patch: Partial<CatRow>) => onChange(value.map((c, j) => (j === i ? { ...c, ...patch } : c)));
+  const del = (i: number) => onChange(value.filter((_, j) => j !== i));
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-400 mb-1.5">
+        Categorías / distancias <span className="text-gray-600">(opcional · precio por categoría)</span>
+      </label>
+      {value.length > 0 && (
+        <div className="space-y-2 mb-2">
+          <div className="flex gap-2 text-[10px] uppercase tracking-wide text-gray-600 px-1">
+            <span className="w-20">Nombre</span><span className="w-16">Km</span><span className="flex-1">Precio $</span><span className="w-16">Cupo</span><span className="w-6" />
+          </div>
+          {value.map((c, i) => (
+            <div key={i} className="flex gap-2 items-center">
+              <input value={c.nombre} onChange={e => set(i, { nombre: e.target.value })} placeholder="10K" className="input text-sm w-20" />
+              <input value={c.distanciaKm} onChange={e => set(i, { distanciaKm: e.target.value })} placeholder="10" type="number" className="input text-sm w-16" />
+              <input value={c.precio} onChange={e => set(i, { precio: e.target.value })} placeholder="0" type="number" className="input text-sm flex-1" />
+              <input value={c.cupoMaximo} onChange={e => set(i, { cupoMaximo: e.target.value })} placeholder="—" type="number" className="input text-sm w-16" />
+              <button type="button" onClick={() => del(i)} className="p-1.5 text-gray-500 hover:text-red-400"><Trash2 size={14} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+      <button type="button" onClick={add} className="text-xs px-3 py-1.5 rounded-lg bg-brand-500/10 text-brand-400 border border-brand-500/20 hover:bg-brand-500/20 flex items-center gap-1.5">
+        <Plus size={13} /> Agregar categoría
+      </button>
+      {value.length > 0 && <p className="text-[11px] text-gray-500 mt-1.5">Con categorías, el corredor elige una al inscribirse y paga su precio (se ignora la distancia/precio de arriba).</p>}
+    </div>
+  );
+}
+
 interface NominatimResult {
   display_name: string;
   address: {
@@ -1150,11 +1185,13 @@ export default function Events() {
     nombre: '', tipo: 'carrera', descripcion: '', fecha: '', lugar: '',
     ciudad: '', estado: '', distanciaKm: '', cupoMaximo: '', precio: '0',
     imagen: '',
+    categorias: [] as CatRow[],
     notificarCorredores: false,
   });
   const [editForm, setEditForm] = useState({
     nombre: '', tipo: 'carrera', descripcion: '', fecha: '', lugar: '',
     ciudad: '', estado: '', distanciaKm: '', cupoMaximo: '', precio: '0', imagen: '',
+    categorias: [] as CatRow[],
   });
   const [improvingText, setImprovingText] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -1179,7 +1216,7 @@ export default function Events() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['events'] });
       setShowForm(false);
-      setForm({ nombre: '', tipo: 'carrera', descripcion: '', fecha: '', lugar: '', ciudad: '', estado: '', distanciaKm: '', cupoMaximo: '', precio: '0', imagen: '', notificarCorredores: false });
+      setForm({ nombre: '', tipo: 'carrera', descripcion: '', fecha: '', lugar: '', ciudad: '', estado: '', distanciaKm: '', cupoMaximo: '', precio: '0', imagen: '', categorias: [], notificarCorredores: false });
     },
   });
 
@@ -1232,6 +1269,12 @@ export default function Events() {
       // Show the existing image (served via the public endpoint). Only a newly
       // uploaded data: URL is sent back on save.
       imagen: ev.hasImagen ? `${import.meta.env.VITE_API_URL ?? '/api'}/public/events/${ev.id}/image?t=${Date.now()}` : '',
+      categorias: ((ev as any).categorias ?? []).map((c: any) => ({
+        nombre: c.nombre ?? '',
+        distanciaKm: c.distanciaKm != null ? String(c.distanciaKm) : '',
+        precio: c.precio != null ? String(c.precio) : '0',
+        cupoMaximo: c.cupoMaximo != null ? String(c.cupoMaximo) : '',
+      })),
     });
     setEditEvent(ev);
   };
@@ -1455,6 +1498,8 @@ export default function Events() {
               </div>
 
               {/* Event image / flyer */}
+              <CategoriesEditor value={form.categorias} onChange={c => setForm({ ...form, categorias: c })} />
+
               <EventImageUpload value={form.imagen} onChange={v => setForm({ ...form, imagen: v })} />
 
               {/* Notify runners checkbox */}
@@ -1479,6 +1524,12 @@ export default function Events() {
                   distanciaKm: form.distanciaKm ? Number(form.distanciaKm) : undefined,
                   cupoMaximo:  form.cupoMaximo  ? Number(form.cupoMaximo)  : undefined,
                   precio:      Number(form.precio),
+                  categorias:  form.categorias.filter(c => c.nombre.trim()).map(c => ({
+                    nombre: c.nombre.trim(),
+                    distanciaKm: c.distanciaKm ? Number(c.distanciaKm) : undefined,
+                    precio: Number(c.precio) || 0,
+                    cupoMaximo: c.cupoMaximo ? Number(c.cupoMaximo) : undefined,
+                  })),
                 })}
                 disabled={createMutation.isPending || !form.nombre.trim() || !form.fecha || !form.lugar.trim()}
                 className="flex-1 btn-primary py-2.5 text-sm">
@@ -1577,6 +1628,8 @@ export default function Events() {
               </div>
 
               {/* Event image / flyer */}
+              <CategoriesEditor value={editForm.categorias} onChange={c => setEditForm({ ...editForm, categorias: c })} />
+
               <EventImageUpload value={editForm.imagen} onChange={v => setEditForm({ ...editForm, imagen: v })} />
 
               {/* GPX upload */}
@@ -1589,7 +1642,7 @@ export default function Events() {
               </button>
               <button
                 onClick={() => {
-                  const { imagen, ...rest } = editForm;
+                  const { imagen, categorias, ...rest } = editForm;
                   updateMutation.mutate({
                     id: editEvent.id,
                     data: {
@@ -1597,6 +1650,12 @@ export default function Events() {
                       distanciaKm: editForm.distanciaKm ? Number(editForm.distanciaKm) : undefined,
                       cupoMaximo:  editForm.cupoMaximo  ? Number(editForm.cupoMaximo)  : undefined,
                       precio:      Number(editForm.precio),
+                      categorias:  categorias.filter(c => c.nombre.trim()).map(c => ({
+                        nombre: c.nombre.trim(),
+                        distanciaKm: c.distanciaKm ? Number(c.distanciaKm) : undefined,
+                        precio: Number(c.precio) || 0,
+                        cupoMaximo: c.cupoMaximo ? Number(c.cupoMaximo) : undefined,
+                      })),
                       // New upload → data: URL. Cleared → ''. Untouched → http URL (skip).
                       ...(imagen.startsWith('data:') ? { imagen } : imagen === '' ? { imagen: '' } : {}),
                     },

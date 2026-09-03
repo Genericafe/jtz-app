@@ -13,7 +13,7 @@ router.use(authMiddleware);
 router.get('/', async (_req: AuthRequest, res: Response) => {
   const [events, paidLeadCounts] = await Promise.all([
     prisma.event.findMany({
-      include: { _count: { select: { registros: true } } },
+      include: { _count: { select: { registros: true } }, categorias: { orderBy: { orden: 'asc' } } },
       orderBy: { fecha: 'asc' },
     }),
     prisma.eventLead.groupBy({
@@ -54,6 +54,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
       leads: {
         orderBy: { createdAt: 'desc' },
       },
+      categorias: { orderBy: { orden: 'asc' } },
     },
   });
   if (!event) return res.status(404).json({ error: 'Evento no encontrado' });
@@ -73,16 +74,26 @@ router.post('/', coachOnly, async (req: AuthRequest, res: Response) => {
     cupoMaximo:          z.number().int().optional(),
     precio:              z.number().default(0),
     imagen:              z.string().optional(),
+    categorias:          z.array(z.object({
+      nombre: z.string().min(1), distanciaKm: z.number().optional(),
+      precio: z.number().default(0), cupoMaximo: z.number().int().optional(),
+    })).optional(),
     notificarCorredores: z.boolean().optional().default(false),
   });
 
   const parse = schema.safeParse(req.body);
   if (!parse.success) return res.status(400).json({ error: 'Datos inválidos', details: parse.error.errors });
 
-  const { notificarCorredores, ...eventData } = parse.data;
+  const { notificarCorredores, categorias, ...eventData } = parse.data;
 
   const event = await prisma.event.create({
-    data: { ...eventData, fecha: new Date(eventData.fecha) },
+    data: {
+      ...eventData,
+      fecha: new Date(eventData.fecha),
+      ...(categorias && categorias.length > 0
+        ? { categorias: { create: categorias.map((c, i) => ({ ...c, orden: i })) } }
+        : {}),
+    },
   });
 
   if (notificarCorredores) {
@@ -112,9 +123,25 @@ router.post('/', coachOnly, async (req: AuthRequest, res: Response) => {
 });
 
 router.put('/:id', coachOnly, async (req: AuthRequest, res: Response) => {
-  const data = { ...req.body };
-  if (data.fecha) data.fecha = new Date(data.fecha);
-  const event = await prisma.event.update({ where: { id: Number(req.params.id) }, data });
+  const id = Number(req.params.id);
+  const b = req.body ?? {};
+  const data: any = {};
+  for (const k of ['nombre', 'tipo', 'descripcion', 'lugar', 'ciudad', 'estado', 'distanciaKm', 'cupoMaximo', 'precio', 'imagen', 'activo']) {
+    if (b[k] !== undefined) data[k] = b[k];
+  }
+  if (b.fecha) data.fecha = new Date(b.fecha);
+
+  // Replace categories when provided
+  if (b.categorias !== undefined) {
+    await (prisma as any).eventCategory.deleteMany({ where: { eventId: id } });
+    if (Array.isArray(b.categorias) && b.categorias.length > 0) {
+      data.categorias = { create: b.categorias.map((c: any, i: number) => ({
+        nombre: c.nombre, distanciaKm: c.distanciaKm ?? null, precio: c.precio ?? 0, cupoMaximo: c.cupoMaximo ?? null, orden: i,
+      })) };
+    }
+  }
+
+  const event = await prisma.event.update({ where: { id }, data, include: { categorias: { orderBy: { orden: 'asc' } } } });
   return res.json(event);
 });
 

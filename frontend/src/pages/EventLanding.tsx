@@ -78,6 +78,7 @@ export default function EventLanding() {
   const [fnMes, setFnMes] = useState('');
   const [fnAño, setFnAño] = useState('');
   const [formError, setFormError] = useState('');
+  const [catId, setCatId] = useState<number | null>(null);
 
   const handleFechaNacimiento = (dia: string, mes: string, año: string) => {
     if (dia && mes && año) {
@@ -116,15 +117,21 @@ export default function EventLanding() {
 
   const trackingData = { fuente, utmSource, utmMedium, utmCampaign };
 
+  const cats: { id: number; nombre: string; distanciaKm?: number | null; precio: number; cupoMaximo?: number | null }[] =
+    (event as any)?.categorias ?? [];
+  const selectedCat = cats.find(c => c.id === catId) ?? null;
+  const effPrice = selectedCat ? selectedCat.precio : (event?.precio ?? 0);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
     if (!event) return;
+    if (cats.length > 0 && catId == null) { setFormError('Elige una categoría / distancia'); return; }
 
-    const payload = { ...form, ...trackingData };
+    const payload = { ...form, ...trackingData, categoriaId: catId ?? undefined };
 
     try {
-      if (event.precio === 0) {
+      if (effPrice === 0) {
         setCheckoutLoading(true);
         await publicApi.registerFree(event.id, payload);
         setStep('success');
@@ -242,16 +249,38 @@ export default function EventLanding() {
             {/* Form header */}
             <div className={`bg-gradient-to-r ${gradient} p-5`}>
               <h2 className="text-xl font-black text-white">
-                {event.precio === 0 ? '¡Inscríbete gratis!' : `Inscríbete — $${event.precio.toLocaleString('es-MX')} MXN`}
+                {cats.length > 0 && !selectedCat
+                  ? 'Elige tu categoría'
+                  : effPrice === 0 ? '¡Inscríbete gratis!' : `Inscríbete — $${effPrice.toLocaleString('es-MX')} MXN`}
               </h2>
               <p className="text-white/70 text-sm mt-0.5">
-                {event.precio === 0
-                  ? 'Completa el formulario y recibe los detalles por correo'
-                  : 'Llena tus datos y completa el pago para reservar tu lugar'}
+                {cats.length > 0 && !selectedCat
+                  ? 'Selecciona la distancia en la que quieres participar'
+                  : effPrice === 0
+                    ? 'Completa el formulario y recibe los detalles por correo'
+                    : 'Llena tus datos y completa el pago para reservar tu lugar'}
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              {/* Category / distance selector */}
+              {cats.length > 0 && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-2">Categoría / distancia *</label>
+                  <div className="grid gap-2">
+                    {cats.map(c => (
+                      <button type="button" key={c.id} onClick={() => setCatId(c.id)}
+                        className={`flex items-center justify-between px-4 py-3 rounded-xl border text-left transition-all ${catId === c.id ? 'bg-brand-500/15 border-brand-500/50' : 'bg-surface-600 border-white/[0.06] hover:border-white/[0.15]'}`}>
+                        <span>
+                          <span className="text-sm font-bold text-white">{c.nombre}</span>
+                          {c.distanciaKm != null && <span className="text-xs text-gray-400 ml-2">{c.distanciaKm} km</span>}
+                        </span>
+                        <span className="text-sm font-black text-white">{c.precio === 0 ? <span className="text-green-400">Gratis</span> : `$${c.precio.toLocaleString('es-MX')}`}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {/* Nombre + Apellido */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -345,15 +374,17 @@ export default function EventLanding() {
               )}
 
               <button type="submit"
-                disabled={checkoutLoading || !form.fechaNacimiento || !form.tallaPlayera}
+                disabled={checkoutLoading || !form.fechaNacimiento || !form.tallaPlayera || (cats.length > 0 && catId == null)}
                 className={`w-full py-4 rounded-xl font-black text-white text-base transition-all active:scale-95 disabled:opacity-50 bg-gradient-to-r ${gradient} shadow-lg hover:shadow-xl`}>
-                {checkoutLoading ? 'Un momento...' : event.precio === 0
-                  ? '✓ Inscribirme gratis'
-                  : `💳 Pagar $${event.precio.toLocaleString('es-MX')} e inscribirme`
+                {checkoutLoading ? 'Un momento...'
+                  : cats.length > 0 && catId == null ? 'Elige una categoría'
+                  : effPrice === 0
+                    ? '✓ Inscribirme gratis'
+                    : `💳 Pagar $${effPrice.toLocaleString('es-MX')} e inscribirme`
                 }
               </button>
 
-              {event.precio > 0 && (
+              {effPrice > 0 && (
                 <p className="text-xs text-center text-gray-500 flex items-center justify-center gap-1">
                   <CreditCard size={12} /> Pago seguro con Stripe · Tarjeta de crédito o débito
                 </p>

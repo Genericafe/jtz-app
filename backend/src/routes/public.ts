@@ -49,7 +49,10 @@ router.get('/gpx/:eventId', async (req: Request, res: Response) => {
 router.get('/events/:id', async (req: Request, res: Response) => {
   const event = await prisma.event.findUnique({
     where: { id: Number(req.params.id), activo: true },
-    include: { _count: { select: { leads: true, registros: true } } },
+    include: {
+      _count: { select: { leads: true, registros: true } },
+      categorias: { orderBy: { orden: 'asc' } },
+    },
   });
   if (!event) return res.status(404).json({ error: 'Evento no encontrado' });
   return res.json(event);
@@ -60,7 +63,7 @@ router.get('/events', async (_req: Request, res: Response) => {
   const events = await prisma.event.findMany({
     where: { activo: true },
     orderBy: { fecha: 'asc' },
-    include: { _count: { select: { registros: true } } },
+    include: { _count: { select: { registros: true } }, categorias: { orderBy: { orden: 'asc' } } },
   });
   return res.json(events);
 });
@@ -142,7 +145,19 @@ const leadSchema = z.object({
   utmSource:       z.string().optional(),
   utmMedium:       z.string().optional(),
   utmCampaign:     z.string().optional(),
+  categoriaId:     z.number().int().optional(),
 });
+
+// Resolve the effective price + category for a registration.
+async function resolveCategory(eventId: number, precioEvento: number, categoriaId?: number) {
+  if (categoriaId) {
+    const cat = await (prisma as any).eventCategory.findUnique({ where: { id: categoriaId } });
+    if (cat && cat.eventId === eventId) {
+      return { precio: cat.precio as number, categoria: cat.nombre as string, categoriaId };
+    }
+  }
+  return { precio: precioEvento, categoria: null as string | null, categoriaId: null as number | null };
+}
 
 // Free event registration
 router.post('/events/:id/register', async (req: Request, res: Response) => {
@@ -151,18 +166,22 @@ router.post('/events/:id/register', async (req: Request, res: Response) => {
 
   const event = await prisma.event.findUnique({ where: { id: Number(req.params.id) } });
   if (!event) return res.status(404).json({ error: 'Evento no encontrado' });
-  if (event.precio > 0) return res.status(400).json({ error: 'Este evento requiere pago' });
 
-  const { fechaNacimiento, ...leadRest } = parse.data;
+  const cat = await resolveCategory(event.id, event.precio, parse.data.categoriaId);
+  if (cat.precio > 0) return res.status(400).json({ error: 'Esta categoría requiere pago' });
+
+  const { fechaNacimiento, categoriaId: _cid, ...leadRest } = parse.data;
   const lead = await prisma.eventLead.upsert({
     where: { eventId_email: { eventId: event.id, email: parse.data.email } },
-    update: { estado: 'confirmado' },
+    update: { estado: 'confirmado', categoria: cat.categoria, categoriaId: cat.categoriaId, monto: 0 },
     create: {
       ...leadRest,
       fechaNacimiento: fechaNacimiento ? new Date(fechaNacimiento) : undefined,
       eventId: event.id,
       estado: 'confirmado',
       monto: 0,
+      categoria: cat.categoria,
+      categoriaId: cat.categoriaId,
     },
   });
 
@@ -190,19 +209,23 @@ router.post('/events/:id/checkout', async (req: Request, res: Response) => {
 
   const event = await prisma.event.findUnique({ where: { id: Number(req.params.id) } });
   if (!event) return res.status(404).json({ error: 'Evento no encontrado' });
-  if (event.precio <= 0) return res.status(400).json({ error: 'Este evento es gratuito' });
+
+  const cat = await resolveCategory(event.id, event.precio, parse.data.categoriaId);
+  if (cat.precio <= 0) return res.status(400).json({ error: 'Esta categoría es gratuita' });
 
   // Create or update lead as pending
-  const { fechaNacimiento: fnPaid, ...leadRestPaid } = parse.data;
+  const { fechaNacimiento: fnPaid, categoriaId: _cid2, ...leadRestPaid } = parse.data;
   const lead = await prisma.eventLead.upsert({
     where: { eventId_email: { eventId: event.id, email: parse.data.email } },
-    update: { ...leadRestPaid, fechaNacimiento: fnPaid ? new Date(fnPaid) : undefined, estado: 'pendiente' },
+    update: { ...leadRestPaid, fechaNacimiento: fnPaid ? new Date(fnPaid) : undefined, estado: 'pendiente', categoria: cat.categoria, categoriaId: cat.categoriaId, monto: cat.precio },
     create: {
       ...leadRestPaid,
       fechaNacimiento: fnPaid ? new Date(fnPaid) : undefined,
       eventId: event.id,
       estado: 'pendiente',
-      monto: event.precio,
+      monto: cat.precio,
+      categoria: cat.categoria,
+      categoriaId: cat.categoriaId,
     },
   });
 
@@ -221,10 +244,10 @@ router.post('/events/:id/checkout', async (req: Request, res: Response) => {
         price_data: {
           currency: 'mxn',
           product_data: {
-            name: `Inscripción — ${event.nombre}`,
+            name: `Inscripción — ${event.nombre}${cat.categoria ? ` · ${cat.categoria}` : ''}`,
             description: `${event.lugar}, ${event.ciudad} · ${format(new Date(event.fecha), "d 'de' MMMM", { locale: es })}`,
           },
-          unit_amount: Math.round(event.precio * 100),
+          unit_amount: Math.round(cat.precio * 100),
         },
         quantity: 1,
       }],
