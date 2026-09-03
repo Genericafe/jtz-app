@@ -138,6 +138,12 @@ export const publicApi = {
   registerFree: (id: number, data: object) => api.post(`/public/events/${id}/register`, data),
   checkout: (id: number, data: object) => api.post(`/public/events/${id}/checkout`, data),
   verifySession: (sessionId: string) => api.get(`/public/verify/${sessionId}`),
+  site: () => api.get('/public/site'),
+};
+
+export const siteApi = {
+  get: () => api.get('/site'),
+  update: (data: object) => api.put('/site', data),
 };
 
 export const settingsApi = {

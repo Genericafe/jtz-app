@@ -310,6 +310,15 @@ model Event {
   categorias EventCategory[]
 }
 
+// Configuración del sitio público (singleton, id=1): fotos de la landing.
+model SiteConfig {
+  id              Int      @id @default(1)
+  heroImagen      String?  @db.Text
+  comunidadImagen String?  @db.Text
+  accionImagen    String?  @db.Text
+  updatedAt       DateTime @updatedAt
+}
+
 // Una categoría/distancia de un evento con su propio precio y cupo.
 // Si un evento no tiene categorías, se usa su distanciaKm/precio simples.
 model EventCategory {

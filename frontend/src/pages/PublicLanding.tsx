@@ -36,6 +36,10 @@ export default function PublicLanding() {
     queryKey: ['public-events'],
     queryFn: async () => (await publicApi.listEvents()).data as PubEvent[],
   });
+  const { data: site } = useQuery({
+    queryKey: ['public-site'],
+    queryFn: async () => (await publicApi.site()).data as { heroImagen?: string; comunidadImagen?: string; accionImagen?: string },
+  });
   const upcoming = (data ?? []).filter(e => new Date(e.fecha) >= new Date()).slice(0, 3);
 
   return (
@@ -45,7 +49,7 @@ export default function PublicLanding() {
       {/* ── HERO — full-screen photo ── */}
       <section className="relative min-h-[92vh] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-brand-900 via-surface-900 to-black topo-bg" />
-        <img src="/fotos/hero.jpg" alt="" onError={hideOnError}
+        <img src={site?.heroImagen || '/fotos/hero.jpg'} alt="" onError={hideOnError}
           className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/30 to-surface-900" />
 
@@ -97,7 +101,7 @@ export default function PublicLanding() {
           <Reveal>
             <div className="relative rounded-3xl overflow-hidden aspect-[4/3] bg-surface-700">
               <div className="absolute inset-0 topo-bg opacity-40 bg-trail" />
-              <img src="/fotos/comunidad.jpg" alt="Comunidad JTZ" onError={hideOnError} className="absolute inset-0 w-full h-full object-cover" />
+              <img src={site?.comunidadImagen || '/fotos/comunidad.jpg'} alt="Comunidad JTZ" onError={hideOnError} className="absolute inset-0 w-full h-full object-cover" />
             </div>
           </Reveal>
           <Reveal delay={120}>
@@ -119,7 +123,7 @@ export default function PublicLanding() {
       {/* ── Action photo band ── */}
       <section className="relative h-[52vh] min-h-[380px] flex items-center justify-center overflow-hidden my-8">
         <div className="absolute inset-0 bg-carrera topo-bg" />
-        <img src="/fotos/accion.jpg" alt="" onError={hideOnError} className="absolute inset-0 w-full h-full object-cover" />
+        <img src={site?.accionImagen || '/fotos/accion.jpg'} alt="" onError={hideOnError} className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0 bg-black/45" />
         <Reveal className="relative z-10 text-center px-4">
           <h2 className="heading-display text-4xl sm:text-6xl text-white leading-tight drop-shadow-xl">¿Listo para tu próximo reto?</h2>

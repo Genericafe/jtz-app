@@ -68,6 +68,12 @@ router.get('/events', async (_req: Request, res: Response) => {
   return res.json(events);
 });
 
+// Public site config (landing photos) — no auth
+router.get('/site', async (_req: Request, res: Response) => {
+  const cfg = await (prisma as any).siteConfig.findUnique({ where: { id: 1 } });
+  return res.json(cfg ?? {});
+});
+
 // Public list of active store products (no auth)
 router.get('/products', async (_req: Request, res: Response) => {
   const products = await prisma.product.findMany({

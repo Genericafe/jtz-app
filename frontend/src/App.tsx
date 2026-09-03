@@ -21,6 +21,7 @@ import PublicLanding from './pages/PublicLanding';
 import PublicEvents from './pages/PublicEvents';
 import PublicStore from './pages/PublicStore';
 import PublicSpectator from './pages/PublicSpectator';
+import SitePhotos from './pages/SitePhotos';
 import EventLeads from './pages/EventLeads';
 import SettingsPage from './pages/Settings';
 import PlanDetail from './pages/PlanDetail';
@@ -87,6 +88,7 @@ export default function App() {
             <Route path="/notificaciones" element={<Notifications />} />
             <Route path="/rendimiento" element={<Performance />} />
             <Route path="/en-vivo" element={<LiveTracking />} />
+            <Route path="/sitio" element={<SitePhotos />} />
             <Route path="/analitica" element={<Navigate to="/rendimiento" replace />} />
             {/* Rutas merged into Actividades — keep the old path working */}
             <Route path="/rutas" element={<Navigate to="/actividades?tab=rutas" replace />} />
