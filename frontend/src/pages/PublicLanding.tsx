@@ -63,13 +63,12 @@ export default function PublicLanding() {
         <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/30 to-surface-900" />
 
         <div className="relative z-10 text-center px-4 max-w-4xl">
-          <p className="text-xs sm:text-sm font-semibold uppercase tracking-[0.4em] text-brand-300 mb-5 animate-fade-in">Trail · Ruta · Comunidad</p>
           <h1 className="heading-display text-6xl sm:text-8xl leading-[0.9] text-white drop-shadow-2xl">
             <span className="word-mask"><span className="word-rise" style={{ animationDelay: '.15s' }}>JTZ</span></span>{' '}
             <span className="word-mask"><span className="word-rise" style={{ animationDelay: '.32s' }}>TRAIL</span></span>
           </h1>
           <p className="text-white/90 text-lg sm:text-2xl max-w-2xl mx-auto mt-6 leading-relaxed">
-            Corre. Sube. Vuela. Una comunidad que suma kilómetros juntos — en la ciudad, en el trail y donde sea.
+            Un plan que te guía, un equipo que te impulsa, kilómetros que te transforman.
           </p>
           <div className="flex flex-wrap gap-3 justify-center mt-9">
             <Link to="/carreras" className="btn-primary px-7 py-3.5 text-sm font-bold flex items-center gap-2 shadow-glow">
