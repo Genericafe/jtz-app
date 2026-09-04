@@ -250,8 +250,7 @@ export default function PublicLanding() {
           <p className="text-sm text-gray-500">JTZ Trail</p>
           <div className="flex gap-4 text-sm">
             <Link to="/carreras" className="text-gray-400 hover:text-white">Carreras</Link>
-            <Link to="/seguir" className="text-gray-400 hover:text-white">Seguir en vivo</Link>
-            <Link to="/tienda-publica" className="text-gray-400 hover:text-white">Tienda</Link>
+            <Link to="/tienda-publica" className="text-gray-400 hover:text-white">Merch</Link>
             <Link to="/login" className="text-brand-400 hover:text-brand-300 font-semibold">Entrar</Link>
           </div>
         </div>

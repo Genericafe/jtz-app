@@ -4,7 +4,6 @@ import BrandMark from './BrandMark';
 const NAV: [string, string][] = [
   ['/inicio', 'Inicio'],
   ['/carreras', 'Carreras'],
-  ['/seguir', 'Seguir en vivo'],
   ['/tienda-publica', 'Merch'],
 ];
 
