@@ -49,9 +49,10 @@ export default function PublicLanding() {
       {/* ── HERO — cinematic photo/video ── */}
       <section className="relative min-h-[92vh] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-brand-900 via-surface-900 to-black topo-bg" />
-        {/* Photo with slow Ken Burns motion (feels like video even without a clip) */}
+        {/* Photo with slow Ken Burns motion (feels like video even without a clip).
+            Saturation/contrast boost makes the colors pop (más vívido). */}
         <img src={site?.heroImagen || '/fotos/hero.jpg'} alt="" onError={hideOnError}
-          style={{ objectPosition: '50% 28%' }}
+          style={{ objectPosition: '50% 28%', filter: 'saturate(1.25) contrast(1.06)' }}
           className="kenburns absolute inset-0 w-full h-full object-cover" />
         {/* Optional video background: drop /fotos/hero.mp4 and it plays automatically on top of the photo.
             Without a poster, if the clip is missing the video stays transparent and the photo above shows through. */}
@@ -61,16 +62,15 @@ export default function PublicLanding() {
         >
           <source src="/fotos/hero.mp4" type="video/mp4" />
         </video>
-        {/* Cinematic darkening — moodier, hides source softness, keeps text legible */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/45 to-surface-900" />
-        <div className="absolute inset-0 bg-black/20" />
+        {/* Lighter gradient — lets the photo's color show while keeping text readable */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/15 to-surface-900" />
 
         <div className="relative z-10 text-center px-4 max-w-3xl">
           <h1 className="heading-display text-4xl sm:text-6xl leading-[0.95] tracking-tight text-white drop-shadow-2xl">
             <span className="word-mask"><span className="word-rise" style={{ animationDelay: '.15s' }}>JTZ</span></span>{' '}
             <span className="word-mask"><span className="word-rise" style={{ animationDelay: '.32s' }}>TRAIL</span></span>
           </h1>
-          <p className="text-white/85 text-base sm:text-xl max-w-xl mx-auto mt-5 leading-relaxed">
+          <p className="text-white text-base sm:text-xl max-w-xl mx-auto mt-5 leading-relaxed [text-shadow:0_2px_12px_rgba(0,0,0,0.6)]">
             Un plan que te guía, un equipo que te impulsa, kilómetros que te transforman.
           </p>
           <div className="flex flex-wrap gap-3 justify-center mt-9">
