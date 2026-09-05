@@ -267,6 +267,9 @@ model TrainingDay {
   descripcion String?
   intensidad  String?
   videoUrl    String?
+  // Estructura de intervalos (JSON): bloques calentamiento/series/enfriamiento
+  // para ejecución guiada. Ej: [{kind:'repeat',veces:10,pasos:[...]}]
+  estructura  String?      @db.Text
 
   activityLogs ActivityLog[]
 }

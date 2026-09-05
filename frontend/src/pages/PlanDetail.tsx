@@ -13,12 +13,17 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { parseGpx } from '../utils/gpxParser';
 import ActivityStatsView, { ActivityLog } from '../components/ActivityStatsView';
+import IntervalBuilder from '../components/IntervalBuilder';
+import WorkoutStructureView from '../components/WorkoutStructureView';
+import IntervalPlayer from '../components/IntervalPlayer';
+import { type Estructura, parseEstructura, hasEstructura } from '../utils/intervals';
 
 interface TrainingDay {
   id: number; diaSemana: string; tipo: string;
   distanciaKm?: number; duracionMin?: number;
   intensidad: string; descripcion: string;
   videoUrl?: string;
+  estructura?: string;
 }
 interface TrainingWeek {
   id: number; numeroSemana: number; descripcion?: string; dias: TrainingDay[];
@@ -782,6 +787,8 @@ function DayCard({ day, dayDate, isCoach, planId, onUpdate, myActivity, onActivi
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [showPlayer, setShowPlayer] = useState(false);
+  const [estructura, setEstructura] = useState<Estructura>(parseEstructura(day.estructura));
   const [editForm, setEditForm] = useState({
     tipo:        day.tipo,
     diaSemana:   day.diaSemana,
@@ -929,6 +936,12 @@ function DayCard({ day, dayDate, isCoach, planId, onUpdate, myActivity, onActivi
                   placeholder="https://youtube.com/watch?v=..."
                   className="input w-full text-sm" />
               </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">
+                  Intervalos guiados <span className="text-gray-600">(opcional — el corredor los ejecuta con sonido y vibración)</span>
+                </label>
+                <IntervalBuilder value={estructura} onChange={setEstructura} />
+              </div>
               <div className="flex gap-2">
                 <button onClick={() => setEditing(false)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/[0.08] text-xs text-gray-400 hover:text-white transition-colors">
                   <X size={12} /> Cancelar
@@ -941,6 +954,7 @@ function DayCard({ day, dayDate, isCoach, planId, onUpdate, myActivity, onActivi
                   intensidad:  editForm.intensidad,
                   descripcion: editForm.descripcion,
                   videoUrl:    editForm.videoUrl || null,
+                  estructura:  estructura.length ? JSON.stringify(estructura) : null,
                 })} disabled={updateMutation.isPending}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-500 text-xs text-white font-semibold transition-colors disabled:opacity-50">
                   <Check size={12} /> {updateMutation.isPending ? 'Guardando...' : 'Guardar'}
@@ -950,6 +964,15 @@ function DayCard({ day, dayDate, isCoach, planId, onUpdate, myActivity, onActivi
           ) : (
             <div className="space-y-3">
               <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{fixRunTerms(day.descripcion)}</p>
+              {hasEstructura(day.estructura) && (
+                <WorkoutStructureView estructura={parseEstructura(day.estructura)} />
+              )}
+              {!isCoach && !isRest && hasEstructura(day.estructura) && (
+                <button onClick={() => setShowPlayer(true)}
+                  className="btn-primary w-full py-3 text-sm font-bold flex items-center justify-center gap-2 shadow-glow">
+                  <Zap size={16} fill="white" /> Iniciar workout guiado
+                </button>
+              )}
               {day.videoUrl && (
                 <a href={day.videoUrl} target="_blank" rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-semibold hover:bg-red-500/20 transition-colors">
@@ -958,6 +981,14 @@ function DayCard({ day, dayDate, isCoach, planId, onUpdate, myActivity, onActivi
                 </a>
               )}
             </div>
+          )}
+
+          {showPlayer && (
+            <IntervalPlayer
+              estructura={parseEstructura(day.estructura)}
+              nombre={tipoLabel[day.tipo] ?? day.tipo}
+              onClose={() => setShowPlayer(false)}
+            />
           )}
 
           {/* Sección de actividad del corredor (solo en días de entrenamiento) */}
